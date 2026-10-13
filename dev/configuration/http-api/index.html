@@ -1215,6 +1215,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#data_directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Directory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#http_api_rate_limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2402,6 +2413,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../http-api/endpoints/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../http-api/endpoints/status/" class="md-nav__link">
         
   
@@ -3040,6 +3079,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#data_directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Directory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#http_api_rate_limit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3318,6 +3368,11 @@ Prefer header-based auth when possible.</p>
 <td><a href="#http_api_token"><code>http-api-token</code></a></td>
 </tr>
 <tr>
+<td><a href="../../http-api/endpoints/settings/"><code>settings</code></a></td>
+<td><code>GET /v1/settings</code>, <code>PATCH /v1/settings</code></td>
+<td><a href="#http_api_token"><code>http-api-token</code></a></td>
+</tr>
+<tr>
 <td><a href="../../http-api/endpoints/events/"><code>events</code></a></td>
 <td><code>GET /v1/events</code></td>
 <td><a href="#http_api_events_token"><code>http-api-events-token</code></a></td>
@@ -3351,12 +3406,23 @@ Prefer header-based auth when possible.</p>
 <li>For environment variables use comma or space-separated values.</li>
 </ul>
 </div>
+<h2 id="data_directory">Data Directory<a class="headerlink" href="#data_directory" title="Permanent link">&para;</a></h2>
+<p>Directory where Watchtower keeps settings changed through the <a href="../../http-api/endpoints/settings/"><code>settings</code></a> endpoint (<code>settings.json</code>) and its scan history (<code>history.json</code>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>            Argument: --data-dir
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>Environment Variable: WATCHTOWER_DATA_DIR
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>                Type: String
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>             Default: /data
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Mount a volume at this path to keep both across restarts. If the directory is missing or read-only, Watchtower keeps them in memory only and starts fresh each time.</p>
+</div>
 <h2 id="http_api_rate_limit">HTTP API Rate Limit<a class="headerlink" href="#http_api_rate_limit" title="Permanent link">&para;</a></h2>
 <p>Sets the maximum number of API requests allowed per minute per IP address.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>            Argument: --http-api-rate-limit
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>Environment Variable: WATCHTOWER_HTTP_API_RATE_LIMIT
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>                Type: Integer
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>             Default: 60
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>            Argument: --http-api-rate-limit
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>Environment Variable: WATCHTOWER_HTTP_API_RATE_LIMIT
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>                Type: Integer
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>             Default: 60
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -3364,10 +3430,10 @@ Prefer header-based auth when possible.</p>
 </div>
 <h2 id="http_api_check_timeout">HTTP API Check Timeout<a class="headerlink" href="#http_api_check_timeout" title="Permanent link">&para;</a></h2>
 <p>Sets the maximum duration for the <code>/v1/check</code> API endpoint.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>            Argument: --http-api-check-timeout
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>Environment Variable: WATCHTOWER_HTTP_API_CHECK_TIMEOUT
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>                Type: Duration
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>             Default: 5m
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>            Argument: --http-api-check-timeout
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Environment Variable: WATCHTOWER_HTTP_API_CHECK_TIMEOUT
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>                Type: Duration
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>             Default: 5m
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -3376,10 +3442,10 @@ Increase this timeout if you see <code>context deadline exceeded</code> errors d
 </div>
 <h2 id="http_api_update_timeout">HTTP API Update Timeout<a class="headerlink" href="#http_api_update_timeout" title="Permanent link">&para;</a></h2>
 <p>Sets the maximum duration for the <code>/v1/update</code> API endpoint.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>            Argument: --http-api-update-timeout
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Environment Variable: WATCHTOWER_HTTP_API_UPDATE_TIMEOUT
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>                Type: Duration
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>             Default: 10m
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>            Argument: --http-api-update-timeout
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>Environment Variable: WATCHTOWER_HTTP_API_UPDATE_TIMEOUT
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>                Type: Duration
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>             Default: 10m
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -3388,10 +3454,10 @@ Increase this timeout if you see <code>context deadline exceeded</code> errors d
 </div>
 <h2 id="http_api_tls_certificate">HTTP API TLS Certificate<a class="headerlink" href="#http_api_tls_certificate" title="Permanent link">&para;</a></h2>
 <p>Path to the TLS certificate file for the HTTP API.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>            Argument: --http-api-tls-cert
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>Environment Variable: WATCHTOWER_HTTP_API_TLS_CERT
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>                Type: String
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>             Default: empty (HTTP)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>            Argument: --http-api-tls-cert
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>Environment Variable: WATCHTOWER_HTTP_API_TLS_CERT
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>                Type: String
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>             Default: empty (HTTP)
 </code></pre></div>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
@@ -3399,10 +3465,10 @@ Increase this timeout if you see <code>context deadline exceeded</code> errors d
 </div>
 <h2 id="http_api_tls_key">HTTP API TLS Key<a class="headerlink" href="#http_api_tls_key" title="Permanent link">&para;</a></h2>
 <p>Path to the TLS private key file for the HTTP API.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>            Argument: --http-api-tls-key
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>Environment Variable: WATCHTOWER_HTTP_API_TLS_KEY
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>                Type: String
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>             Default: empty (HTTP)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>            Argument: --http-api-tls-key
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>Environment Variable: WATCHTOWER_HTTP_API_TLS_KEY
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>                Type: String
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>             Default: empty (HTTP)
 </code></pre></div>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
@@ -3414,10 +3480,10 @@ Increase this timeout if you see <code>context deadline exceeded</code> errors d
 <h2 id="http_api_trusted_proxies">HTTP API Trusted Proxies<a class="headerlink" href="#http_api_trusted_proxies" title="Permanent link">&para;</a></h2>
 <p>Comma-separated list of trusted proxy IP addresses or CIDR ranges for reverse proxy support.
 When set, enables proxy header processing for client IP and scheme detection.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>            Argument: --http-api-trusted-proxies
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>Environment Variable: WATCHTOWER_HTTP_API_TRUSTED_PROXIES
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>                Type: String Array
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>             Default: (unset)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>            Argument: --http-api-trusted-proxies
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>Environment Variable: WATCHTOWER_HTTP_API_TRUSTED_PROXIES
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>                Type: String Array
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>             Default: (unset)
 </code></pre></div>
 <div class="admonition important">
 <p class="admonition-title">Important</p>
@@ -3425,10 +3491,10 @@ When set, enables proxy header processing for client IP and scheme detection.</p
 </div>
 <h2 id="http_api_proxy_header">HTTP API Proxy Header<a class="headerlink" href="#http_api_proxy_header" title="Permanent link">&para;</a></h2>
 <p>Header to read the real client IP from when behind a reverse proxy.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>            Argument: --http-api-proxy-header
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>Environment Variable: WATCHTOWER_HTTP_API_PROXY_HEADER
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>                Type: String
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>             Default: X-Forwarded-For
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>            Argument: --http-api-proxy-header
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>Environment Variable: WATCHTOWER_HTTP_API_PROXY_HEADER
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>                Type: String
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>             Default: X-Forwarded-For
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -3443,10 +3509,10 @@ When set, enables proxy header processing for client IP and scheme detection.</p
 <h2 id="http_api_cors_origins">HTTP API CORS Origins<a class="headerlink" href="#http_api_cors_origins" title="Permanent link">&para;</a></h2>
 <p>Comma-separated list of allowed CORS origins for cross-origin requests.
 Use this to restrict which origins can access the API.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>            Argument: --http-api-cors-origins
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>Environment Variable: WATCHTOWER_HTTP_API_CORS_ORIGINS
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>                Type: String Array
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>             Default: Unset (same-origin only)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>            Argument: --http-api-cors-origins
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>Environment Variable: WATCHTOWER_HTTP_API_CORS_ORIGINS
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>                Type: String Array
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>             Default: Unset (same-origin only)
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -3458,10 +3524,10 @@ Set this to permit specific cross-origin origins.</p>
 <summary>The following legacy configuration options are deprecated and will be removed with the release of Watchtower v2.</summary>
 <h3 id="http_api_containers">HTTP API Containers<a class="headerlink" href="#http_api_containers" title="Permanent link">&para;</a></h3>
 <p>Runs Watchtower with the read-only containers API enabled.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>            Argument: --http-api-containers
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>Environment Variable: WATCHTOWER_HTTP_API_CONTAINERS
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>                Type: Boolean
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>             Default: false
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>            Argument: --http-api-containers
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>Environment Variable: WATCHTOWER_HTTP_API_CONTAINERS
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>                Type: Boolean
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>             Default: false
 </code></pre></div>
 <div class="admonition deprecated">
 <p class="admonition-title">Deprecated</p>
@@ -3470,10 +3536,10 @@ Set this to permit specific cross-origin origins.</p>
 </div>
 <h3 id="http_api_metrics">HTTP API Metrics<a class="headerlink" href="#http_api_metrics" title="Permanent link">&para;</a></h3>
 <p>Runs Watchtower with the Prometheus metrics API enabled.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>            Argument: --http-api-metrics
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>Environment Variable: WATCHTOWER_HTTP_API_METRICS
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>                Type: Boolean
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>             Default: false
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>            Argument: --http-api-metrics
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>Environment Variable: WATCHTOWER_HTTP_API_METRICS
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>                Type: Boolean
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>             Default: false
 </code></pre></div>
 <div class="admonition deprecated">
 <p class="admonition-title">Deprecated</p>
@@ -3482,10 +3548,10 @@ Set this to permit specific cross-origin origins.</p>
 </div>
 <h3 id="http_api_update">HTTP API Update<a class="headerlink" href="#http_api_update" title="Permanent link">&para;</a></h3>
 <p>Runs Watchtower in HTTP API mode, so that image updates must be triggered by a request.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>            Argument: --http-api-update
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>Environment Variable: WATCHTOWER_HTTP_API_UPDATE
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>                Type: Boolean
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>             Default: false
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>            Argument: --http-api-update
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>Environment Variable: WATCHTOWER_HTTP_API_UPDATE
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>                Type: Boolean
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>             Default: false
 </code></pre></div>
 <div class="admonition deprecated">
 <p class="admonition-title">Deprecated</p>
@@ -3515,7 +3581,7 @@ Set this to permit specific cross-origin origins.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 13, 2026 20:57:27 UTC"><span class="timeago" datetime="2026-10-13T20:57:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 13, 2026 20:57:27 UTC">2026-10-13</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 13, 2026 22:18:25 UTC"><span class="timeago" datetime="2026-10-13T22:18:25+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 13, 2026 22:18:25 UTC">2026-10-13</span>
   </span>
 
     
