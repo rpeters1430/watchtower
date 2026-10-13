@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/events"
+	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
 func TestNew(t *testing.T) {
@@ -21,8 +22,10 @@ func TestNew(t *testing.T) {
 		check CheckFunc
 	}{
 		{
-			name:  "with check function",
-			check: func(_ context.Context, _, _ []string) ([]ContainerCheck, error) { return nil, nil },
+			name: "with check function",
+			check: func(_ context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
+				return nil, nil
+			},
 		},
 		{
 			name:  "with nil check function",
@@ -32,7 +35,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := New(testLogger(), tt.check, 5*time.Minute, nil, false, nil, events.ScanStartedData{})
+			h := New(testLogger(), tt.check, 5*time.Minute, nil, false, nil, nil)
 			require.NotNil(t, h)
 			assert.Equal(t, "/v1/check", h.Path)
 		})
@@ -47,7 +50,7 @@ func TestHandler_Handle(t *testing.T) {
 	}{
 		{
 			name: "successful check returns 200",
-			checkFunc: func(_ context.Context, _, _ []string) ([]ContainerCheck, error) {
+			checkFunc: func(_ context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 				return []ContainerCheck{
 					{Name: "container1", Image: "nginx:latest", ImageID: "sha256:abc", UpdateAvailable: true},
 				}, nil
@@ -56,14 +59,14 @@ func TestHandler_Handle(t *testing.T) {
 		},
 		{
 			name: "empty results returns 200",
-			checkFunc: func(_ context.Context, _, _ []string) ([]ContainerCheck, error) {
+			checkFunc: func(_ context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 				return []ContainerCheck{}, nil
 			},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name: "check error returns 500",
-			checkFunc: func(_ context.Context, _, _ []string) ([]ContainerCheck, error) {
+			checkFunc: func(_ context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 				return nil, errors.New("docker error")
 			},
 			wantStatus: http.StatusInternalServerError,
@@ -72,7 +75,7 @@ func TestHandler_Handle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := New(testLogger(), tt.checkFunc, 5*time.Minute, nil, false, nil, events.ScanStartedData{})
+			h := New(testLogger(), tt.checkFunc, 5*time.Minute, nil, false, nil, nil)
 			app := fiber.New(fiber.Config{})
 			app.Post("/v1/check", h.Handle)
 
@@ -132,12 +135,12 @@ func TestHandler_Handle_WithFilters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var capturedImages, capturedNames []string
 
-			h := New(testLogger(), func(ctx context.Context, images, names []string) ([]ContainerCheck, error) {
+			h := New(testLogger(), func(ctx context.Context, images, names []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 				capturedImages = images
 				capturedNames = names
 
 				return []ContainerCheck{}, nil
-			}, 5*time.Minute, nil, false, nil, events.ScanStartedData{})
+			}, 5*time.Minute, nil, false, nil, nil)
 			app := fiber.New(fiber.Config{})
 			app.Post("/v1/check", h.Handle)
 
@@ -162,9 +165,9 @@ func TestHandler_Handle_WithFilters(t *testing.T) {
 
 func TestHandler_Handle_TimeoutOverride(t *testing.T) {
 	t.Run("valid timeout is applied", func(t *testing.T) {
-		h := New(testLogger(), func(ctx context.Context, _, _ []string) ([]ContainerCheck, error) {
+		h := New(testLogger(), func(ctx context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 			return []ContainerCheck{}, nil
-		}, 5*time.Minute, nil, false, nil, events.ScanStartedData{})
+		}, 5*time.Minute, nil, false, nil, nil)
 		app := fiber.New(fiber.Config{})
 		app.Post("/v1/check", h.Handle)
 
@@ -178,9 +181,9 @@ func TestHandler_Handle_TimeoutOverride(t *testing.T) {
 	})
 
 	t.Run("timeout exceeding max is clamped", func(t *testing.T) {
-		h := New(testLogger(), func(ctx context.Context, _, _ []string) ([]ContainerCheck, error) {
+		h := New(testLogger(), func(ctx context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 			return []ContainerCheck{}, nil
-		}, 2*time.Minute, nil, false, nil, events.ScanStartedData{})
+		}, 2*time.Minute, nil, false, nil, nil)
 		app := fiber.New(fiber.Config{})
 		app.Post("/v1/check", h.Handle)
 
@@ -194,9 +197,9 @@ func TestHandler_Handle_TimeoutOverride(t *testing.T) {
 	})
 
 	t.Run("invalid timeout is ignored", func(t *testing.T) {
-		h := New(testLogger(), func(ctx context.Context, _, _ []string) ([]ContainerCheck, error) {
+		h := New(testLogger(), func(ctx context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 			return []ContainerCheck{}, nil
-		}, 5*time.Minute, nil, false, nil, events.ScanStartedData{})
+		}, 5*time.Minute, nil, false, nil, nil)
 		app := fiber.New(fiber.Config{})
 		app.Post("/v1/check", h.Handle)
 
@@ -211,20 +214,7 @@ func TestHandler_Handle_TimeoutOverride(t *testing.T) {
 }
 
 func TestHandler_Handle_EmitsEvents(t *testing.T) {
-	scanStartedData := events.ScanStartedData{
-		Cleanup:             true,
-		NoRestart:           false,
-		MonitorOnly:         false,
-		LifecycleHooks:      true,
-		RollingRestart:      false,
-		LabelPrecedence:     false,
-		NoPull:              false,
-		RunOnce:             false,
-		UseComposeDependsOn: false,
-		SkipSelfUpdate:      false,
-		EphemeralSelfUpdate: false,
-		ReviveStopped:       false,
-	}
+	scanStartedParams := types.UpdateParams{Cleanup: true, LifecycleHooks: true}
 
 	t.Run("success emits scan_started and scan_completed", func(t *testing.T) {
 		b := events.NewBroadcaster()
@@ -232,13 +222,13 @@ func TestHandler_Handle_EmitsEvents(t *testing.T) {
 		require.NotNil(t, ch)
 
 		h := New(testLogger(),
-			func(_ context.Context, _, _ []string) ([]ContainerCheck, error) {
+			func(_ context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 				return []ContainerCheck{
 					{Name: "c1", Image: "nginx:latest", ImageID: "sha256:abc", UpdateAvailable: true},
 					{Name: "c2", Image: "redis:latest", ImageID: "sha256:def", UpdateAvailable: false, Error: "registry error"},
 				}, nil
 			},
-			5*time.Minute, nil, false, b, scanStartedData,
+			5*time.Minute, nil, false, b, func() types.UpdateParams { return scanStartedParams },
 		)
 		app := fiber.New(fiber.Config{})
 		app.Post("/v1/check", h.Handle)
@@ -284,10 +274,10 @@ func TestHandler_Handle_EmitsEvents(t *testing.T) {
 		require.NotNil(t, ch)
 
 		h := New(testLogger(),
-			func(_ context.Context, _, _ []string) ([]ContainerCheck, error) {
+			func(_ context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 				return nil, errors.New("docker api error")
 			},
-			5*time.Minute, nil, false, b, scanStartedData,
+			5*time.Minute, nil, false, b, func() types.UpdateParams { return scanStartedParams },
 		)
 		app := fiber.New(fiber.Config{})
 		app.Post("/v1/check", h.Handle)
@@ -324,10 +314,10 @@ func TestHandler_Handle_EmitsEvents(t *testing.T) {
 
 	t.Run("nil broadcaster emits no events", func(t *testing.T) {
 		h := New(testLogger(),
-			func(_ context.Context, _, _ []string) ([]ContainerCheck, error) {
+			func(_ context.Context, _, _ []string, _ types.UpdateParams) ([]ContainerCheck, error) {
 				return []ContainerCheck{{Name: "c1"}}, nil
 			},
-			5*time.Minute, nil, false, nil, events.ScanStartedData{},
+			5*time.Minute, nil, false, nil, nil,
 		)
 		app := fiber.New(fiber.Config{})
 		app.Post("/v1/check", h.Handle)
@@ -340,4 +330,48 @@ func TestHandler_Handle_EmitsEvents(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
+}
+
+func TestHandler_Handle_BuildsCurrentParamsPerRequest(t *testing.T) {
+	b := events.NewBroadcaster()
+	ch := b.Subscribe()
+	require.NotNil(t, ch)
+
+	current := types.UpdateParams{Cleanup: true}
+	var checked []types.UpdateParams
+	h := New(testLogger(),
+		func(_ context.Context, _, _ []string, params types.UpdateParams) ([]ContainerCheck, error) {
+			checked = append(checked, params)
+
+			return nil, nil
+		},
+		5*time.Minute, nil, false, b, func() types.UpdateParams { return current },
+	)
+	app := fiber.New(fiber.Config{})
+	app.Post("/v1/check", h.Handle)
+
+	for _, want := range []types.UpdateParams{{Cleanup: true}, {MonitorOnly: true}} {
+		current = want
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/check", nil)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var started events.ScanStartedData
+		for started.Cleanup != want.Cleanup || started.MonitorOnly != want.MonitorOnly {
+			select {
+			case evt := <-ch:
+				if evt.Type == "scan_started" {
+					started = evt.Data.(events.ScanStartedData)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("timeout waiting for scan_started event")
+			}
+		}
+	}
+
+	require.Len(t, checked, 2)
+	assert.Equal(t, types.UpdateParams{Cleanup: true}, checked[0])
+	assert.Equal(t, types.UpdateParams{MonitorOnly: true}, checked[1])
 }
