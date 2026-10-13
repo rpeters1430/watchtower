@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Record update checks in scan history by @rpeters1430
 - Add built-in web UI by @rpeters1430
 - Add initial web dashboard foundation by @rpeters1430
 - Add initial web dashboard foundation by @rpeters1430
@@ -954,6 +955,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Clarify where the container lookup test fails by @rpeters1430
 - Add CLAUDE.md by @rpeters1430
 - Report timed-out api requests as service unavailable by @nicholas-fedor
 - Add rooty0 as a contributor for code, and test by @allcontributors[bot]
@@ -2939,8 +2941,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#2](https://github.com/rpeters1430/watchtower/pull/2)
-- @github-actions[bot] made their first contribution
+- @rpeters1430 made their first contribution in [#4](https://github.com/rpeters1430/watchtower/pull/4)
+- @github-actions[bot] made their first contribution in [#3](https://github.com/rpeters1430/watchtower/pull/3)
 - @nicholas-fedor made their first contribution
 - @renovate[bot] made their first contribution
 - @allcontributors[bot] made their first contribution
