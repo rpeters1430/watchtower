@@ -69,10 +69,33 @@ func TestUpdateAppliesAndPersists(t *testing.T) {
 	assert.Equal(t, map[string]bool{
 		KeyMonitorOnly: true, KeyCleanup: true, KeyRollingRestart: false, KeySchedule: true,
 	}, store.Overridden())
+	assert.Equal(t, Snapshot{
+		Effective:  want,
+		Defaults:   defaults,
+		Overridden: store.Overridden(),
+		Persistent: true,
+	}, store.Snapshot())
 
 	// A new store over the same directory sees the saved overrides.
 	reopened := Open(nil, dir, defaults, Validators{Schedule: rejectBadSchedule})
 	assert.Equal(t, want, reopened.Effective())
+}
+
+func TestUpdateDoesNotApplyWhenPersistenceFails(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	defaults := Values{Cleanup: true}
+	store := Open(nil, dir, defaults, Validators{})
+
+	require.NoError(t, os.RemoveAll(dir))
+	require.NoError(t, os.WriteFile(dir, []byte("block directory creation"), 0o600))
+
+	err := store.Update(changes(t, `{"monitor_only":true}`))
+
+	require.ErrorIs(t, err, ErrPersistence)
+	assert.Equal(t, defaults, store.Effective())
+	assert.False(t, store.Snapshot().Overridden[KeyMonitorOnly])
 }
 
 func TestUpdateNullResetsToDefault(t *testing.T) {

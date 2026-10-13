@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -133,4 +134,21 @@ func TestPatchRejected(t *testing.T) {
 			assert.Equal(t, before, store.Effective())
 		})
 	}
+}
+
+func TestPatchReturnsServerErrorWhenPersistenceFails(t *testing.T) {
+	dir := t.TempDir()
+	store := runtime.Open(nil, dir, runtime.Values{}, runtime.Validators{})
+	handler := New(nil, store, true)
+	app := fiber.New()
+	app.Patch(handler.Path, handler.Patch)
+
+	require.NoError(t, os.RemoveAll(dir))
+	require.NoError(t, os.WriteFile(dir, []byte("block directory creation"), 0o600))
+
+	status, body := send(t, app, http.MethodPatch, `{"monitor_only":true}`)
+
+	assert.Equal(t, http.StatusInternalServerError, status)
+	assert.Contains(t, body, runtime.ErrPersistence.Error())
+	assert.False(t, store.Effective().MonitorOnly)
 }

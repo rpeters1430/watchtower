@@ -1,8 +1,10 @@
 package metrics
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -74,6 +76,39 @@ func TestMetrics_PersistHistory(t *testing.T) {
 
 	if got := len(third.GetHistory(nil, nil, 0)); got != 3 {
 		t.Errorf("restored %d entries after a further check, want 3", got)
+	}
+}
+
+func TestMetrics_PersistHistoryConcurrentAppends(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+	m := &Metrics{}
+	m.PersistHistory(nil, path)
+
+	const count = 100
+	var wg sync.WaitGroup
+	wg.Add(count)
+
+	for range count {
+		go func() {
+			defer wg.Done()
+			m.RecordCheck(1, 0, 0)
+		}()
+	}
+
+	wg.Wait()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var history []HistoryEntry
+	if err := json.Unmarshal(data, &history); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(history) != count {
+		t.Errorf("persisted %d entries, want %d", len(history), count)
 	}
 }
 

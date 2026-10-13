@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -14,14 +15,8 @@ import (
 
 // Store is the runtime settings store the handler reads and changes.
 type Store interface {
-	// Effective returns the values in force.
-	Effective() runtime.Values
-	// Defaults returns the values resolved from flags and environment variables.
-	Defaults() runtime.Values
-	// Overridden reports which settings were changed at run time.
-	Overridden() map[string]bool
-	// Persistent reports whether changes are saved across restarts.
-	Persistent() bool
+	// Snapshot returns one consistent view of the runtime settings.
+	Snapshot() runtime.Snapshot
 	// Update applies changes atomically, where JSON null resets a setting.
 	Update(changes map[string]json.RawMessage) error
 }
@@ -110,6 +105,7 @@ func (h *Handler) Get(c fiber.Ctx) error {
 //	@Success		200		{object}	Response				"Runtime settings after the change"
 //	@Failure		400		{object}	map[string]string		"The change was rejected"
 //	@Failure		401		{string}	string					"Missing or invalid API token"
+//	@Failure		500		{object}	map[string]string		"The change could not be persisted"
 //	@Security		BearerAuth
 //	@Router			/v1/settings [patch]
 func (h *Handler) Patch(c fiber.Ctx) error {
@@ -117,7 +113,7 @@ func (h *Handler) Patch(c fiber.Ctx) error {
 
 	err := json.Unmarshal(c.Body(), &changes)
 	if err != nil || len(changes) == 0 {
-		return h.sendError(c, "request body must be a JSON object naming at least one setting")
+		return h.sendError(c, fiber.StatusBadRequest, "request body must be a JSON object naming at least one setting")
 	}
 
 	err = h.store.Update(changes)
@@ -128,7 +124,11 @@ func (h *Handler) Patch(c fiber.Ctx) error {
 			Str("notify", "no").
 			Msg("Rejected settings change")
 
-		return h.sendError(c, err.Error())
+		if errors.Is(err, runtime.ErrPersistence) {
+			return h.sendError(c, fiber.StatusInternalServerError, runtime.ErrPersistence.Error())
+		}
+
+		return h.sendError(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	names := make([]string, 0, len(changes))
@@ -149,9 +149,10 @@ func (h *Handler) Patch(c fiber.Ctx) error {
 
 // send writes the current settings.
 func (h *Handler) send(c fiber.Ctx) error {
-	values := h.store.Effective()
-	defaults := h.store.Defaults()
-	changed := h.store.Overridden()
+	snapshot := h.store.Snapshot()
+	values := snapshot.Effective
+	defaults := snapshot.Defaults
+	changed := snapshot.Overridden
 
 	err := c.Status(fiber.StatusOK).JSON(Response{
 		Settings: map[string]Setting{
@@ -176,7 +177,7 @@ func (h *Handler) send(c fiber.Ctx) error {
 				Changed: changed[runtime.KeySchedule],
 			},
 		},
-		Saved:          h.store.Persistent(),
+		Saved:          snapshot.Persistent,
 		ScheduleActive: h.scheduleActive,
 		Timestamp:      time.Now().UTC().Format(time.RFC3339),
 		APIVersion:     "v1",
@@ -189,8 +190,8 @@ func (h *Handler) send(c fiber.Ctx) error {
 }
 
 // sendError writes a 400 response with a JSON error body.
-func (h *Handler) sendError(c fiber.Ctx, message string) error {
-	err := c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+func (h *Handler) sendError(c fiber.Ctx, status int, message string) error {
+	err := c.Status(status).JSON(fiber.Map{
 		"error":       message,
 		"api_version": "v1",
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),

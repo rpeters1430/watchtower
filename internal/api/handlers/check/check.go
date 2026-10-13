@@ -54,7 +54,11 @@ type CheckResponse struct {
 }
 
 // CheckFunc performs the update availability check for all watched containers.
-type CheckFunc func(ctx context.Context, images, names []string) ([]ContainerCheck, error)
+type CheckFunc func(
+	ctx context.Context,
+	images, names []string,
+	params types.UpdateParams,
+) ([]ContainerCheck, error)
 
 // extractFilterParams parses comma-separated query parameters into a slice.
 // Supports both repeated params (?name=a&name=b) and comma-separated values (?name=a,b).

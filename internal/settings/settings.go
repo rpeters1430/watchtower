@@ -37,6 +37,8 @@ var (
 	ErrInvalidValue = errors.New("invalid value")
 	// ErrIncompatible is returned when a change would leave settings that cannot work together.
 	ErrIncompatible = errors.New("rolling restart cannot be used together with monitor only")
+	// ErrPersistence is returned when an update cannot be saved to disk.
+	ErrPersistence = errors.New("could not persist settings")
 )
 
 // Values is a complete set of runtime settings.
@@ -49,6 +51,15 @@ type Values struct {
 	RollingRestart bool
 	// Schedule is the cron expression for periodic scans. Empty disables them.
 	Schedule string
+}
+
+// Snapshot contains a consistent view of the effective settings and their
+// defaults and override state.
+type Snapshot struct {
+	Effective  Values
+	Defaults   Values
+	Overridden map[string]bool
+	Persistent bool
 }
 
 // Validators are optional checks supplied by the composition root.
@@ -152,6 +163,24 @@ func (s *Store) Overridden() map[string]bool {
 	}
 }
 
+// Snapshot returns the effective values and their state under one read lock.
+func (s *Store) Snapshot() Snapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return Snapshot{
+		Effective: s.overrides.apply(s.defaults),
+		Defaults:  s.defaults,
+		Overridden: map[string]bool{
+			KeyMonitorOnly:    s.overrides.MonitorOnly != nil,
+			KeyCleanup:        s.overrides.Cleanup != nil,
+			KeyRollingRestart: s.overrides.RollingRestart != nil,
+			KeySchedule:       s.overrides.Schedule != nil,
+		},
+		Persistent: s.path != "",
+	}
+}
+
 // ApplyTo returns params with the effective runtime settings applied.
 // A nil store returns params unchanged.
 func (s *Store) ApplyTo(params types.UpdateParams) types.UpdateParams {
@@ -181,8 +210,8 @@ func (s *Store) ScheduleChanges() <-chan string {
 //   - changes: Setting names mapped to raw JSON values.
 //
 // Returns:
-//   - error: Non-nil if a name is unknown, a value has the wrong type, or the
-//     resulting settings fail validation.
+//   - error: Non-nil if a name is unknown, a value has the wrong type, the
+//     resulting settings fail validation, or the change cannot be persisted.
 func (s *Store) Update(changes map[string]json.RawMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -204,8 +233,12 @@ func (s *Store) Update(changes map[string]json.RawMessage) error {
 		return err
 	}
 
+	err = s.save(next)
+	if err != nil {
+		return err
+	}
+
 	s.overrides = next
-	s.save()
 
 	if after.Schedule != before.Schedule {
 		s.announceSchedule(after.Schedule)
@@ -287,22 +320,26 @@ func (s *Store) load() {
 }
 
 // save writes the overrides to disk when a data directory is available.
-func (s *Store) save() {
+func (s *Store) save(next overrides) error {
 	if s.path == "" {
-		return
+		return nil
 	}
 
-	data, err := json.MarshalIndent(s.overrides, "", "  ")
+	data, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		s.log.Error().Err(err).Msg("Could not encode settings")
 
-		return
+		return fmt.Errorf("%w: %w", ErrPersistence, err)
 	}
 
 	err = util.WriteFileAtomic(s.path, append(data, '\n'))
 	if err != nil {
 		s.log.Error().Err(err).Str("path", s.path).Msg("Could not save settings")
+
+		return fmt.Errorf("%w: %w", ErrPersistence, err)
 	}
+
+	return nil
 }
 
 // apply returns defaults with these overrides layered on top.

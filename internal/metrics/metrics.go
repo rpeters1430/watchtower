@@ -508,14 +508,18 @@ func (m *Metrics) appendHistory(entry HistoryEntry) {
 	}
 
 	path := m.historyPath
-	log := m.historyLog
-	snapshot := slices.Clone(m.history)
-
-	m.historyMu.Unlock()
-
 	if path == "" {
+		m.historyMu.Unlock()
+
 		return
 	}
+
+	m.historySaveMu.Lock()
+	snapshot := slices.Clone(m.history)
+	log := m.historyLog
+	m.historyMu.Unlock()
+
+	defer m.historySaveMu.Unlock()
 
 	slices.SortFunc(snapshot, func(a, b HistoryEntry) int {
 		return a.Timestamp.Compare(b.Timestamp)
@@ -527,9 +531,6 @@ func (m *Metrics) appendHistory(entry HistoryEntry) {
 
 		return
 	}
-
-	m.historySaveMu.Lock()
-	defer m.historySaveMu.Unlock()
 
 	err = util.WriteFileAtomic(path, data)
 	if err != nil {

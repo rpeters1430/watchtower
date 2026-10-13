@@ -668,7 +668,7 @@ func (p *process) runMain(cfg types.RunConfig) int {
 
 	// If rolling restarts are enabled, validate that the containers being monitored for
 	// updates do not have linked dependencies.
-	if appCfg.Update.RollingRestart {
+	if runtimeSettings.Effective().RollingRestart {
 		err := actions.ValidateRollingRestartDependencies(
 			p.log,
 			ctx,

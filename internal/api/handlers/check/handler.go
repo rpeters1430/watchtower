@@ -29,8 +29,8 @@ type Handler struct {
 	splitByContainer bool
 	// eventBroadcaster publishes SSE events for check runs.
 	eventBroadcaster *events.Broadcaster
-	// scanStartedData carries redacted policy flags reused for every scan_started event.
-	scanStartedData events.ScanStartedData
+	// buildUpdateParams returns current policy flags for each check request.
+	buildUpdateParams func() types.UpdateParams
 }
 
 // New creates a new check handler backed by the given check function.
@@ -43,7 +43,7 @@ type Handler struct {
 //   - splitByContainer: When true, notifications are split by container instead of being grouped.
 //   - eventBroadcaster: Optional SSE broadcaster. When provided, scan_started, scan_completed,
 //     and scan_failed events are emitted during check runs.
-//   - scanStartedData: Pre-built redacted policy flags for the scan_started event.
+//   - buildUpdateParams: Builds the current policy flags for each check request.
 func New(
 	log *zerolog.Logger,
 	check CheckFunc,
@@ -51,7 +51,7 @@ func New(
 	notifier types.Notifier,
 	splitByContainer bool,
 	eventBroadcaster *events.Broadcaster,
-	scanStartedData events.ScanStartedData,
+	buildUpdateParams func() types.UpdateParams,
 ) *Handler {
 	if log == nil {
 		nop := zerolog.Nop()
@@ -59,14 +59,14 @@ func New(
 	}
 
 	return &Handler{
-		log:              log,
-		check:            check,
-		Path:             "/v1/check",
-		maxTimeout:       maxTimeout,
-		notifier:         notifier,
-		splitByContainer: splitByContainer,
-		eventBroadcaster: eventBroadcaster,
-		scanStartedData:  scanStartedData,
+		log:               log,
+		check:             check,
+		Path:              "/v1/check",
+		maxTimeout:        maxTimeout,
+		notifier:          notifier,
+		splitByContainer:  splitByContainer,
+		eventBroadcaster:  eventBroadcaster,
+		buildUpdateParams: buildUpdateParams,
 	}
 }
 
@@ -113,6 +113,10 @@ func (h *Handler) Handle(c fiber.Ctx) error {
 
 	images := extractFilterParams(c, "image")
 	containers := extractFilterParams(c, "container")
+	var params types.UpdateParams
+	if h.buildUpdateParams != nil {
+		params = h.buildUpdateParams()
+	}
 
 	ctx := c.Context()
 	if timeoutStr := c.Query("timeout"); timeoutStr != "" {
@@ -151,11 +155,11 @@ func (h *Handler) Handle(c fiber.Ctx) error {
 		h.eventBroadcaster.Publish(events.Event{
 			Type:      "scan_started",
 			Timestamp: time.Now().UTC(),
-			Data:      h.scanStartedData,
+			Data:      events.NewScanStartedData(params),
 		})
 	}
 
-	results, err := h.check(ctx, images, containers)
+	results, err := h.check(ctx, images, containers, params)
 	if err != nil {
 		apiLog.Error().Err(err).Msg("Failed to check for updates")
 
