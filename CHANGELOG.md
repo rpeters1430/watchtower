@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Change settings at run time and keep history across restarts by @rpeters1430
 - Record update checks in scan history by @rpeters1430
 - Add built-in web UI by @rpeters1430
 - Add initial web dashboard foundation by @rpeters1430
@@ -199,6 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Resolve runtime settings review findings by @Copilot
 - Target only requested container by @rpeters1430
 - Cap retry-after seconds too long for a duration by @nicholas-fedor
 - Remove the environment file when writing it fails by @nicholas-fedor
@@ -955,6 +957,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Document settings persistence errors by @Copilot
+- Describe runtime settings in CLAUDE.md by @rpeters1430
 - Clarify where the container lookup test fails by @rpeters1430
 - Add CLAUDE.md by @rpeters1430
 - Report timed-out api requests as service unavailable by @nicholas-fedor
@@ -2941,8 +2945,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#4](https://github.com/rpeters1430/watchtower/pull/4)
-- @github-actions[bot] made their first contribution in [#3](https://github.com/rpeters1430/watchtower/pull/3)
+- @rpeters1430 made their first contribution in [#6](https://github.com/rpeters1430/watchtower/pull/6)
+- @Copilot made their first contribution
+- @github-actions[bot] made their first contribution in [#5](https://github.com/rpeters1430/watchtower/pull/5)
 - @nicholas-fedor made their first contribution
 - @renovate[bot] made their first contribution
 - @allcontributors[bot] made their first contribution
