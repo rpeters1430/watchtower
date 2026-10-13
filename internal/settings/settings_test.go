@@ -67,7 +67,12 @@ func TestUpdateAppliesAndPersists(t *testing.T) {
 	assert.Equal(t, want, store.Effective())
 	assert.Equal(t, defaults, store.Defaults())
 	assert.Equal(t, map[string]bool{
-		KeyMonitorOnly: true, KeyCleanup: true, KeyRollingRestart: false, KeySchedule: true,
+		KeyMonitorOnly:        true,
+		KeyCleanup:            true,
+		KeyRollingRestart:     false,
+		KeySchedule:           true,
+		KeyAutoRollback:       false,
+		KeyContainerOverrides: false,
 	}, store.Overridden())
 	assert.Equal(t, Snapshot{
 		Effective:  want,
@@ -96,6 +101,24 @@ func TestUpdateDoesNotApplyWhenPersistenceFails(t *testing.T) {
 	require.ErrorIs(t, err, ErrPersistence)
 	assert.Equal(t, defaults, store.Effective())
 	assert.False(t, store.Snapshot().Overridden[KeyMonitorOnly])
+}
+
+func TestUpdateContainerOverrides(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	defaults := Values{}
+
+	store := Open(nil, dir, defaults, Validators{})
+	require.NoError(t, store.Update(changes(t, `{"auto_rollback":true,"container_overrides":{"plex":"pinned","nextcloud":"monitor_only"}}`)))
+
+	eff := store.Effective()
+	assert.True(t, eff.AutoRollback)
+	assert.Equal(t, map[string]string{"plex": "pinned", "nextcloud": "monitor_only"}, eff.ContainerOverrides)
+
+	// Setting override to "auto" removes that container override
+	require.NoError(t, store.Update(changes(t, `{"container_overrides":{"plex":"auto"}}`)))
+	assert.Equal(t, map[string]string{"nextcloud": "monitor_only"}, store.Effective().ContainerOverrides)
 }
 
 func TestUpdateNullResetsToDefault(t *testing.T) {
