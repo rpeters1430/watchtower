@@ -5,7 +5,7 @@ on:
   workflow_dispatch: {}
   push:
     branches:
-      - "**"
+      - main
     paths:
       - cmd/**
       - internal/**
@@ -26,6 +26,7 @@ concurrency:
 jobs:
   publish:
     name: Build and Push to GHCR
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read # For code checkout
@@ -56,22 +57,15 @@ jobs:
       - name: Build and Push Image
         env:
           REPOSITORY: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           COMMIT_SHA: ${{ github.sha }}
           SERVER_URL: ${{ github.server_url }}
         run: |
           image="ghcr.io/${REPOSITORY,,}"
           short_sha="${COMMIT_SHA::7}"
 
-          # The default branch publishes "latest". Other branches publish a
-          # tag named after the branch so they can be tried without replacing it.
-          if [ "${REF_NAME}" = "${DEFAULT_BRANCH}" ]; then
-            tags=(--tag "${image}:latest" --tag "${image}:sha-${short_sha}")
-          else
-            branch_tag="$(printf '%s' "${REF_NAME}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9._-' '-')"
-            tags=(--tag "${image}:${branch_tag}")
-          fi
+          # Only main publishes. "latest" is the tag to run; sha-<short> pins
+          # a specific build for rollback.
+          tags=(--tag "${image}:latest" --tag "${image}:sha-${short_sha}")
 
           docker buildx build \
             --file build/docker/Dockerfile.self-local \
