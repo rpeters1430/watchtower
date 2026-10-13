@@ -465,6 +465,12 @@ paths:
           description: Missing or invalid API token
           schema:
             type: string
+        "500":
+          description: The change could not be persisted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       security:
       - BearerAuth: []
       summary: Change runtime settings
