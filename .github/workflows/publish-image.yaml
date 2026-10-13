@@ -44,6 +44,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: linux/amd64,linux/arm64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -62,6 +67,7 @@ jobs:
         run: |
           image="ghcr.io/${REPOSITORY,,}"
           short_sha="${COMMIT_SHA::7}"
+          branch_tag="$(printf '%s' "${REF_NAME}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9._-' '-')"
 
           # Only main publishes. "latest" is the tag to run; sha-<short> pins
           # a specific build for rollback.
@@ -69,10 +75,11 @@ jobs:
 
           docker buildx build \
             --file build/docker/Dockerfile.self-local \
-            --platform linux/amd64 \
+            --platform linux/amd64,linux/arm64 \
             --label "org.opencontainers.image.source=${SERVER_URL}/${REPOSITORY}" \
             --label "org.opencontainers.image.url=${SERVER_URL}/${REPOSITORY}" \
             --label "org.opencontainers.image.revision=${COMMIT_SHA}" \
             "${tags[@]}" \
             --push \
             .
+
