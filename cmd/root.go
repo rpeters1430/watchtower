@@ -49,6 +49,9 @@ const (
 	// historyFileName is the scan history file inside the data directory.
 	historyFileName = "history.json"
 
+	// statusFileName is the latest container check results inside the data directory.
+	statusFileName = "checks.json"
+
 	// containerLookupTimeout is the maximum duration allowed for current
 	// container ID lookups.
 	//
@@ -655,10 +658,13 @@ func (p *process) runMain(cfg types.RunConfig) int {
 
 	liveSettings.Store(runtimeSettings)
 
+	applySavedNotifications(p.log, notifier, runtimeSettings)
+
 	if dataDir != "" {
 		metrics.Default().PersistHistory(p.log, filepath.Join(dataDir, historyFileName))
+		metrics.Default().PersistStatuses(p.log, filepath.Join(dataDir, statusFileName))
 
-		p.log.Debug().Str("data_dir", dataDir).Msg("Saving settings changes and scan history")
+		p.log.Debug().Str("data_dir", dataDir).Msg("Saving settings changes, scan history, and check results")
 	}
 
 	runUpdatesWithNotifications = func(ctx context.Context, filter types.Filter, params types.UpdateParams) *metrics.Metric {
@@ -936,6 +942,7 @@ func (p *process) runMain(cfg types.RunConfig) int {
 		Lock:                       updateLock,
 		ScheduleSpec:               runtimeSettings.Effective().Schedule,
 		ScheduleChanges:            runtimeSettings.ScheduleChanges(),
+		ReportNextRun:              runtimeSettings.SetNextRun,
 		Startup:                    startupBase,
 		WriteStartupMessage:        logging.WriteStartupMessage,
 		RunUpdate:                  runUpdatesWithNotifications,
@@ -1036,4 +1043,23 @@ func resolveCurrentWatchtowerContainerForFallback(log *zerolog.Logger, ctx conte
 	}
 
 	return nil
+}
+
+// applySavedNotifications makes notification services added from the web UI
+// send alongside the configured ones, now and whenever they change.
+//
+// Parameters:
+//   - log: Process logger.
+//   - notifier: Process notifier. One that cannot change its URLs is left alone.
+//   - store: Runtime settings holding the saved services.
+func applySavedNotifications(log *zerolog.Logger, notifier types.Notifier, store *settings.Store) {
+	extra, ok := notifier.(interface{ SetExtraURLs(urls []string) error })
+	if !ok {
+		return
+	}
+
+	err := store.OnNotificationChange(extra.SetExtraURLs)
+	if err != nil {
+		log.Warn().Err(err).Msg("Could not use the saved notification services")
+	}
 }

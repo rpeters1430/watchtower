@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -71,18 +72,21 @@ type router interface {
 // Uses mutex for thread-safe access to entries and sync.Once for idempotent operations.
 // Implements zerolog.Hook so log events are pushed via Run.
 type shoutrrrTypeNotifier struct {
-	Urls           []string              // Notification service URLs.
-	Router         router                // Router for sending messages.
-	entries        []*notificationEntry  // Queued log entries.
-	entriesMutex   sync.RWMutex          // Mutex for thread-safe access to entries.
-	logLevel       zerolog.Level         // Minimum log level for notifications.
-	template       *template.Template    // Template for message formatting.
-	messages       chan string           // Channel for message queuing.
-	done           chan struct{}         // Signal for send completion.
-	stop           chan struct{}         // Channel for stopping the notifier.
-	legacyTemplate bool                  // Use legacy log-only template if true.
-	params         *shoutrrrTypes.Params // Notification parameters.
-	data           StaticData            // Static notification data.
+	Urls           []string                // Notification service URLs. Guarded by routeMu once running.
+	Router         router                  // Router for sending messages. Guarded by routeMu once running.
+	routeMu        sync.RWMutex            // Protects Urls and Router against SetExtraURLs.
+	baseURLs       []string                // URLs from configuration, which SetExtraURLs keeps.
+	senderLogger   shoutrrrTypes.StdLogger // Logger for routers built by SetExtraURLs.
+	entries        []*notificationEntry    // Queued log entries.
+	entriesMutex   sync.RWMutex            // Mutex for thread-safe access to entries.
+	logLevel       zerolog.Level           // Minimum log level for notifications.
+	template       *template.Template      // Template for message formatting.
+	messages       chan string             // Channel for message queuing.
+	done           chan struct{}           // Signal for send completion.
+	stop           chan struct{}           // Channel for stopping the notifier.
+	legacyTemplate bool                    // Use legacy log-only template if true.
+	params         *shoutrrrTypes.Params   // Notification parameters.
+	data           StaticData              // Static notification data.
 	//nolint:containedctx
 	ctx    context.Context    // Context for cancellation.
 	cancel context.CancelFunc // Cancel function for the context.
@@ -126,8 +130,10 @@ func GetScheme(url string) string {
 // Returns:
 //   - []string: List of schemes from URLs.
 func (n *shoutrrrTypeNotifier) GetNames() []string {
-	names := make([]string, len(n.Urls))
-	for i, u := range n.Urls {
+	urls, _ := n.route()
+
+	names := make([]string, len(urls))
+	for i, u := range urls {
 		names[i] = GetScheme(u)
 	}
 
@@ -139,7 +145,42 @@ func (n *shoutrrrTypeNotifier) GetNames() []string {
 // Returns:
 //   - []string: List of URLs.
 func (n *shoutrrrTypeNotifier) GetURLs() []string {
-	return n.Urls
+	urls, _ := n.route()
+
+	return urls
+}
+
+// SetExtraURLs replaces the notification URLs added at run time, keeping the
+// URLs from configuration. The change applies to the next message sent.
+//
+// Parameters:
+//   - extra: URLs to send to in addition to the configured ones.
+//
+// Returns:
+//   - error: Non-nil if a URL cannot be used, in which case nothing changes.
+func (n *shoutrrrTypeNotifier) SetExtraURLs(extra []string) error {
+	urls := slices.Concat(n.baseURLs, extra)
+
+	logger := n.senderLogger
+	if logger == nil {
+		logger = newStdLogger(n.ll(), "Shoutrrr: ")
+	}
+
+	sender, err := shoutrrr.NewSenderWithOptions(logger, shoutrrrTypes.SenderOptions{}, urls...)
+	if err != nil {
+		return fmt.Errorf("invalid notification URL: %w", err)
+	}
+
+	n.routeMu.Lock()
+	n.Urls = urls
+	n.Router = sender
+	n.routeMu.Unlock()
+
+	n.ll().Info().
+		Strs("urls", redactServiceURLs(urls)).
+		Msg("Notification services changed")
+
+	return nil
 }
 
 // RegisterHook attaches this notifier as a zerolog.Hook on the given logger instance.
@@ -166,8 +207,10 @@ func (n *shoutrrrTypeNotifier) RegisterHook(log *zerolog.Logger) {
 		local := log.With().Str("notify", "no").Logger()
 		n.localLog = &local
 
+		urls, _ := n.route()
+
 		n.localLog.Debug().
-			Strs("urls", redactServiceURLs(n.Urls)).
+			Strs("urls", redactServiceURLs(urls)).
 			Msg("Added Shoutrrr notifier as zerolog hook, starting notification goroutine")
 
 		// Send using a separate goroutine to avoid blocking the main process.
@@ -238,8 +281,10 @@ func createNotifier(
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &shoutrrrTypeNotifier{
-		Urls:   urls,   // Notification service URLs.
-		Router: router, // Router for sending messages.
+		Urls:         urls,               // Notification service URLs.
+		Router:       router,             // Router for sending messages.
+		baseURLs:     slices.Clone(urls), // URLs from configuration.
+		senderLogger: logger,             // Logger for rebuilt routers.
 		messages: make(
 			chan string,
 			messageChannelBufferSize,
@@ -268,8 +313,9 @@ func createNotifier(
 //
 // Parameters:
 //   - notifier: Notifier instance.
+//   - urls: URLs the message was sent to, in router order.
 //   - errs: Errors returned from router send.
-func processSendErrors(notifier *shoutrrrTypeNotifier, errs []error) {
+func processSendErrors(notifier *shoutrrrTypeNotifier, urls []string, errs []error) {
 	log := notifier.ll()
 	failureCount := 0
 
@@ -277,11 +323,11 @@ func processSendErrors(notifier *shoutrrrTypeNotifier, errs []error) {
 
 	for i, err := range errs {
 		// Index guard against potential errs/Urls length mismatch
-		if i >= len(notifier.Urls) {
+		if i >= len(urls) {
 			log.Error().
 				Err(err).
 				Int("index", i).
-				Int("urls_length", len(notifier.Urls)).
+				Int("urls_length", len(urls)).
 				Int("errs_length", len(errs)).
 				Str("failure_type", "index_mismatch").
 				Msg("Error index out of bounds for URLs slice")
@@ -292,8 +338,8 @@ func processSendErrors(notifier *shoutrrrTypeNotifier, errs []error) {
 		// Increment failure count and prepare URL details for logging on notification failure.
 		if err != nil {
 			failureCount++
-			scheme := GetScheme(notifier.Urls[i])
-			sanitizedURL := sanitizeURLForLogging(notifier.Urls[i])
+			scheme := GetScheme(urls[i])
+			sanitizedURL := sanitizeURLForLogging(urls[i])
 
 			// Diagnostic logging: Categorize failure types
 			errStr := err.Error()
@@ -353,16 +399,16 @@ func processSendErrors(notifier *shoutrrrTypeNotifier, errs []error) {
 	// Diagnostic logging: Summary with categorized failures
 	if failureCount > 0 {
 		log.Warn().
-			Int("total_urls", len(notifier.Urls)).
+			Int("total_urls", len(urls)).
 			Int("failed_count", failureCount).
-			Int("success_count", len(notifier.Urls)-failureCount).
+			Int("success_count", len(urls)-failureCount).
 			Int("auth_failures", authFailures).
 			Int("network_failures", networkFailures).
 			Int("rate_limit_failures", rateLimitFailures).
 			Msg("Notification send completed with failures")
-	} else if len(notifier.Urls) > 0 {
+	} else if len(urls) > 0 {
 		log.Debug().
-			Int("total_urls", len(notifier.Urls)).
+			Int("total_urls", len(urls)).
 			Msg("Notification send completed successfully")
 	}
 }
@@ -897,6 +943,14 @@ func (n *shoutrrrTypeNotifier) Run(event *zerolog.Event, level zerolog.Level, me
 	n.sendEntries([]*notificationEntry{entry}, nil)
 }
 
+// route returns the current URLs and the router that sends to them.
+func (n *shoutrrrTypeNotifier) route() ([]string, router) {
+	n.routeMu.RLock()
+	defer n.routeMu.RUnlock()
+
+	return slices.Clone(n.Urls), n.Router
+}
+
 // ll returns the notifier's loop-safe logger, falling back to a discarded logger.
 //
 // Returns:
@@ -1041,21 +1095,22 @@ func (n *shoutrrrTypeNotifier) send(msg string) {
 	}
 
 	errsCh := make(chan []error, 1)
+	urls, sender := n.route()
 
 	go func() {
-		errsCh <- n.Router.Send(msg, n.params)
+		errsCh <- sender.Send(msg, n.params)
 	}()
 
 	select {
 	case errs := <-errsCh:
-		processSendErrors(n, errs)
+		processSendErrors(n, urls, errs)
 	case <-n.ctx.Done():
 		timer := time.NewTimer(shutdownGracePeriod)
 		defer timer.Stop()
 
 		select {
 		case errs := <-errsCh:
-			processSendErrors(n, errs)
+			processSendErrors(n, urls, errs)
 		case <-timer.C:
 			n.ll().Debug().Err(n.ctx.Err()).Msg("Notification send canceled")
 		}
@@ -1165,7 +1220,7 @@ func (n *shoutrrrTypeNotifier) sendEntries(entries []*notificationEntry, report 
 	if msg == "" {
 		if err != nil {
 			log.Error().Err(err).Msg("Notification template error")
-		} else if len(n.Urls) > 1 {
+		} else if urls, _ := n.route(); len(urls) > 1 {
 			log.Info().Msg("Skipping notification due to empty message")
 		}
 
@@ -1338,6 +1393,7 @@ func SendTestNotification(log *zerolog.Logger, urls []string, title, message str
 	} else {
 		local = zerolog.Nop()
 	}
+
 	logger := newStdLogger(&local, "Shoutrrr: ")
 
 	router, err := shoutrrr.NewSenderWithOptions(logger, shoutrrrTypes.SenderOptions{}, urls...)
@@ -1351,4 +1407,3 @@ func SendTestNotification(log *zerolog.Logger, urls []string, title, message str
 
 	return router.Send(message, params)
 }
-

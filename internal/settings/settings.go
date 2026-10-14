@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -92,6 +93,9 @@ type overrides struct {
 	AutoRollback       *bool             `json:"auto_rollback,omitempty"`
 	IncludeStopped     *bool             `json:"include_stopped,omitempty"`
 	ContainerOverrides map[string]string `json:"container_overrides,omitempty"`
+	// NotificationServices are notification destinations added at run time.
+	// They add to the URLs from flags rather than replacing them.
+	NotificationServices []NotificationService `json:"notification_services,omitempty"`
 }
 
 // Store holds the defaults from flags and the overrides layered on top.
@@ -106,6 +110,10 @@ type Store struct {
 	path      string
 	// scheduleChanges carries the latest schedule to the scheduler.
 	scheduleChanges chan string
+	// nextRun reports when the scheduler runs next. Protected by mu.
+	nextRun func() time.Time
+	// applyNotifications puts the saved notification services into effect. Protected by mu.
+	applyNotifications func(urls []string) error
 }
 
 // Open creates a store with the given defaults and loads saved overrides from
@@ -218,6 +226,35 @@ func (s *Store) ApplyTo(params types.UpdateParams) types.UpdateParams {
 	params.ContainerOverrides = values.ContainerOverrides
 
 	return params
+}
+
+// SetNextRun registers the function that reports when the scheduler next
+// runs a scan. The scheduler calls it once it is set up.
+//
+// Parameters:
+//   - next: Returns the next scan time, or the zero time when none is scheduled.
+func (s *Store) SetNextRun(next func() time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.nextRun = next
+}
+
+// NextRun returns when the scheduler next runs a scan, or the zero time when
+// no scan is scheduled or the scheduler is not running.
+//
+// Returns:
+//   - time.Time: The next scan time, or zero.
+func (s *Store) NextRun() time.Time {
+	s.mu.RLock()
+	next := s.nextRun
+	s.mu.RUnlock()
+
+	if next == nil {
+		return time.Time{}
+	}
+
+	return next()
 }
 
 // ScheduleChanges delivers the new cron expression each time the schedule
@@ -335,6 +372,9 @@ func (s *Store) load() {
 	if err != nil {
 		s.log.Warn().Err(err).Str("path", s.path).Msg("Saved settings no longer apply, using defaults")
 
+		// Notification services do not depend on the other settings, so keep them.
+		s.overrides = overrides{NotificationServices: saved.NotificationServices}
+
 		return
 	}
 
@@ -430,6 +470,7 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 		}
 
 		var co map[string]string
+
 		err := json.Unmarshal(raw, &co)
 		if err != nil {
 			return fmt.Errorf("%w: %s", ErrInvalidValue, key)

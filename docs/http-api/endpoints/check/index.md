@@ -103,6 +103,40 @@ The check does not clone or build.
 See [Git Monitoring](../../../advanced-features/git-monitoring/index.md).
 Git and OCI report fields are documented under [notification templates](../../../notifications/templates/index.md#git_and_oci_report_fields).
 
+## Latest Results
+
+`GET /v1/check` returns each container's status from the most recent check or scan that looked at it, without contacting any registry. Both `POST /v1/check` and update scans, scheduled or started through [`/v1/update`](../update/index.md), keep it current, so it also reports updates that a [monitor-only](../../../configuration/update-behavior/index.md#monitor_only) scan found but did not apply. The [web UI](../ui/index.md) reads it to show which containers have an update waiting.
+
+```bash
+curl -H "Authorization: Bearer mytoken" localhost:8080/v1/check
+```
+
+```json
+{
+    "containers": [
+        {
+            "name": "radarr",
+            "image": "lscr.io/linuxserver/radarr:latest",
+            "image_id": "sha256:5d1a...",
+            "update_available": true,
+            "latest_image_id": "sha256:9b7c...",
+            "current_image_version": "5.1",
+            "latest_image_version": "5.2",
+            "timestamp": "2025-01-20T11:30:45Z",
+            "checked_by": "scan"
+        }
+    ],
+    "count": 1,
+    "checked_at": "2025-01-20T11:30:45Z",
+    "timestamp": "2025-01-20T11:35:00Z",
+    "api_version": "v1"
+}
+```
+
+The fields match those of `POST /v1/check`, plus `checked_by`, which is `check` or `scan`. A container whose update failed during a scan has `update_available: true` and an `error`. `checked_at` is the newest `timestamp`, or `null` before the first check or scan.
+
+The results are saved to `checks.json` in the [data directory](../../../configuration/http-api/index.md#data_directory) when one is mounted. A container that no check or scan has looked at for 30 days, for example because it was removed, is dropped.
+
 ## HTTP Status Codes
 
 | Status Code | Description                                    |

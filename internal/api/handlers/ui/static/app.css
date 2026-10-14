@@ -865,6 +865,34 @@ input {
   width: 100%;
 }
 
+.field-optional {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+/* Notifications */
+
+.section-note {
+  max-width: 62ch;
+  margin-bottom: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.notify-add-title {
+  margin: 1.75rem 0 0.75rem;
+}
+
+.notify-form {
+  max-width: 34rem;
+  padding: 1.25rem 1rem;
+  border-top: 2px solid var(--ink);
+  background: var(--deck);
+}
+
+.notify-form .actions {
+  margin-top: 0.25rem;
+}
+
 /* Confirmation */
 
 .confirm {

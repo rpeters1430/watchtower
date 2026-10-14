@@ -93,6 +93,35 @@
             }
         },
         "/v1/check": {
+            "get": {
+                "description": "Returns each container's update status from the most recent check or scan that looked at it, without contacting any registry. Statuses are saved in the data directory when one is",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "check"
+                ],
+                "summary": "Latest check results",
+                "responses": {
+                    "200": {
+                        "description": "Latest known container statuses",
+                        "schema": {
+                            "$ref": "#/definitions/check.LatestResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
             "post": {
                 "description": "Checks each watched container for available updates. Associated Git-watched containers compare the hosted Git ref (no clone or build). Other containers query the registry for the",
                 "consumes": [
@@ -638,6 +667,155 @@
                 ]
             }
         },
+        "/v1/settings/notifications": {
+            "get": {
+                "description": "Lists the notification services Watchtower sends to, without their credentials. Services from flags or environment variables have source \"config\"; services added through this endpoint",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "List notification services",
+                "responses": {
+                    "200": {
+                        "description": "Notification services",
+                        "schema": {
+                            "$ref": "#/definitions/settings.NotificationsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "description": "Adds a Shoutrrr notification URL, such as ntfy://ntfy.sh/topic, in addition to any set by flags. It is saved in the data directory when one is mounted.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Add a notification service",
+                "parameters": [
+                    {
+                        "description": "Service to add",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/settings.AddNotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Notification services after the change",
+                        "schema": {
+                            "$ref": "#/definitions/settings.NotificationsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid URL",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "The service is already set up",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "The change could not be saved",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/settings/notifications/{id}": {
+            "delete": {
+                "description": "Removes a notification service that was added through the HTTP API. Services set by flags or environment variables cannot be removed here.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Remove a notification service",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Notification services after the change",
+                        "schema": {
+                            "$ref": "#/definitions/settings.NotificationsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "No service added at run time has this ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "The change could not be saved",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/settings/test-notification": {
             "post": {
                 "description": "Sends an immediate test alert to verify notification services. Optionally accepts a custom URL, title, or message.",
@@ -1037,11 +1215,156 @@
                 }
             }
         },
+        "check.LatestResponse": {
+            "type": "object",
+            "properties": {
+                "api_version": {
+                    "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "checked_at": {
+                    "description": "CheckedAt is when the most recent check or scan finished, or null before the first one.",
+                    "type": "string"
+                },
+                "containers": {
+                    "description": "Containers holds the latest known status of each container.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/metrics.ContainerStatus"
+                    }
+                },
+                "count": {
+                    "description": "Count is the number of containers.",
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "description": "Timestamp is when the response was produced.",
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_nicholas-fedor_watchtower_internal_api_handlers_settings.NotificationService": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "description": "Host is the server the service sends to, when the URL names one.",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID identifies the service. It is derived from the URL but does not reveal it.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the label given when the service was added, if any.",
+                    "type": "string"
+                },
+                "service": {
+                    "description": "Service is the Shoutrrr service, such as \"ntfy\" or \"discord\".",
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source is \"config\" for services set by flags or environment variables,\nwhich cannot be removed here, or \"settings\" for services added at run time.",
+                    "type": "string"
+                }
+            }
+        },
+        "metrics.ContainerStatus": {
+            "type": "object",
+            "properties": {
+                "changelog": {
+                    "type": "string"
+                },
+                "checked_by": {
+                    "description": "CheckedBy is StatusSourceCheck or StatusSourceScan.",
+                    "type": "string"
+                },
+                "current_image_version": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "git_ref": {
+                    "type": "string"
+                },
+                "git_repo": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "image_id": {
+                    "type": "string"
+                },
+                "latest_digest": {
+                    "type": "string"
+                },
+                "latest_image_id": {
+                    "type": "string"
+                },
+                "latest_image_version": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "oci_source": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "update_available": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "settings.AddNotificationRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "description": "Name is an optional label for the service.",
+                    "type": "string"
+                },
+                "url": {
+                    "description": "URL is the Shoutrrr service URL.",
+                    "type": "string"
+                }
+            }
+        },
+        "settings.NotificationsResponse": {
+            "type": "object",
+            "properties": {
+                "api_version": {
+                    "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "saved": {
+                    "description": "Saved is true when added services are written to the data directory and survive a restart.",
+                    "type": "boolean"
+                },
+                "services": {
+                    "description": "Services lists every notification destination.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_nicholas-fedor_watchtower_internal_api_handlers_settings.NotificationService"
+                    }
+                },
+                "timestamp": {
+                    "description": "Timestamp is when the response was produced.",
+                    "type": "string"
+                }
+            }
+        },
         "settings.Response": {
             "type": "object",
             "properties": {
                 "api_version": {
                     "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "next_run": {
+                    "description": "NextRun is when the next scheduled scan starts, omitted when none is scheduled.",
                     "type": "string"
                 },
                 "saved": {

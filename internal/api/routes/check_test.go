@@ -162,6 +162,15 @@ func TestRecordCheck(t *testing.T) {
 	assert.Equal(t, metrics.HistoryOutcomeAvailable, containers[1].Outcome)
 	assert.Equal(t, metrics.HistoryOutcomeFailed, containers[2].Outcome)
 	assert.Equal(t, "registry returned 429", containers[2].Error)
+
+	// Every checked container's status is kept for GET /v1/check.
+	statuses := store.GetStatuses()
+	require.Len(t, statuses, 4)
+	assert.Equal(t, "also-waiting", statuses[0].Name)
+	assert.Equal(t, "waiting", statuses[3].Name)
+	assert.True(t, statuses[3].UpdateAvailable)
+	assert.Equal(t, "1.28", statuses[3].LatestImageVersion)
+	assert.Equal(t, metrics.StatusSourceCheck, statuses[3].CheckedBy)
 }
 
 func TestRecordCheck_NoMetricsStore(t *testing.T) {

@@ -100,7 +100,9 @@ Adding or changing an option touches several layers, kept deliberately separate:
 
 - The store is opened in `runMain` and applied in exactly one place for updates: the `runUpdatesWithNotifications` closure calls `ApplyTo(params)`, which every path (schedule, `/v1/update`) goes through. API read paths use `apiconfig.BuildUpdateParams(opts)` per request for the same reason; do not hoist that call out of a handler closure.
 - Schedule changes reach the running scheduler through `ScheduleDeps.ScheduleChanges`, which swaps the cron entry in place.
-- `--data-dir` (default `/data`) holds `settings.json` and `history.json`. If the directory is missing or not writable, both fall back to memory only; nothing fails. `--run-once` ignores saved overrides.
+- `--data-dir` (default `/data`) holds `settings.json`, `history.json`, and `checks.json`. If the directory is missing or not writable, both fall back to memory only; nothing fails. `--run-once` ignores saved overrides.
+- Notification URLs added from the UI live in the same store (`notification_services`), not in `PATCH`: `/v1/settings/notifications` adds and removes them, `OnNotificationChange` pushes the list to the notifier's `SetExtraURLs`, and responses never echo the URLs.
+- `internal/metrics` also keeps each container's latest check result (`ContainerStatus`), fed by `/v1/check` and by every scan's report, and served by `GET /v1/check`. The next scheduled run reaches `/v1/settings` through `ScheduleDeps.ReportNextRun`.
 - `/v1/settings` (endpoint name `settings`) exposes the store over GET and PATCH. To make another setting editable: add it to `settings.Values`, the `overrides` struct and its `apply`/`set`, `ApplyTo`, the handler's response, the Settings view in `app.js`, and the docs table. A setting baked into the Docker client at construction (for example include-stopped) cannot be changed this way without reworking the client.
 
 ### Update engine

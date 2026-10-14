@@ -115,7 +115,7 @@ Valid names (case-insensitive):
 
 ## Data Directory
 
-Directory where Watchtower keeps settings changed through the [`settings`](../../http-api/endpoints/settings/index.md) endpoint (`settings.json`) and its scan history (`history.json`).
+Directory where Watchtower keeps settings changed through the [`settings`](../../http-api/endpoints/settings/index.md) endpoint (`settings.json`, which also holds notification services added in the web UI), its scan history (`history.json`), and each container's latest check result (`checks.json`).
 
 ```text
             Argument: --data-dir
@@ -125,7 +125,7 @@ Environment Variable: WATCHTOWER_DATA_DIR
 ```
 
 !!! Note
-    Mount a volume at this path to keep both across restarts. If the directory is missing or read-only, Watchtower keeps them in memory only and starts fresh each time.
+    Mount a volume at this path to keep them across restarts. If the directory is missing or read-only, Watchtower keeps them in memory only and starts fresh each time.
 
 ## HTTP API Rate Limit
 

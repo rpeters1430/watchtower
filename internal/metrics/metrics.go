@@ -32,34 +32,41 @@ type Metric struct {
 	Skipped   int `json:"skipped"`
 	// Containers names the containers the scan changed or failed on.
 	Containers []HistoryContainer `json:"containers,omitempty"`
+	// Statuses is the update state of each container the scan looked at.
+	Statuses []ContainerStatus `json:"-"`
 }
 
 // Metrics handles processing and exposing scan metrics.
 type Metrics struct {
-	channel            chan *Metric       // Channel for queuing metrics.
-	scanned            prometheus.Gauge   // Gauge for scanned containers.
-	updated            prometheus.Gauge   // Gauge for updated containers.
-	failed             prometheus.Gauge   // Gauge for failed containers.
-	restarted          prometheus.Gauge   // Gauge for restarted containers.
-	skipped            prometheus.Gauge   // Gauge for skipped containers.
-	restartedTotal     prometheus.Counter // Counter for total restarted containers.
-	total              prometheus.Counter // Counter for total scans.
-	skippedScans       prometheus.Counter // Counter for skipped scans.
-	dropped            prometheus.Counter // Counter for dropped metrics.
-	imageBytes         prometheus.Gauge   // Gauge for Docker image usage bytes.
-	imageReclaimable   prometheus.Gauge   // Gauge for reclaimable Docker image bytes.
-	diskSpaceMaxBytes  prometheus.Gauge   // Gauge for the configured image-usage maximum.
-	diskSpaceWarnBytes prometheus.Gauge   // Gauge for the configured image-usage warning threshold.
-	stopCh             chan struct{}      // Channel for shutdown signaling.
-	shutdownOnce       sync.Once          // Ensures shutdown is called only once.
-	lastMetric         *Metric            // Last scan metric for status endpoint.
-	lastMetricMu       sync.RWMutex       // Protects lastMetric.
-	history            []HistoryEntry     // Ring buffer of scan history.
-	historyIdx         int                // Current write position in the ring buffer.
-	historyMu          sync.RWMutex       // Protects history and historyIdx.
-	historyPath        string             // File history is saved to, empty for memory only.
-	historySaveMu      sync.Mutex         // Serializes writes of the history file.
-	historyLog         *zerolog.Logger    // Logger for history file problems.
+	channel            chan *Metric               // Channel for queuing metrics.
+	scanned            prometheus.Gauge           // Gauge for scanned containers.
+	updated            prometheus.Gauge           // Gauge for updated containers.
+	failed             prometheus.Gauge           // Gauge for failed containers.
+	restarted          prometheus.Gauge           // Gauge for restarted containers.
+	skipped            prometheus.Gauge           // Gauge for skipped containers.
+	restartedTotal     prometheus.Counter         // Counter for total restarted containers.
+	total              prometheus.Counter         // Counter for total scans.
+	skippedScans       prometheus.Counter         // Counter for skipped scans.
+	dropped            prometheus.Counter         // Counter for dropped metrics.
+	imageBytes         prometheus.Gauge           // Gauge for Docker image usage bytes.
+	imageReclaimable   prometheus.Gauge           // Gauge for reclaimable Docker image bytes.
+	diskSpaceMaxBytes  prometheus.Gauge           // Gauge for the configured image-usage maximum.
+	diskSpaceWarnBytes prometheus.Gauge           // Gauge for the configured image-usage warning threshold.
+	stopCh             chan struct{}              // Channel for shutdown signaling.
+	shutdownOnce       sync.Once                  // Ensures shutdown is called only once.
+	lastMetric         *Metric                    // Last scan metric for status endpoint.
+	lastMetricMu       sync.RWMutex               // Protects lastMetric.
+	history            []HistoryEntry             // Ring buffer of scan history.
+	historyIdx         int                        // Current write position in the ring buffer.
+	historyMu          sync.RWMutex               // Protects history and historyIdx.
+	historyPath        string                     // File history is saved to, empty for memory only.
+	historySaveMu      sync.Mutex                 // Serializes writes of the history file.
+	historyLog         *zerolog.Logger            // Logger for history file problems.
+	statuses           map[string]ContainerStatus // Latest known status per container name.
+	statusMu           sync.RWMutex               // Protects statuses, statusPath, and statusLog.
+	statusPath         string                     // File statuses are saved to, empty for memory only.
+	statusSaveMu       sync.Mutex                 // Serializes writes of the status file.
+	statusLog          *zerolog.Logger            // Logger for status file problems.
 	//nolint:containedctx
 	ctx    context.Context    // Context for cancellation.
 	cancel context.CancelFunc // Cancel function for the context.
@@ -197,6 +204,7 @@ func NewMetric(report types.Report) *Metric {
 		{HistoryOutcomeUpdated, report.Updated()},
 		{HistoryOutcomeFailed, report.Failed()},
 		{HistoryOutcomeRestarted, report.Restarted()},
+		{HistoryOutcomeAvailable, report.Stale()},
 	} {
 		for _, item := range group.reports {
 			if item == nil {
@@ -214,27 +222,7 @@ func NewMetric(report types.Report) *Metric {
 		Restarted:  len(report.Restarted()),
 		Skipped:    len(report.Skipped()),
 		Containers: containers,
-	}
-}
-
-// NewHistoryContainer records one container's part in a scan.
-//
-// Parameters:
-//   - outcome: One of the HistoryOutcome* values.
-//   - report: The container's scan report.
-//
-// Returns:
-//   - HistoryContainer: The container's history record.
-func NewHistoryContainer(outcome string, report types.ContainerReport) HistoryContainer {
-	return HistoryContainer{
-		Name:        strings.TrimPrefix(report.Name(), "/"),
-		Image:       report.ImageName(),
-		Outcome:     outcome,
-		FromImageID: string(report.CurrentImageID()),
-		ToImageID:   string(report.LatestImageID()),
-		FromVersion: report.CurrentImageVersion(),
-		ToVersion:   report.LatestImageVersion(),
-		Error:       report.Error(),
+		Statuses:   newScanStatuses(report, time.Now().UTC()),
 	}
 }
 
@@ -371,7 +359,8 @@ const (
 	// HistoryOutcomeRestarted marks a container restarted because a container
 	// it depends on was updated.
 	HistoryOutcomeRestarted = "restarted"
-	// HistoryOutcomeAvailable marks a container a check found a newer image for.
+	// HistoryOutcomeAvailable marks a container a check or scan found a newer
+	// image for without applying it, for example in monitor-only mode.
 	HistoryOutcomeAvailable = "available"
 )
 
@@ -389,6 +378,27 @@ type HistoryContainer struct {
 	FromVersion string `json:"from_version,omitempty"`
 	ToVersion   string `json:"to_version,omitempty"`
 	Error       string `json:"error,omitempty"`
+}
+
+// NewHistoryContainer records one container's part in a scan.
+//
+// Parameters:
+//   - outcome: One of the HistoryOutcome* values.
+//   - report: The container's scan report.
+//
+// Returns:
+//   - HistoryContainer: The container's history record.
+func NewHistoryContainer(outcome string, report types.ContainerReport) HistoryContainer {
+	return HistoryContainer{
+		Name:        strings.TrimPrefix(report.Name(), "/"),
+		Image:       report.ImageName(),
+		Outcome:     outcome,
+		FromImageID: string(report.CurrentImageID()),
+		ToImageID:   string(report.LatestImageID()),
+		FromVersion: report.CurrentImageVersion(),
+		ToVersion:   report.LatestImageVersion(),
+		Error:       report.Error(),
+	}
 }
 
 // HistoryEntry represents a single scan or check record in the history ring buffer.
@@ -565,6 +575,7 @@ func (m *Metrics) HandleUpdate() {
 			m.lastMetricMu.Unlock()
 
 			m.RecordHistory(change)
+			m.RecordStatuses(change.Statuses)
 		case <-m.stopCh:
 			return
 		case <-m.ctx.Done():

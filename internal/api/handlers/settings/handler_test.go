@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
@@ -165,7 +166,46 @@ func TestTestNotificationNoURLs(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
+
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestGetNextRun(t *testing.T) {
+	t.Parallel()
+
+	next := time.Date(2026, 10, 14, 15, 0, 0, 0, time.UTC)
+
+	for _, tt := range []struct {
+		name           string
+		scheduleActive bool
+		next           time.Time
+		want           *time.Time
+	}{
+		{name: "scheduled", scheduleActive: true, next: next, want: &next},
+		{name: "nothing scheduled", scheduleActive: true},
+		{name: "schedule inactive", scheduleActive: false, next: next},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			app, store := newTestApp(t, tt.scheduleActive)
+			store.SetNextRun(func() time.Time { return tt.next })
+
+			status, body := send(t, app, http.MethodGet, "")
+			require.Equal(t, http.StatusOK, status)
+
+			var response Response
+			require.NoError(t, json.Unmarshal([]byte(body), &response))
+
+			if tt.want == nil {
+				assert.Nil(t, response.NextRun)
+				assert.NotContains(t, body, "next_run")
+			} else {
+				require.NotNil(t, response.NextRun)
+				assert.True(t, tt.want.Equal(*response.NextRun))
+			}
+		})
+	}
 }

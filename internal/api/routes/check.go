@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/timeout"
@@ -68,6 +69,19 @@ func registerCheckRoute(app *fiber.App, auth fiber.Handler, opts config.Options)
 			},
 		),
 	)
+
+	if opts.DefaultMetrics != nil {
+		latest := check.NewLatest(opts.Logger, func() []metrics.ContainerStatus {
+			store := opts.DefaultMetrics()
+			if store == nil {
+				return nil
+			}
+
+			return store.GetStatuses()
+		})
+
+		app.Get(latest.Path, auth, latest.Handle)
+	}
 }
 
 // recordCheck adds a completed check to the scan history so that checks
@@ -86,7 +100,11 @@ func recordCheck(opts config.Options, results []check.ContainerCheck) {
 
 	var containers []metrics.HistoryContainer
 
+	statuses := make([]metrics.ContainerStatus, 0, len(results))
+
 	for _, result := range results {
+		statuses = append(statuses, checkStatus(result))
+
 		item := metrics.HistoryContainer{
 			Name:        strings.TrimPrefix(result.Name, "/"),
 			Image:       result.Image,
@@ -112,4 +130,31 @@ func recordCheck(opts config.Options, results []check.ContainerCheck) {
 	}
 
 	store.RecordCheck(len(results), available, failed, containers)
+	store.RecordStatuses(statuses)
+}
+
+// checkStatus converts one check result into the container's latest status.
+func checkStatus(result check.ContainerCheck) metrics.ContainerStatus {
+	timestamp := result.Timestamp
+	if timestamp.IsZero() {
+		timestamp = time.Now().UTC()
+	}
+
+	return metrics.ContainerStatus{
+		Name:                strings.TrimPrefix(result.Name, "/"),
+		Image:               result.Image,
+		ImageID:             result.ImageID,
+		UpdateAvailable:     result.UpdateAvailable,
+		LatestImageID:       result.LatestImageID,
+		LatestDigest:        result.LatestDigest,
+		CurrentImageVersion: result.CurrentImageVersion,
+		LatestImageVersion:  result.LatestImageVersion,
+		Changelog:           result.Changelog,
+		OCISource:           result.OCISource,
+		GitRepo:             result.GitRepo,
+		GitRef:              result.GitRef,
+		Error:               result.Error,
+		Timestamp:           timestamp,
+		CheckedBy:           metrics.StatusSourceCheck,
+	}
 }

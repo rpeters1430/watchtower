@@ -36,6 +36,8 @@ func TestNewMetric(t *testing.T) {
 					mock.EXPECT().Failed().Return([]types.ContainerReport{})
 					mock.EXPECT().Restarted().Return([]types.ContainerReport{})
 					mock.EXPECT().Skipped().Return([]types.ContainerReport{})
+					mock.EXPECT().Stale().Return(nil).Maybe()
+					mock.EXPECT().All().Return(nil).Maybe()
 
 					return mock
 				}(),
@@ -58,6 +60,8 @@ func TestNewMetric(t *testing.T) {
 					mock.EXPECT().Failed().Return(make([]types.ContainerReport, 1))
 					mock.EXPECT().Restarted().Return(make([]types.ContainerReport, 2))
 					mock.EXPECT().Skipped().Return(make([]types.ContainerReport, 1))
+					mock.EXPECT().Stale().Return(nil).Maybe()
+					mock.EXPECT().All().Return(nil).Maybe()
 
 					return mock
 				}(),
@@ -80,6 +84,8 @@ func TestNewMetric(t *testing.T) {
 					mock.EXPECT().Failed().Return([]types.ContainerReport{})
 					mock.EXPECT().Restarted().Return(make([]types.ContainerReport, 5))
 					mock.EXPECT().Skipped().Return([]types.ContainerReport{})
+					mock.EXPECT().Stale().Return(nil).Maybe()
+					mock.EXPECT().All().Return(nil).Maybe()
 
 					return mock
 				}(),
@@ -102,6 +108,8 @@ func TestNewMetric(t *testing.T) {
 					mock.EXPECT().Failed().Return(make([]types.ContainerReport, 2))
 					mock.EXPECT().Restarted().Return(make([]types.ContainerReport, 4))
 					mock.EXPECT().Skipped().Return(make([]types.ContainerReport, 2))
+					mock.EXPECT().Stale().Return(nil).Maybe()
+					mock.EXPECT().All().Return(nil).Maybe()
 
 					return mock
 				}(),
@@ -149,6 +157,8 @@ func TestNewMetric_NamesChangedContainers(t *testing.T) {
 	report.EXPECT().Failed().Return([]types.ContainerReport{failed})
 	report.EXPECT().Restarted().Return([]types.ContainerReport{})
 	report.EXPECT().Skipped().Return([]types.ContainerReport{})
+	report.EXPECT().Stale().Return(nil).Maybe()
+	report.EXPECT().All().Return(nil).Maybe()
 
 	want := []HistoryContainer{
 		{
@@ -198,6 +208,8 @@ func TestNewMetric_ErrorHandling(t *testing.T) {
 				mock.EXPECT().Failed().Return(nil)
 				mock.EXPECT().Restarted().Return(nil)
 				mock.EXPECT().Skipped().Return(nil)
+				mock.EXPECT().Stale().Return(nil).Maybe()
+				mock.EXPECT().All().Return(nil).Maybe()
 
 				return mock
 			}(),

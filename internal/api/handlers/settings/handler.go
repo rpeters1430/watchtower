@@ -41,10 +41,17 @@ type Response struct {
 	Saved bool `json:"saved"`
 	// ScheduleActive is false when Watchtower only updates on request, so the schedule has no effect.
 	ScheduleActive bool `json:"schedule_active"`
+	// NextRun is when the next scheduled scan starts, omitted when none is scheduled.
+	NextRun *time.Time `json:"next_run,omitempty"`
 	// Timestamp is when the response was produced.
 	Timestamp string `json:"timestamp"`
 	// APIVersion is the API version of the response.
 	APIVersion string `json:"api_version"`
+}
+
+// nextRunner is implemented by stores that know when the scheduler runs next.
+type nextRunner interface {
+	NextRun() time.Time
 }
 
 // TestNotificationRequest is the optional request body for testing notification delivery.
@@ -210,6 +217,7 @@ func (h *Handler) send(c fiber.Ctx) error {
 		},
 		Saved:          snapshot.Persistent,
 		ScheduleActive: h.scheduleActive,
+		NextRun:        h.nextRun(),
 		Timestamp:      time.Now().UTC().Format(time.RFC3339),
 		APIVersion:     "v1",
 	})
@@ -271,6 +279,23 @@ func (h *Handler) TestNotification(c fiber.Ctx) error {
 		"success": true,
 		"message": "Notification sent successfully",
 	})
+}
+
+// nextRun returns the next scheduled scan time, or nil when none is scheduled.
+func (h *Handler) nextRun() *time.Time {
+	runner, ok := h.store.(nextRunner)
+	if !ok || !h.scheduleActive {
+		return nil
+	}
+
+	next := runner.NextRun()
+	if next.IsZero() {
+		return nil
+	}
+
+	next = next.UTC()
+
+	return &next
 }
 
 // sendError writes a 400 response with a JSON error body.

@@ -8,7 +8,6 @@
 (() => {
   "use strict";
 
-  const CHECK_STORE = "watchtower.check";
   const REFRESH_MS = 60_000;
   // Update progress is polled this often while an update runs. Every request
   // counts toward the API's per-IP rate limit, so keep it gentle.
@@ -37,6 +36,11 @@
     configProblem: "",
     settings: null,
     settingsProblem: "",
+    notifications: null,
+    notificationsProblem: "",
+    notifyDraft: { service: "ntfy", name: "", fields: {} },
+    notifyBusy: "",
+    removingService: "",
     customSchedule: false,
     customScheduleDraft: null,
     editingTag: new Map(),
@@ -214,32 +218,6 @@
     return data;
   }
 
-  // Check results survive a reload but not the browser tab.
-
-  function restoreChecks() {
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(CHECK_STORE));
-
-      if (saved && Array.isArray(saved.items)) {
-        state.checks = new Map(saved.items.map((item) => [cleanName(item.name), item]));
-        state.checkedAt = new Date(saved.at);
-      }
-    } catch {
-      sessionStorage.removeItem(CHECK_STORE);
-    }
-  }
-
-  function saveChecks() {
-    try {
-      sessionStorage.setItem(
-        CHECK_STORE,
-        JSON.stringify({ at: state.checkedAt.toISOString(), items: [...state.checks.values()] }),
-      );
-    } catch {
-      // Storage can be unavailable in private windows. The results still show until reload.
-    }
-  }
-
   // Data
 
   function feature(name) {
@@ -263,6 +241,45 @@
     }
 
     state.containersLoaded = true;
+  }
+
+  // The server keeps each container's latest check or scan result, so every
+  // browser sees the same state, including results from scheduled scans.
+  async function loadChecks() {
+    if (!feature("check")) {
+      return;
+    }
+
+    try {
+      const data = await request("GET", "/v1/check");
+      const next = new Map();
+
+      for (const item of data.containers || []) {
+        const name = cleanName(item.name);
+        const local = state.checks.get(name);
+
+        // Keep a change this page made that the server hasn't recorded yet.
+        next.set(name, local && new Date(local.timestamp) > new Date(item.timestamp) ? local : item);
+      }
+
+      state.checks = next;
+      state.checkedAt = data.checked_at ? new Date(data.checked_at) : null;
+    } catch {
+      // Older results stay on the page; the next refresh tries again.
+    }
+  }
+
+  // Marks containers as up to date straight after this page updated them.
+  function markUpdated(names) {
+    const now = new Date().toISOString();
+
+    for (const name of names) {
+      const check = state.checks.get(name);
+
+      if (check) {
+        state.checks.set(name, { ...check, update_available: false, error: "", timestamp: now });
+      }
+    }
   }
 
   async function loadHistory() {
@@ -307,6 +324,19 @@
       state.settingsProblem = "";
     } catch (problem) {
       state.settingsProblem = problem.message;
+    }
+  }
+
+  async function loadNotifications() {
+    if (!feature("settings")) {
+      return;
+    }
+
+    try {
+      state.notifications = await request("GET", "/v1/settings/notifications");
+      state.notificationsProblem = "";
+    } catch (problem) {
+      state.notificationsProblem = problem.message;
     }
   }
 
@@ -376,17 +406,7 @@
   async function activityEnded(last) {
     const updated = (last.containers || []).filter((entry) => entry.step === "updated").map((entry) => cleanName(entry.name));
 
-    for (const name of updated) {
-      const check = state.checks.get(name);
-
-      if (check) {
-        state.checks.set(name, { ...check, update_available: false });
-      }
-    }
-
-    if (updated.length > 0 && state.checkedAt) {
-      saveChecks();
-    }
+    markUpdated(updated);
 
     if (state.updating.size > 0) {
       // This page's own update request reports the outcome when it returns.
@@ -394,6 +414,7 @@
     }
 
     await Promise.all([loadContainers(), loadHistory()]);
+    await loadChecks();
 
     if (updated.length > 0) {
       notify(`Updated ${updated.length === 1 ? updated[0] : count(updated.length, "container")}.`);
@@ -528,7 +549,6 @@
 
       state.checks = new Map((data.containers || []).map((item) => [cleanName(item.name), item]));
       state.checkedAt = new Date();
-      saveChecks();
       await Promise.all([loadContainers(), loadHistory()]);
     } catch (problem) {
       notify(`Couldn't check for updates. ${problem.message}`, true);
@@ -564,17 +584,7 @@
       }
 
       if (!summary.failed) {
-        for (const name of names) {
-          const check = state.checks.get(name);
-
-          if (check) {
-            state.checks.set(name, { ...check, update_available: false });
-          }
-        }
-
-        if (state.checkedAt) {
-          saveChecks();
-        }
+        markUpdated(names);
       }
     } catch (problem) {
       const reason = problem.status === 429 ? "Another update is already running." : problem.message;
@@ -587,6 +597,7 @@
     // must not report it again as one that finished elsewhere.
     state.activity = null;
     await Promise.all([loadContainers(), loadHistory()]);
+    await loadChecks();
     render();
   }
 
@@ -750,7 +761,7 @@
     }
 
     if (check && check.error) {
-      return { key: "failed", label: "Couldn't check" };
+      return { key: "failed", label: check.checked_by === "scan" && check.update_available ? "Update failed" : "Couldn't check" };
     }
 
     if (check && check.update_available) {
@@ -766,6 +777,19 @@
     }
 
     return { key: "unknown", label: "Not checked yet" };
+  }
+
+  // When Watchtower's schedule runs next, or null when nothing is scheduled.
+  function nextScan() {
+    const settings = state.settings;
+
+    if (!settings || !settings.schedule_active || !settings.next_run) {
+      return null;
+    }
+
+    const next = new Date(settings.next_run);
+
+    return next > new Date() ? next : null;
   }
 
   function canUpdate(container) {
@@ -836,7 +860,12 @@
   function lookout() {
     const total = state.containers.length;
     const waiting = waitingContainers();
-    const unchecked = [...state.checks.values()].filter((check) => check.error).length;
+    // The server remembers containers that have since been removed, so count only current ones.
+    const unchecked = state.containers.filter((container) => {
+      const check = state.checks.get(container.name);
+
+      return check && check.error;
+    }).length;
     const updatable = waiting.filter(canUpdate);
     let line;
     let note;
@@ -889,7 +918,13 @@
     }
 
     if (state.checkedAt && unchecked > 0) {
-      note += ` ${capitalise(count(unchecked, "container"))} couldn't be checked.`;
+      note += ` ${capitalise(count(unchecked, "container"))} couldn't be checked or updated.`;
+    }
+
+    const next = nextScan();
+
+    if (!activity && next) {
+      note += ` Next scan ${next - Date.now() < 60_000 ? "in under a minute" : ago(next)}.`;
     }
 
     return el(
@@ -1794,6 +1829,472 @@
     return ["To turn it on, add ", code(endpoint), " to ", code("WATCHTOWER_HTTP_API_ENDPOINTS"), ".", extra || ""];
   }
 
+  // Notifications
+
+  // Reads a server address typed as "host", "host:port", or a full http(s) URL.
+  function serverAddress(text, fallback) {
+    const raw = String(text || "").trim() || fallback || "";
+    const withScheme = /^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`;
+    let parsed;
+
+    try {
+      parsed = new URL(withScheme);
+    } catch {
+      throw new Error("The server address isn't valid.");
+    }
+
+    if (!parsed.hostname) {
+      throw new Error("Enter the server address.");
+    }
+
+    return {
+      host: parsed.host,
+      path: parsed.pathname.replace(/\/+$/, ""),
+      insecure: parsed.protocol === "http:",
+    };
+  }
+
+  function required(fields, key, label) {
+    const value = String(fields[key] || "").trim();
+
+    if (!value) {
+      throw new Error(`${label} is required.`);
+    }
+
+    return value;
+  }
+
+  const enc = encodeURIComponent;
+
+  // Each service lists the fields the form asks for and turns them into the
+  // Shoutrrr URL Watchtower stores. Secrets are typed into password fields.
+  const SERVICES = [
+    {
+      id: "ntfy",
+      label: "ntfy",
+      help: "Push notifications to the ntfy app, from ntfy.sh or your own server.",
+      fields: [
+        { key: "server", label: "Server", placeholder: "ntfy.sh", help: "Leave as ntfy.sh, or enter your own server, for example http://ntfy.lan:8080." },
+        { key: "topic", label: "Topic", placeholder: "watchtower-updates", help: "On ntfy.sh anyone who knows the topic can read it, so pick something hard to guess." },
+        { key: "token", label: "Access token", secret: true, optional: true, help: "Only for protected topics." },
+      ],
+      build(fields) {
+        const server = serverAddress(fields.server, "ntfy.sh");
+        const query = new URLSearchParams();
+
+        if (fields.token) {
+          query.set("token", fields.token.trim());
+        }
+
+        if (server.insecure) {
+          query.set("scheme", "http");
+        }
+
+        const suffix = query.toString() ? `?${query}` : "";
+
+        return `ntfy://${server.host}${server.path}/${enc(required(fields, "topic", "Topic"))}${suffix}`;
+      },
+    },
+    {
+      id: "discord",
+      label: "Discord",
+      help: "Post to a Discord channel through a webhook.",
+      fields: [
+        { key: "webhook", label: "Webhook URL", secret: true, placeholder: "https://discord.com/api/webhooks/…", help: "Channel settings, Integrations, Webhooks, Copy webhook URL." },
+      ],
+      build(fields) {
+        const match = required(fields, "webhook", "Webhook URL").match(/\/api\/webhooks\/(\d+)\/([^/?#\s]+)/);
+
+        if (!match) {
+          throw new Error("That doesn't look like a Discord webhook URL.");
+        }
+
+        return `discord://${match[2]}@${match[1]}`;
+      },
+    },
+    {
+      id: "telegram",
+      label: "Telegram",
+      help: "Message a Telegram chat or channel from your bot.",
+      fields: [
+        { key: "token", label: "Bot token", secret: true, placeholder: "123456:ABC-DEF…", help: "From @BotFather." },
+        { key: "chats", label: "Chat IDs", placeholder: "-1001234567890, @mychannel", help: "Separate several with commas. Forward a message to @shoutrrrbot to find a chat's ID." },
+      ],
+      build(fields) {
+        const chats = required(fields, "chats", "Chat IDs")
+          .split(",")
+          .map((chat) => chat.trim())
+          .filter(Boolean)
+          .join(",");
+
+        return `telegram://${required(fields, "token", "Bot token")}@telegram?chats=${enc(chats)}`;
+      },
+    },
+    {
+      id: "gotify",
+      label: "Gotify",
+      help: "Push to your own Gotify server.",
+      fields: [
+        { key: "server", label: "Server", placeholder: "https://gotify.example.com" },
+        { key: "token", label: "Application token", secret: true, placeholder: "A…", help: "Create an application in Gotify and copy its token." },
+      ],
+      build(fields) {
+        const server = serverAddress(required(fields, "server", "Server"));
+        const suffix = server.insecure ? "?disabletls=yes" : "";
+
+        return `gotify://${server.host}${server.path}/${enc(required(fields, "token", "Application token"))}${suffix}`;
+      },
+    },
+    {
+      id: "pushover",
+      label: "Pushover",
+      help: "Push to the Pushover app.",
+      fields: [
+        { key: "user", label: "User key", secret: true, help: "Shown at the top right of your Pushover dashboard." },
+        { key: "token", label: "API token", secret: true, help: "From the application you created for Watchtower." },
+      ],
+      build(fields) {
+        return `pushover://shoutrrr:${enc(required(fields, "token", "API token"))}@${enc(required(fields, "user", "User key"))}/`;
+      },
+    },
+    {
+      id: "slack",
+      label: "Slack",
+      help: "Post to a Slack channel through an incoming webhook.",
+      fields: [
+        { key: "webhook", label: "Webhook URL", secret: true, placeholder: "https://hooks.slack.com/services/…" },
+      ],
+      build(fields) {
+        const match = required(fields, "webhook", "Webhook URL").match(/hooks\.slack\.com\/services\/([^/]+)\/([^/]+)\/([^/?#\s]+)/);
+
+        if (!match) {
+          throw new Error("That doesn't look like a Slack webhook URL.");
+        }
+
+        return `slack://hook:${match[1]}-${match[2]}-${match[3]}@webhook`;
+      },
+    },
+    {
+      id: "smtp",
+      label: "Email",
+      help: "Send email through an SMTP server.",
+      fields: [
+        { key: "host", label: "SMTP server", placeholder: "smtp.gmail.com" },
+        { key: "port", label: "Port", placeholder: "587" },
+        { key: "username", label: "Username", optional: true },
+        { key: "password", label: "Password", secret: true, optional: true, help: "For Gmail and similar, use an app password." },
+        { key: "from", label: "From address", placeholder: "watchtower@example.com" },
+        { key: "to", label: "To addresses", placeholder: "you@example.com", help: "Separate several with commas." },
+      ],
+      build(fields) {
+        const user = String(fields.username || "").trim();
+        const password = String(fields.password || "");
+        const auth = user ? `${enc(user)}${password ? `:${enc(password)}` : ""}@` : "";
+        const port = String(fields.port || "").trim() || "587";
+        const query = new URLSearchParams({
+          fromaddress: required(fields, "from", "From address"),
+          toaddresses: required(fields, "to", "To addresses")
+            .split(",")
+            .map((to) => to.trim())
+            .filter(Boolean)
+            .join(","),
+        });
+
+        if (!user) {
+          query.set("auth", "None");
+        }
+
+        return `smtp://${auth}${required(fields, "host", "SMTP server")}:${port}/?${query}`;
+      },
+    },
+    {
+      id: "webhook",
+      label: "Webhook",
+      help: "POST a JSON message to any URL, for Home Assistant, n8n, and similar.",
+      fields: [{ key: "url", label: "URL", placeholder: "https://example.com/hooks/watchtower" }],
+      build(fields) {
+        const target = required(fields, "url", "URL");
+
+        if (!/^https?:\/\//i.test(target)) {
+          throw new Error("The URL must start with http:// or https://.");
+        }
+
+        return `generic+${target}`;
+      },
+    },
+    {
+      id: "custom",
+      label: "Other",
+      help: "Any service Shoutrrr supports, such as Matrix, Teams, Mattermost, or Bark.",
+      fields: [
+        {
+          key: "url",
+          label: "Shoutrrr URL",
+          secret: true,
+          placeholder: "matrix://user:password@matrix.example.com/?rooms=!room",
+          help: "Each service's format is in the Shoutrrr documentation.",
+        },
+      ],
+      build(fields) {
+        return required(fields, "url", "Shoutrrr URL");
+      },
+    },
+  ];
+
+  function serviceLabel(id) {
+    const known = SERVICES.find((service) => service.id === id || (id === "generic" && service.id === "webhook"));
+
+    return known ? known.label : capitalise(id);
+  }
+
+  async function notificationAction(kind) {
+    const draft = state.notifyDraft;
+    const service = SERVICES.find((item) => item.id === draft.service);
+    let url;
+
+    try {
+      url = service.build(draft.fields);
+    } catch (problem) {
+      notify(problem.message, true);
+
+      return;
+    }
+
+    state.notifyBusy = kind;
+    render();
+
+    try {
+      if (kind === "test") {
+        await request("POST", "/v1/settings/test-notification", { url });
+        notify(`Sent a test message to ${service.label}. Check that it arrived.`);
+      } else {
+        state.notifications = await request("POST", "/v1/settings/notifications", { name: draft.name, url });
+        state.notifyDraft = { service: draft.service, name: "", fields: {} };
+        notify(`${service.label} added. Watchtower sends its update reports there from now on.`);
+      }
+    } catch (problem) {
+      notify(kind === "test" ? `The test message didn't send. ${problem.message}` : `Couldn't add ${service.label}. ${problem.message}`, true);
+    }
+
+    state.notifyBusy = "";
+    render();
+  }
+
+  async function removeNotification(id) {
+    if (state.removingService !== id) {
+      state.removingService = id;
+      render();
+
+      return;
+    }
+
+    state.notifyBusy = id;
+    render();
+
+    try {
+      state.notifications = await request("DELETE", `/v1/settings/notifications/${encodeURIComponent(id)}`);
+      notify("Notification service removed.");
+    } catch (problem) {
+      notify(`Couldn't remove it. ${problem.message}`, true);
+    }
+
+    state.notifyBusy = "";
+    state.removingService = "";
+    render();
+  }
+
+  async function testAll(event) {
+    const button = event.currentTarget;
+
+    button.disabled = true;
+
+    try {
+      await request("POST", "/v1/settings/test-notification", {});
+      notify("Sent a test message to every service. Check that they arrived.");
+    } catch (problem) {
+      notify(`The test message didn't send. ${problem.message}`, true);
+    }
+
+    button.disabled = false;
+  }
+
+  function notificationRow(service) {
+    const fromConfig = service.source === "config";
+    const confirming = state.removingService === service.id;
+    const title = service.name || serviceLabel(service.service);
+    const detail = [service.name ? serviceLabel(service.service) : "", service.host].filter(Boolean).join(", ");
+
+    return el(
+      "li",
+      { class: "setting" },
+      el("span", { class: "setting-name" }, title),
+      el(
+        "span",
+        { class: "setting-value" },
+        fromConfig
+          ? el("span", { class: "setting-off" }, "From config")
+          : el(
+              "button",
+              {
+                class: confirming ? "button button-quiet button-tiny button-stop" : "button button-quiet button-tiny",
+                type: "button",
+                disabled: state.notifyBusy === service.id,
+                "aria-label": confirming ? `Confirm removing ${title}` : `Remove ${title}`,
+                onclick: () => removeNotification(service.id),
+              },
+              confirming ? "Confirm remove" : "Remove",
+            ),
+      ),
+      el(
+        "span",
+        { class: "setting-help" },
+        [detail, fromConfig ? "Set with WATCHTOWER_NOTIFICATION_URL, so change it there." : ""].filter(Boolean).join(". "),
+      ),
+    );
+  }
+
+  function notificationForm() {
+    const draft = state.notifyDraft;
+    const service = SERVICES.find((item) => item.id === draft.service) || SERVICES[0];
+    const busy = Boolean(state.notifyBusy);
+    const field = (spec) => {
+      const id = `notify-${spec.key}`;
+
+      return el(
+        "div",
+        { class: "field" },
+        el("label", { class: "field-label", for: id }, spec.label, spec.optional && el("span", { class: "field-optional" }, " (optional)")),
+        el("input", {
+          class: "field-input",
+          id,
+          type: spec.secret ? "password" : "text",
+          autocomplete: "off",
+          spellcheck: "false",
+          placeholder: spec.placeholder,
+          value: draft.fields[spec.key] || "",
+          "aria-describedby": spec.help && `${id}-help`,
+          oninput: (event) => {
+            draft.fields[spec.key] = event.target.value;
+          },
+        }),
+        spec.help && el("p", { class: "field-help", id: `${id}-help` }, spec.help),
+      );
+    };
+
+    return el(
+      "form",
+      {
+        class: "form notify-form",
+        onsubmit: (event) => {
+          event.preventDefault();
+          notificationAction("add");
+        },
+      },
+      el(
+        "div",
+        { class: "field" },
+        el("label", { class: "field-label", for: "notify-service" }, "Service"),
+        el(
+          "select",
+          {
+            class: "select",
+            id: "notify-service",
+            onchange: (event) => {
+              state.notifyDraft = { service: event.target.value, name: draft.name, fields: {} };
+              render();
+              document.getElementById("notify-service")?.focus();
+            },
+          },
+          SERVICES.map((item) => el("option", { value: item.id, selected: item.id === service.id }, item.label)),
+        ),
+        el("p", { class: "field-help" }, service.help),
+      ),
+      service.fields.map(field),
+      el(
+        "div",
+        { class: "field" },
+        el("label", { class: "field-label", for: "notify-name" }, "Name", el("span", { class: "field-optional" }, " (optional)")),
+        el("input", {
+          class: "field-input field-input-text",
+          id: "notify-name",
+          type: "text",
+          autocomplete: "off",
+          maxlength: "80",
+          placeholder: `${service.label} on my phone`,
+          value: draft.name,
+          oninput: (event) => {
+            draft.name = event.target.value;
+          },
+        }),
+      ),
+      el(
+        "div",
+        { class: "actions" },
+        el(
+          "button",
+          { class: "button", type: "button", disabled: busy, onclick: () => notificationAction("test") },
+          state.notifyBusy === "test" ? "Sending" : "Send a test",
+        ),
+        el("button", { class: "button button-primary", type: "submit", disabled: busy }, state.notifyBusy === "add" ? "Adding" : `Add ${service.label}`),
+      ),
+    );
+  }
+
+  function notificationsSection() {
+    const data = state.notifications;
+    const parts = [
+      el("h2", { class: "section-title" }, "Notifications"),
+      el(
+        "p",
+        { class: "section-note" },
+        "Watchtower sends a report to these services after each scan that updates or fails on something.",
+      ),
+    ];
+
+    if (state.notificationsProblem && !data) {
+      parts.push(el("p", { class: "blank" }, el("strong", null, "Notification services didn't load."), state.notificationsProblem));
+
+      return el("section", { class: "section" }, parts);
+    }
+
+    if (!data) {
+      return el("section", { class: "section" }, parts, el("p", { class: "setting-help" }, "Loading notification services."));
+    }
+
+    const services = data.services || [];
+
+    parts.push(
+      services.length > 0
+        ? el(
+            "ul",
+            { class: "manifest" },
+            services.map(notificationRow),
+            el(
+              "li",
+              { class: "setting" },
+              el("span", { class: "setting-name" }, "Test every service"),
+              el(
+                "span",
+                { class: "setting-value" },
+                el("button", { class: "button button-quiet button-tiny", type: "button", onclick: testAll }, "Send test"),
+              ),
+              el("span", { class: "setting-help" }, "Sends one message to each service above."),
+            ),
+          )
+        : el("p", { class: "blank" }, el("strong", null, "No notifications set up."), "Add a service below to hear about updates on your phone or in chat."),
+    );
+
+    if (!data.saved) {
+      parts.push(
+        el("p", { class: "problem" }, "Services added here are forgotten when Watchtower restarts, because no ", code("/data"), " folder is mounted."),
+      );
+    }
+
+    parts.push(el("h3", { class: "detail-title notify-add-title" }, "Add a service"), notificationForm());
+
+    return el("section", { class: "section" }, parts);
+  }
+
   function settingsView() {
     const config = state.config;
     const editable = feature("settings") && state.settings;
@@ -1893,52 +2394,10 @@
           el("ul", { class: "manifest" }, rows),
         ),
       );
+    }
 
-      if (editable) {
-        sections.push(
-          el(
-            "section",
-            { class: "section" },
-            el("h2", { class: "section-title" }, "Notifications"),
-            el(
-              "ul",
-              { class: "manifest" },
-              el(
-                "li",
-                { class: "setting" },
-                el("span", { class: "setting-name" }, "Test notifications"),
-                el(
-                  "span",
-                  { class: "setting-value" },
-                  el(
-                    "button",
-                    {
-                      class: "button button-quiet",
-                      type: "button",
-                      onclick: async (event) => {
-                        const btn = event.target;
-                        btn.disabled = true;
-                        btn.textContent = "Sending...";
-                        try {
-                          const res = await request("POST", "/v1/settings/test-notification", {});
-                          notify(res && res.message ? res.message : "Test notification sent successfully!");
-                        } catch (err) {
-                          notify(`Test notification failed: ${err.message}`, true);
-                        } finally {
-                          btn.disabled = false;
-                          btn.textContent = "Send test notification";
-                        }
-                      },
-                    },
-                    "Send test notification",
-                  ),
-                ),
-                el("span", { class: "setting-help" }, "Dispatches a test alert through configured Shoutrrr notification URLs."),
-              ),
-            ),
-          ),
-        );
-      }
+    if (feature("settings")) {
+      sections.push(notificationsSection());
     }
 
     if (feature("config") && config) {
@@ -2132,7 +2591,6 @@
       // The cookie may already be gone. Showing the sign-in page is right either way.
     }
 
-    sessionStorage.removeItem(CHECK_STORE);
     state.session = { authenticated: false };
     state.checks = new Map();
     state.checkedAt = null;
@@ -2206,16 +2664,30 @@
       await loadHistory();
       render();
     } else if (view.draw === containersView) {
-      await Promise.all([loadContainers(), loadHistory()]);
+      const nextRun = state.settings && state.settings.next_run ? new Date(state.settings.next_run) : null;
+
+      await Promise.all([
+        loadContainers(),
+        loadHistory(),
+        loadChecks(),
+        // The next scan time moves on once a scan has started.
+        nextRun && nextRun <= new Date() && loadSettings(),
+      ]);
+      // Redraw only the parts that change, so typing in the search box isn't interrupted.
+      const slot = document.getElementById("lookout-slot");
+
+      if (slot) {
+        slot.replaceChildren(lookout());
+      }
+
       renderManifest();
     }
   }
 
   async function start() {
-    restoreChecks();
     render();
     // History also feeds each container's update history on the Containers view.
-    await Promise.all([loadContainers(), loadConfig(), loadSettings(), loadHistory()]);
+    await Promise.all([loadContainers(), loadConfig(), loadSettings(), loadHistory(), loadChecks(), loadNotifications()]);
     render();
     // Picks up an update that was already running, for example before a reload.
     await pollActivity();

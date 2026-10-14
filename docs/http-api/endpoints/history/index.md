@@ -95,7 +95,7 @@ Each entry has a `kind`:
 |:----------------------------------|:----------------------------------------------------------------------------------------------------|
 | `name`                            | Container name                                                                                      |
 | `image`                           | Image name with tag                                                                                 |
-| `outcome`                         | `updated`, `failed`, `restarted` (because a container it depends on was updated), or `available` (a check found a newer image) |
+| `outcome`                         | `updated`, `failed`, `restarted` (because a container it depends on was updated), or `available` (a newer image was found but not applied, by a check or a [monitor-only](../../../configuration/update-behavior/index.md#monitor_only) scan) |
 | `from_image_id`, `to_image_id`    | Image IDs before and after the update, or the running and newer image for `available`             |
 | `from_version`, `to_version`      | The images' `org.opencontainers.image.version` annotations, when the image sets them              |
 | `error`                           | Why the container failed, for `failed`                                                              |
