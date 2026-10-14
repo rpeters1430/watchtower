@@ -856,7 +856,7 @@
     return el(
       "li",
       { class: "unit" },
-      el("div", { class: "unit-head" }, toggle, el("div", { class: "unit-action" }, actionWrapper)),
+      el("div", { class: "unit-head" }, toggle, actions.length > 0 && el("div", { class: "unit-action" }, actionWrapper)),
       open && facts(container),
     );
   }
