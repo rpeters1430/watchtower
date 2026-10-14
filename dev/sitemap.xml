@@ -25,6 +25,10 @@
          <lastmod>2026-10-14</lastmod>
     </url>
     <url>
+         <loc>https://watchtower.nickfedor.com/dev/advanced-features/image-scanning/</loc>
+         <lastmod>2026-10-14</lastmod>
+    </url>
+    <url>
          <loc>https://watchtower.nickfedor.com/dev/advanced-features/lifecycle-hooks/</loc>
          <lastmod>2026-10-14</lastmod>
     </url>
@@ -74,6 +78,10 @@
     </url>
     <url>
          <loc>https://watchtower.nickfedor.com/dev/configuration/image-cooldown/</loc>
+         <lastmod>2026-10-14</lastmod>
+    </url>
+    <url>
+         <loc>https://watchtower.nickfedor.com/dev/configuration/image-scanning/</loc>
          <lastmod>2026-10-14</lastmod>
     </url>
     <url>
