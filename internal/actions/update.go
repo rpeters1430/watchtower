@@ -17,6 +17,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	dockerContainer "github.com/moby/moby/api/types/container"
 
+	"github.com/nicholas-fedor/watchtower/internal/activity"
 	"github.com/nicholas-fedor/watchtower/internal/git"
 	"github.com/nicholas-fedor/watchtower/internal/release"
 	"github.com/nicholas-fedor/watchtower/pkg/container"
@@ -1667,6 +1668,29 @@ func stopStaleContainer(
 	client container.Client,
 	config types.UpdateParams,
 ) error {
+	if container.IsWatchtower() || !container.ToRestart() {
+		return stopStaleContainerUntracked(log, ctx, container, client, config)
+	}
+
+	activity.Default().SetStep(container.Name(), container.ImageName(), activity.StepStopping)
+
+	err := stopStaleContainerUntracked(log, ctx, container, client, config)
+	if err != nil {
+		activity.Default().SetStep(container.Name(), container.ImageName(), activity.StepFailed)
+	}
+
+	return err
+}
+
+// stopStaleContainerUntracked does the work of stopStaleContainer without
+// reporting it to the activity tracker.
+func stopStaleContainerUntracked(
+	log *zerolog.Logger,
+	ctx context.Context,
+	container types.Container,
+	client container.Client,
+	config types.UpdateParams,
+) error {
 	fields := map[string]any{
 		"container": container.Name(),
 		"image":     container.ImageName(),
@@ -2003,6 +2027,28 @@ func addCleanupImageInfo(
 //   - bool: True if the container was renamed, false otherwise.
 //   - error: Non-nil if restart fails, nil on success.
 func restartStaleContainer(
+	log *zerolog.Logger,
+	ctx context.Context,
+	sourceContainer types.Container,
+	client container.Client,
+	config types.UpdateParams,
+) (types.ContainerID, bool, error) {
+	name, image := sourceContainer.Name(), sourceContainer.ImageName()
+	activity.Default().SetStep(name, image, activity.StepStarting)
+
+	newID, renamed, err := restartStaleContainerUntracked(log, ctx, sourceContainer, client, config)
+	if err != nil {
+		activity.Default().SetStep(name, image, activity.StepFailed)
+	} else {
+		activity.Default().SetStep(name, image, activity.StepUpdated)
+	}
+
+	return newID, renamed, err
+}
+
+// restartStaleContainerUntracked does the work of restartStaleContainer
+// without reporting it to the activity tracker.
+func restartStaleContainerUntracked(
 	log *zerolog.Logger,
 	ctx context.Context,
 	sourceContainer types.Container,
@@ -2443,4 +2489,3 @@ func (r *rollbackContainerWrapper) GetCreateConfig() *dockerContainer.Config {
 
 	return &cloned
 }
-

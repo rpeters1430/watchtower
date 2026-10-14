@@ -31,6 +31,8 @@ const (
 	// defaultRateLimitPerMinute is the fallback rate limit when a
 	// non-positive value is provided.
 	defaultRateLimitPerMinute = 60
+	// updateStatusPath is the update progress route, kept out of the access log.
+	updateStatusPath = "/v1/update/status"
 
 	// corsMaxAge is the maximum duration (in seconds) that browsers may cache
 	// CORS preflight results.
@@ -152,6 +154,12 @@ func New(
 		requestid.New(),
 		fiberzerolog.New(fiberzerolog.Config{
 			Logger: &requestLog,
+			// The web UI polls update progress every few seconds while an
+			// update runs; logging each successful poll would bury the
+			// update's own log lines.
+			Skip: func(c fiber.Ctx) bool {
+				return c.Path() == updateStatusPath && c.Response().StatusCode() == fiber.StatusOK
+			},
 			// Structured access fields: status/method/path (prior stream shape) plus
 			// ip/latency/error and request ID for correlation with requestid middleware.
 			// Messages/Levels omit so contrib defaults apply (5xx Error, 4xx Warn, else Info).

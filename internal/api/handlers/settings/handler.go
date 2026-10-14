@@ -113,7 +113,7 @@ func (h *Handler) Get(c fiber.Ctx) error {
 // Patch changes one or more runtime settings.
 //
 //	@Summary		Change runtime settings
-//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart (booleans) and schedule (cron). JSON null resets one.
+//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped (booleans), schedule (cron) and container_overrides (map). JSON null resets one.
 //	@Tags			settings
 //	@Accept			json
 //	@Produce		json
@@ -196,6 +196,11 @@ func (h *Handler) send(c fiber.Ctx) error {
 				Value:   values.AutoRollback,
 				Default: defaults.AutoRollback,
 				Changed: changed[runtime.KeyAutoRollback],
+			},
+			runtime.KeyIncludeStopped: {
+				Value:   values.IncludeStopped,
+				Default: defaults.IncludeStopped,
+				Changed: changed[runtime.KeyIncludeStopped],
 			},
 			runtime.KeyContainerOverrides: {
 				Value:   values.ContainerOverrides,

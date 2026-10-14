@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/nicholas-fedor/watchtower/internal/activity"
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/events"
 	"github.com/nicholas-fedor/watchtower/internal/git"
 	"github.com/nicholas-fedor/watchtower/internal/metrics"
@@ -81,6 +82,10 @@ func RunUpdatesWithNotifications(
 	log := params.Logger
 
 	log.Debug().Msg("Starting RunUpdatesWithNotifications")
+
+	// Let the HTTP API report what this scan is doing while it runs.
+	activity.Default().BeginScan()
+	defer activity.Default().EndScan()
 
 	// Initiate notification batching.
 	startNotifications(log, params.Notifier, params.NotificationSplitByContainer)

@@ -12,6 +12,7 @@ Flags and environment variables still provide the starting values. A change made
 | `monitor_only`    | Boolean  | [`monitor-only`](../../../configuration/update-behavior/index.md#monitor_only)               | Report available updates without applying them                          |
 | `cleanup`         | Boolean  | [`cleanup`](../../../configuration/update-behavior/index.md#cleanup_old_images)                    | Remove the previous image after a container is updated                  |
 | `rolling_restart` | Boolean  | [`rolling-restart`](../../../configuration/update-behavior/index.md#rolling_restart)            | Restart containers one at a time                                        |
+| `include_stopped` | Boolean  | [`include-stopped`](../../../configuration/container-selection/index.md#include_stopped_containers) | List, check, and update created and exited containers as well as running ones |
 | `schedule`        | String   | [`schedule`](../../../configuration/scheduling/index.md) or the poll interval      | Cron expression for scheduled updates. An empty string turns them off   |
 
 Everything else, including the API token, the listen address, the Docker connection, and registry credentials, can only be set with flags and environment variables.
@@ -48,6 +49,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/settings
         "monitor_only": {"value": false, "default": false, "changed": false},
         "cleanup": {"value": true, "default": false, "changed": true},
         "rolling_restart": {"value": false, "default": false, "changed": false},
+        "include_stopped": {"value": true, "default": false, "changed": true},
         "schedule": {"value": "@every 6h", "default": "@every 86400s", "changed": true}
     },
     "saved": true,

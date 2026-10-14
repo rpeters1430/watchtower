@@ -72,6 +72,7 @@ func TestUpdateAppliesAndPersists(t *testing.T) {
 		KeyRollingRestart:     false,
 		KeySchedule:           true,
 		KeyAutoRollback:       false,
+		KeyIncludeStopped:     false,
 		KeyContainerOverrides: false,
 	}, store.Overridden())
 	assert.Equal(t, Snapshot{
@@ -84,6 +85,24 @@ func TestUpdateAppliesAndPersists(t *testing.T) {
 	// A new store over the same directory sees the saved overrides.
 	reopened := Open(nil, dir, defaults, Validators{Schedule: rejectBadSchedule})
 	assert.Equal(t, want, reopened.Effective())
+}
+
+func TestUpdateIncludeStopped(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := Open(nil, dir, Values{}, Validators{})
+
+	require.NoError(t, store.Update(changes(t, `{"include_stopped":true}`)))
+	assert.True(t, store.Effective().IncludeStopped)
+	assert.True(t, store.Overridden()[KeyIncludeStopped])
+	assert.True(t, Open(nil, dir, Values{}, Validators{}).Effective().IncludeStopped)
+
+	require.ErrorIs(t, store.Update(changes(t, `{"include_stopped":"yes"}`)), ErrInvalidValue)
+
+	require.NoError(t, store.Update(changes(t, `{"include_stopped":null}`)))
+	assert.False(t, store.Effective().IncludeStopped)
+	assert.False(t, store.Overridden()[KeyIncludeStopped])
 }
 
 func TestUpdateDoesNotApplyWhenPersistenceFails(t *testing.T) {

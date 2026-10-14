@@ -16,6 +16,7 @@ import (
 	dockerImage "github.com/moby/moby/api/types/image"
 	dockerClient "github.com/moby/moby/client"
 
+	"github.com/nicholas-fedor/watchtower/internal/activity"
 	"github.com/nicholas-fedor/watchtower/pkg/container/oci"
 	"github.com/nicholas-fedor/watchtower/pkg/registry"
 	"github.com/nicholas-fedor/watchtower/pkg/registry/auth"
@@ -37,6 +38,8 @@ const (
 	// so digest checks can stay parallel without bursting blob downloads
 	// against one registry.
 	maxConcurrentPulls = 1
+	// pullProgressLogInterval is how often a running pull logs its progress.
+	pullProgressLogInterval = 15 * time.Second
 )
 
 // pullSlots serializes layer pulls per registry host.
@@ -444,6 +447,8 @@ func (c imageClient) PullImage(
 		return cooldownErr
 	}
 
+	activity.Default().SetStep(sourceContainer.Name(), sourceContainer.ImageName(), activity.StepPulling)
+
 	return c.performImagePull(ctx, sourceContainer.ImageName(), opts)
 }
 
@@ -790,14 +795,19 @@ func (c imageClient) performImagePull(
 
 		pullStart := time.Now()
 
+		progress := activity.Default().StartPull(imageName)
+
 		response, err := c.api.ImagePull(ctx, imageName, opts)
 		if err != nil {
 			info := ratelimit.FromErrorMessage(err.Error())
 			if info != nil {
 				ratelimit.Observe(pullHost, info)
+				progress.Finish(info)
 
 				return info
 			}
+
+			progress.Finish(err)
 
 			// Differentiate error types for appropriate logging and handling.
 			// Auth failures and missing images return distinct sentinel errors
@@ -825,7 +835,9 @@ func (c imageClient) performImagePull(
 		}
 		defer response.Close()
 
-		waitErr := response.Wait(ctx)
+		waitErr := followPull(ctx, clog, response, progress)
+		progress.Finish(waitErr)
+
 		if waitErr != nil {
 			info := ratelimit.FromErrorMessage(waitErr.Error())
 			if info != nil {
@@ -856,6 +868,89 @@ func (c imageClient) performImagePull(
 	}
 
 	return nil
+}
+
+// followPull reads an image pull's progress stream to the end, passing each
+// layer update to progress and logging overall progress every
+// pullProgressLogInterval so a long download shows it is still moving.
+//
+// Parameters:
+//   - ctx: Context for cancellation.
+//   - clog: Logger carrying the image field.
+//   - response: Pull response from the Docker API.
+//   - progress: Receives the per-layer progress.
+//
+// Returns:
+//   - error: Non-nil if the stream fails or reports an error.
+func followPull(
+	ctx context.Context,
+	clog *zerolog.Logger,
+	response dockerClient.ImagePullResponse,
+	progress *activity.PullProgress,
+) error {
+	lastLog := time.Now()
+
+	for message, err := range response.JSONMessages(ctx) {
+		if err != nil {
+			return fmt.Errorf("read pull progress: %w", err)
+		}
+
+		if message.Error != nil {
+			return errors.New(message.Error.Message) //nolint:err113 // carries the daemon's message
+		}
+
+		var current, total int64
+		if message.Progress != nil {
+			current, total = message.Progress.Current, message.Progress.Total
+		}
+
+		progress.Observe(message.ID, message.Status, current, total)
+
+		if time.Since(lastLog) >= pullProgressLogInterval {
+			lastLog = time.Now()
+			logPullProgress(clog, progress.Summary())
+		}
+	}
+
+	return nil
+}
+
+// logPullProgress writes one info line describing how far a pull has got.
+func logPullProgress(clog *zerolog.Logger, summary activity.Pull) {
+	event := clog.Info().
+		Str("notify", "no").
+		Str("phase", summary.Phase).
+		Str("layers", fmt.Sprintf("%d/%d", summary.LayersDone, summary.Layers))
+
+	if summary.TotalBytes > 0 {
+		event = event.Str("downloaded", fmt.Sprintf("%s/%s",
+			humanBytes(summary.DownloadedBytes),
+			humanBytes(summary.TotalBytes),
+		))
+	}
+
+	event.Msg("Pulling image")
+}
+
+// humanBytes formats a byte count with a decimal unit, e.g. "312.4MB".
+func humanBytes(n int64) string {
+	const unit = 1000
+
+	if n < unit {
+		return fmt.Sprintf("%dB", n)
+	}
+
+	value := float64(n)
+	suffixes := []string{"kB", "MB", "GB", "TB"}
+
+	for _, suffix := range suffixes {
+		value /= unit
+		if value < unit || suffix == suffixes[len(suffixes)-1] {
+			return fmt.Sprintf("%.1f%s", value, suffix)
+		}
+	}
+
+	return fmt.Sprintf("%dB", n)
 }
 
 // pullSlotFor returns the per-host pull slot channel, creating it when missing.

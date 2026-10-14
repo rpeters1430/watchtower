@@ -13,6 +13,7 @@ The UI has no data of its own. It reads the other HTTP API endpoints, so each pa
 | Container list         |    `containers`     |
 | Check for updates      |       `check`       |
 | Update a container     |      `update`       |
+| Live update progress   |      `update`       |
 | Scan history           |      `history`      |
 | Settings               |      `config`       |
 | Changing settings      |     `settings`      |

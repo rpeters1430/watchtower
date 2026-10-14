@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/timeout"
 
+	"github.com/nicholas-fedor/watchtower/internal/activity"
 	"github.com/nicholas-fedor/watchtower/internal/api/config"
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/update"
 	mt "github.com/nicholas-fedor/watchtower/internal/metrics"
@@ -38,6 +39,9 @@ func registerUpdateRoute(ctx context.Context, app *fiber.App, auth fiber.Handler
 	app.Post(handler.Path, auth, timeout.New(handler.Handle, timeout.Config{
 		Timeout: updateTimeout,
 	}))
+
+	// Progress of the running scan, whether requested here or scheduled.
+	app.Get(update.StatusPath, auth, config.TimeoutMiddleware(), update.Status(activity.Default().Snapshot))
 
 	// In blocking HTTP API mode, emit the startup message once when the update route registers.
 	if !opts.UnblockHTTPAPI && opts.WriteStartupMessage != nil {
