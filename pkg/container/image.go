@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/distribution/reference"
 	"github.com/rs/zerolog"
@@ -781,6 +782,14 @@ func (c imageClient) performImagePull(
 			return fmt.Errorf("image pull cooldown wait: %w", cooldownErr)
 		}
 
+		// A pull can take minutes for a large image and nothing else is
+		// logged meanwhile, so say when it starts and how long it took.
+		clog.Info().
+			Str("notify", "no").
+			Msg("Pulling image")
+
+		pullStart := time.Now()
+
 		response, err := c.api.ImagePull(ctx, imageName, opts)
 		if err != nil {
 			info := ratelimit.FromErrorMessage(err.Error())
@@ -835,7 +844,10 @@ func (c imageClient) performImagePull(
 			return fmt.Errorf("%w: %s: %w", errReadPullResponseFailed, imageName, waitErr)
 		}
 
-		clog.Debug().Msg("Image pull completed")
+		clog.Info().
+			Str("notify", "no").
+			Str("elapsed", time.Since(pullStart).Round(time.Millisecond).String()).
+			Msg("Pulled image")
 
 		return nil
 	})
