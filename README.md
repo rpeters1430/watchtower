@@ -76,6 +76,10 @@ services:
       # Remove the old image after a container is updated.
       WATCHTOWER_CLEANUP: "true"
 
+      # Let Watchtower update itself even though it publishes port 8080.
+      # Without this, self-updates are skipped while a port is published.
+      WATCHTOWER_EPHEMERAL_SELF_UPDATE: "true"
+
       # Optional: send a notification after each update. See the shoutrrr docs for URL formats.
       # WATCHTOWER_NOTIFICATION_URL: discord://token@channel
     volumes:
@@ -101,7 +105,9 @@ Open <http://localhost:8080/> and sign in with the `WATCHTOWER_HTTP_API_TOKEN` v
 
 ### 4. Keep it up to date
 
-Watchtower updates itself along with your other containers. To update it by hand:
+With `WATCHTOWER_EPHEMERAL_SELF_UPDATE` set, Watchtower updates itself along with your other containers. It starts a short-lived helper container that replaces the old Watchtower and then removes itself; this mode is marked experimental upstream.
+
+Without it, Watchtower skips its own updates because port 8080 is published (the log says `Published port detected - self-updates disabled.`). The new container could not bind the port while the old one still holds it. In that case, update Watchtower by hand:
 
 ```console
 docker compose pull && docker compose up -d
