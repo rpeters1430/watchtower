@@ -569,6 +569,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Refactor Renovate configuration settings by @rpeters1430
 - Replace SetNoRestartPolicy with SetRestartPolicy by @nicholas-fedor
 - Replace untyped maps with concrete types by @nicholas-fedor
 - Rename Viper locals from vip to vCfg by @nicholas-fedor
@@ -2959,7 +2960,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New Contributors
 
 - @rpeters1430 made their first contribution
-- @github-actions[bot] made their first contribution in [#18](https://github.com/rpeters1430/watchtower/pull/18)
+- @github-actions[bot] made their first contribution in [#19](https://github.com/rpeters1430/watchtower/pull/19)
 - @claude made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
