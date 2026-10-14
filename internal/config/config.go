@@ -12,6 +12,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/config/mode"
 	"github.com/nicholas-fedor/watchtower/internal/config/notify"
 	"github.com/nicholas-fedor/watchtower/internal/config/registry"
+	"github.com/nicholas-fedor/watchtower/internal/config/scan"
 	"github.com/nicholas-fedor/watchtower/internal/config/schedule"
 	"github.com/nicholas-fedor/watchtower/internal/config/update"
 )
@@ -48,4 +49,6 @@ type Config struct {
 	Logging logging.Logging
 	// Git holds Git association mappings and watcher credentials.
 	Git git.Git
+	// Scan holds image vulnerability scanning settings.
+	Scan scan.Scan
 }

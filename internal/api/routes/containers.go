@@ -54,4 +54,3 @@ func registerContainerActionRoute(app *fiber.App, auth fiber.Handler, opts confi
 		Timeout: actionTimeout,
 	}))
 }
-

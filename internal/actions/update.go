@@ -774,6 +774,10 @@ func Update(
 		Int("failed", staleCheckFailed).
 		Msg("Completed container staleness check")
 
+	// Scan the new image of each pending update, and hold updates the scan
+	// gate rejects, before any container is stopped.
+	securityReviews := reviewSecurity(log, ctx, filteredContainers, progress, config)
+
 	// Build a map for a lookup of containers by ID.
 	containerByID := make(map[types.ContainerID]types.Container, len(allContainers))
 	for _, ac := range allContainers {
@@ -964,6 +968,8 @@ func Update(
 		)
 		recordRestartOutcomes(log, progress, failedStart)
 	}
+
+	logSecurityFixes(log, progress, securityReviews)
 
 	// Run post-check lifecycle hooks if enabled to finalize the update process.
 	// Passing nil lists the containers again, so the hooks run in the
@@ -2354,7 +2360,9 @@ func restartStaleContainerUntracked(
 			checkCtx, checkCancel := context.WithTimeout(context.Background(), restartPolicyTimeout(config.Timeout))
 			//nolint:contextcheck // fresh context intentional
 			startedContainer, getErr := client.GetContainer(checkCtx, newContainerID)
+
 			checkCancel()
+
 			if getErr == nil && startedContainer != nil {
 				info := startedContainer.ContainerInfo()
 				if info != nil && info.State != nil && !info.State.Running && info.State.ExitCode != 0 {
@@ -2389,7 +2397,11 @@ func restartStaleContainerUntracked(
 								Str("rollback_id", rollbackID.ShortID()).
 								Msg("Successfully rolled back crashed container to previous image")
 
-							return rollbackID, renamed, fmt.Errorf("%w: new container crashed (exit code %d), automatically rolled back to previous image", errStartContainerFailed, info.State.ExitCode)
+							return rollbackID, renamed, fmt.Errorf(
+								"%w: new container crashed (exit code %d), automatically rolled back to previous image",
+								errStartContainerFailed,
+								info.State.ExitCode,
+							)
 						}
 					}
 				}
@@ -2474,6 +2486,7 @@ func restartPolicyTimeout(timeout time.Duration) time.Duration {
 // rollbackContainerWrapper wraps a types.Container to substitute the previous image ID during auto-rollback.
 type rollbackContainerWrapper struct {
 	types.Container
+
 	rollbackImage string
 }
 

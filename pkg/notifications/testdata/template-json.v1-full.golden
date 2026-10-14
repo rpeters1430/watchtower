@@ -400,6 +400,28 @@
     },
     {
       "data": {
+        "container": "app",
+        "fixed": "CVE-2024-0001 (critical), CVE-2024-0003 (high)",
+        "fixed_count": 2,
+        "image": "org/app:latest"
+      },
+      "level": "error",
+      "message": "Update changed known vulnerabilities",
+      "time": "2026-10-07T12:00:42Z"
+    },
+    {
+      "data": {
+        "container": "app",
+        "gate": "critical",
+        "image": "org/app:latest",
+        "introduced": "CVE-2024-0004 (critical)"
+      },
+      "level": "debug",
+      "message": "Holding update. The new image adds findings at or above the scan gate",
+      "time": "2026-10-07T12:00:43Z"
+    },
+    {
+      "data": {
         "alpha": "one",
         "beta": 2
       },

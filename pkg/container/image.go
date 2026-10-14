@@ -908,6 +908,7 @@ func followPull(
 
 		if time.Since(lastLog) >= pullProgressLogInterval {
 			lastLog = time.Now()
+
 			logPullProgress(clog, progress.Summary())
 		}
 	}
@@ -933,14 +934,14 @@ func logPullProgress(clog *zerolog.Logger, summary activity.Pull) {
 }
 
 // humanBytes formats a byte count with a decimal unit, e.g. "312.4MB".
-func humanBytes(n int64) string {
+func humanBytes(size int64) string {
 	const unit = 1000
 
-	if n < unit {
-		return fmt.Sprintf("%dB", n)
+	if size < unit {
+		return fmt.Sprintf("%dB", size)
 	}
 
-	value := float64(n)
+	value := float64(size)
 	suffixes := []string{"kB", "MB", "GB", "TB"}
 
 	for _, suffix := range suffixes {
@@ -950,7 +951,7 @@ func humanBytes(n int64) string {
 		}
 	}
 
-	return fmt.Sprintf("%dB", n)
+	return fmt.Sprintf("%dB", size)
 }
 
 // pullSlotFor returns the per-host pull slot channel, creating it when missing.

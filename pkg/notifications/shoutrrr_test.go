@@ -1497,6 +1497,40 @@ func TestDefaultLegacyGitSkipAndComposeMessages(t *testing.T) {
 			data:    map[string]any{"container": "app", "id": "abcdef123456"},
 			want:    "Skipped app: circular dependency",
 		},
+		{
+			name:    "update fixed vulnerabilities",
+			message: "Update changed known vulnerabilities",
+			data: map[string]any{
+				"container":   "web",
+				"image":       "nginx:1.27",
+				"fixed_count": int64(2),
+				"fixed":       "CVE-2024-0001 (critical), CVE-2024-0003 (high)",
+			},
+			want: "Updated web fixed 2 known vulnerabilities: CVE-2024-0001 (critical), CVE-2024-0003 (high)",
+		},
+		{
+			name:    "update fixed one and added one vulnerability",
+			message: "Update changed known vulnerabilities",
+			data: map[string]any{
+				"container":        "web",
+				"fixed_count":      int64(1),
+				"fixed":            "CVE-2024-0001 (critical)",
+				"introduced_count": int64(1),
+				"introduced":       "CVE-2024-0004 (medium)",
+			},
+			want: "Updated web fixed 1 known vulnerability: CVE-2024-0001 (critical). New in this image: CVE-2024-0004 (medium)",
+		},
+		{
+			name:    "update held by scan gate",
+			message: "Holding update. The new image adds findings at or above the scan gate",
+			data: map[string]any{
+				"container":  "db",
+				"image":      "postgres:17",
+				"gate":       "critical",
+				"introduced": "CVE-2024-0004 (critical)",
+			},
+			want: "Held update for db (postgres:17): the new image adds CVE-2024-0004 (critical) at or above the critical gate",
+		},
 	}
 
 	for _, tc := range cases {

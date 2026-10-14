@@ -886,3 +886,59 @@
   list-parse: none
   hidden: false
   deprecated: ""
+--scan
+  shorthand: ""
+  kind: bool
+  default: false
+  env: WATCHTOWER_SCAN
+  list-parse: none
+  hidden: false
+  deprecated: ""
+--scan-gate
+  shorthand: ""
+  kind: string
+  default: "off"
+  env: WATCHTOWER_SCAN_GATE
+  list-parse: none
+  hidden: false
+  deprecated: ""
+--scan-image
+  shorthand: ""
+  kind: string
+  default: "aquasec/trivy:latest"
+  env: WATCHTOWER_SCAN_IMAGE
+  list-parse: none
+  hidden: false
+  deprecated: ""
+--scan-timeout
+  shorthand: ""
+  kind: duration
+  default: time.Duration(5m0s)
+  env: WATCHTOWER_SCAN_TIMEOUT
+  list-parse: none
+  hidden: false
+  deprecated: ""
+--scan-ignore-unfixed
+  shorthand: ""
+  kind: bool
+  default: false
+  env: WATCHTOWER_SCAN_IGNORE_UNFIXED
+  list-parse: none
+  hidden: false
+  deprecated: ""
+--scan-cache-volume
+  shorthand: ""
+  kind: string
+  default: "watchtower-trivy-cache"
+  env: WATCHTOWER_SCAN_CACHE_VOLUME
+  list-parse: none
+  hidden: false
+  deprecated: ""
+--scan-docker-socket
+  shorthand: ""
+  kind: string
+  default: "/var/run/docker.sock"
+  env: WATCHTOWER_SCAN_DOCKER_SOCKET
+  list-parse: none
+  hidden: false
+  deprecated: ""

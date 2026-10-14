@@ -1383,6 +1383,7 @@ func TestContainerLookupWithTimeoutContext(t *testing.T) {
 	origCgroup := container.ReadCgroupFunc
 	container.ReadMountinfoFunc = func(string) ([]byte, error) { return nil, os.ErrNotExist }
 	container.ReadCgroupFunc = func(string) ([]byte, error) { return nil, os.ErrNotExist }
+
 	t.Cleanup(func() {
 		container.ReadMountinfoFunc = origMount
 		container.ReadCgroupFunc = origCgroup

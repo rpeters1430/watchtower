@@ -24,12 +24,14 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/config/mode"
 	"github.com/nicholas-fedor/watchtower/internal/config/notify"
 	"github.com/nicholas-fedor/watchtower/internal/config/registry"
+	"github.com/nicholas-fedor/watchtower/internal/config/scan"
 	"github.com/nicholas-fedor/watchtower/internal/config/schedule"
 	"github.com/nicholas-fedor/watchtower/internal/config/update"
 	"github.com/nicholas-fedor/watchtower/internal/flags"
 	"github.com/nicholas-fedor/watchtower/internal/flags/spec"
 	"github.com/nicholas-fedor/watchtower/internal/util"
 	"github.com/nicholas-fedor/watchtower/pkg/filters"
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 )
 
 // diskSpacePercentBase is the divisor used to convert a 0-100 percentage into a fraction of max.
@@ -122,6 +124,11 @@ func Load(log *zerolog.Logger, cmd *cobra.Command, args []string) (Config, error
 	cfg.Logging = loadLogging(vCfg)
 
 	cfg.Git, err = loadGit(vCfg, flagSet)
+	if err != nil {
+		return Config{}, err
+	}
+
+	cfg.Scan, err = loadScan(vCfg)
 	if err != nil {
 		return Config{}, err
 	}
@@ -625,6 +632,31 @@ func readOptionalFile(path string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// loadScan reads image vulnerability scanning settings from Viper.
+//
+// Parameters:
+//   - vCfg: Bound Viper instance.
+//
+// Returns:
+//   - scan.Scan: Parsed scanning settings.
+//   - error: Non-nil when --scan-gate is not a known gate.
+func loadScan(vCfg *viper.Viper) (scan.Scan, error) {
+	gate, err := scanner.ParseGate(vCfg.GetString("scan-gate"))
+	if err != nil {
+		return scan.Scan{}, fmt.Errorf("load scan settings: %w", err)
+	}
+
+	return scan.Scan{
+		Enabled:       vCfg.GetBool("scan"),
+		Gate:          gate,
+		Image:         strings.TrimSpace(vCfg.GetString("scan-image")),
+		Timeout:       vCfg.GetDuration("scan-timeout"),
+		IgnoreUnfixed: vCfg.GetBool("scan-ignore-unfixed"),
+		CacheVolume:   strings.TrimSpace(vCfg.GetString("scan-cache-volume")),
+		DockerSocket:  strings.TrimSpace(vCfg.GetString("scan-docker-socket")),
+	}, nil
 }
 
 // validate checks cross-flag constraints that Load can enforce without side effects.

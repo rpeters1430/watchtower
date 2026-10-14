@@ -126,6 +126,10 @@ var Templates = map[string]string{
     Skipped {{with (index $e.Data "container")}}{{.}}{{else}}container{{end}}: depends on itself
 {{- else if eq $msg "Skipping container update (circular dependency)" -}}
     Skipped {{with (index $e.Data "container")}}{{.}}{{else}}container{{end}}: circular dependency
+{{- else if eq $msg "Update changed known vulnerabilities" -}}
+    Updated {{with (index $e.Data "container")}}{{.}}{{else}}container{{end}} fixed {{with (index $e.Data "fixed_count")}}{{.}}{{else}}0{{end}} known vulnerabilit{{if eq (index $e.Data "fixed_count") 1}}y{{else}}ies{{end}}{{with (index $e.Data "fixed")}}: {{.}}{{end}}{{with (index $e.Data "introduced")}}. New in this image: {{.}}{{end}}
+{{- else if eq $msg "Holding update. The new image adds findings at or above the scan gate" -}}
+    Held update for {{with (index $e.Data "container")}}{{.}}{{else}}container{{end}} ({{with (index $e.Data "image")}}{{.}}{{else}}unknown{{end}}): the new image adds {{with (index $e.Data "introduced")}}{{.}}{{else}}findings{{end}} at or above the {{with (index $e.Data "gate")}}{{.}}{{else}}scan{{end}} gate
 {{- else if $e.Data -}}
     {{- /* For messages with data, show message and key=value pairs */ -}}
     {{$msg}} | {{range $k, $v := $e.Data}}{{$k}}={{$v}} {{end}}

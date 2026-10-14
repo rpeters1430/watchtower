@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/distribution/reference"
+	"github.com/rs/zerolog"
+
 	dockerContainer "github.com/moby/moby/api/types/container"
+
 	"github.com/nicholas-fedor/watchtower/pkg/container"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
-	"github.com/rs/zerolog"
 )
 
 // Supported container lifecycle action names.
@@ -38,6 +40,9 @@ type Executor interface {
 	Execute(ctx context.Context, containerName, action, newImageOrTag string) error
 }
 
+// defaultActionTimeout is the stop timeout used when none is configured.
+const defaultActionTimeout = 30 * time.Second
+
 // containerExecutor is the concrete implementation of Executor.
 type containerExecutor struct {
 	client  container.Client
@@ -53,7 +58,7 @@ func NewExecutor(log *zerolog.Logger, client container.Client, timeout time.Dura
 	}
 
 	if timeout <= 0 {
-		timeout = 30 * time.Second
+		timeout = defaultActionTimeout
 	}
 
 	return &containerExecutor{
@@ -108,7 +113,12 @@ func (e *containerExecutor) start(ctx context.Context, target types.Container) e
 		Str("id", target.ID().ShortID()).
 		Msg("Starting container via API")
 
-	return e.client.StartContainerByID(ctx, target.ID())
+	err := e.client.StartContainerByID(ctx, target.ID())
+	if err != nil {
+		return fmt.Errorf("failed to start container: %w", err)
+	}
+
+	return nil
 }
 
 func (e *containerExecutor) stop(ctx context.Context, target types.Container) error {
@@ -117,7 +127,12 @@ func (e *containerExecutor) stop(ctx context.Context, target types.Container) er
 		Str("id", target.ID().ShortID()).
 		Msg("Stopping container via API")
 
-	return e.client.StopContainer(ctx, target, e.timeout)
+	err := e.client.StopContainer(ctx, target, e.timeout)
+	if err != nil {
+		return fmt.Errorf("failed to stop container: %w", err)
+	}
+
+	return nil
 }
 
 func (e *containerExecutor) restart(ctx context.Context, target types.Container) error {
@@ -126,12 +141,18 @@ func (e *containerExecutor) restart(ctx context.Context, target types.Container)
 		Str("id", target.ID().ShortID()).
 		Msg("Restarting container via API")
 
-	return e.client.RestartContainer(ctx, target, e.timeout)
+	err := e.client.RestartContainer(ctx, target, e.timeout)
+	if err != nil {
+		return fmt.Errorf("failed to restart container: %w", err)
+	}
+
+	return nil
 }
 
 // targetContainerWrapper wraps a types.Container and overrides its creation config image.
 type targetContainerWrapper struct {
 	types.Container
+
 	newImage string
 }
 

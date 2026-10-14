@@ -170,6 +170,59 @@ func (h *Handler) Patch(c fiber.Ctx) error {
 	return h.send(c)
 }
 
+// TestNotification sends a test notification through configured or requested URLs.
+//
+//	@Summary		Test notification delivery
+//	@Description	Sends an immediate test alert to verify notification services. Optionally accepts a custom URL, title, or message.
+//	@Tags			settings
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body	TestNotificationRequest	false	"Notification parameters"
+//	@Success		200		{object}	map[string]interface{}	"Notification test result"
+//	@Failure		400		{object}	map[string]interface{}	"No URLs configured or invalid request"
+//	@Failure		502		{object}	map[string]interface{}	"Delivery failed"
+//	@Security		BearerAuth
+//	@Router			/v1/settings/test-notification [post]
+func (h *Handler) TestNotification(c fiber.Ctx) error {
+	var req TestNotificationRequest
+	if len(c.Body()) > 0 {
+		_ = json.Unmarshal(c.Body(), &req)
+	}
+
+	urls := []string{}
+	if req.URL != "" {
+		urls = []string{req.URL}
+	} else if h.notifier != nil {
+		urls = h.notifier.GetURLs()
+	}
+
+	if len(urls) == 0 {
+		return sendJSON(c, fiber.StatusBadRequest, fiber.Map{
+			"success": false,
+			"error":   "No notification URLs are configured. Set WATCHTOWER_NOTIFICATION_URL or supply a url in the request.",
+		})
+	}
+
+	errs := notifications.SendTestNotification(h.log, urls, req.Title, req.Message)
+	if len(errs) > 0 {
+		errStrs := make([]string, len(errs))
+		for i, err := range errs {
+			errStrs[i] = err.Error()
+		}
+
+		return sendJSON(c, fiber.StatusBadGateway, fiber.Map{
+			"success": false,
+			"error":   "Failed to deliver notification",
+			"details": errStrs,
+		})
+	}
+
+	return sendJSON(c, fiber.StatusOK, fiber.Map{
+		"success": true,
+		"message": "Notification sent successfully",
+	})
+}
+
 // send writes the current settings.
 func (h *Handler) send(c fiber.Ctx) error {
 	snapshot := h.store.Snapshot()
@@ -228,59 +281,6 @@ func (h *Handler) send(c fiber.Ctx) error {
 	return nil
 }
 
-// TestNotification sends a test notification through configured or requested URLs.
-//
-//	@Summary		Test notification delivery
-//	@Description	Sends an immediate test alert to verify notification services. Optionally accepts a custom URL, title, or message.
-//	@Tags			settings
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		TestNotificationRequest	false	"Notification parameters"
-//	@Success		200		{object}	map[string]interface{}	"Notification test result"
-//	@Failure		400		{object}	map[string]interface{}	"No URLs configured or invalid request"
-//	@Failure		502		{object}	map[string]interface{}	"Delivery failed"
-//	@Security		BearerAuth
-//	@Router			/v1/settings/test-notification [post]
-func (h *Handler) TestNotification(c fiber.Ctx) error {
-	var req TestNotificationRequest
-	if len(c.Body()) > 0 {
-		_ = json.Unmarshal(c.Body(), &req)
-	}
-
-	urls := []string{}
-	if req.URL != "" {
-		urls = []string{req.URL}
-	} else if h.notifier != nil {
-		urls = h.notifier.GetURLs()
-	}
-
-	if len(urls) == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"error":   "No notification URLs are configured. Set WATCHTOWER_NOTIFICATION_URL or supply a url in the request.",
-		})
-	}
-
-	errs := notifications.SendTestNotification(h.log, urls, req.Title, req.Message)
-	if len(errs) > 0 {
-		errStrs := make([]string, len(errs))
-		for i, err := range errs {
-			errStrs[i] = err.Error()
-		}
-
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
-			"success": false,
-			"error":   "Failed to deliver notification",
-			"details": errStrs,
-		})
-	}
-
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"success": true,
-		"message": "Notification sent successfully",
-	})
-}
-
 // nextRun returns the next scheduled scan time, or nil when none is scheduled.
 func (h *Handler) nextRun() *time.Time {
 	runner, ok := h.store.(nextRunner)
@@ -305,6 +305,16 @@ func (h *Handler) sendError(c fiber.Ctx, status int, message string) error {
 		"api_version": "v1",
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	})
+	if err != nil {
+		return fmt.Errorf("failed to send JSON response: %w", err)
+	}
+
+	return nil
+}
+
+// sendJSON writes body as a JSON response with the given status.
+func sendJSON(c fiber.Ctx, status int, body any) error {
+	err := c.Status(status).JSON(body)
 	if err != nil {
 		return fmt.Errorf("failed to send JSON response: %w", err)
 	}

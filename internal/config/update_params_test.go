@@ -145,6 +145,9 @@ func TestUpdateParamsAssignsEveryField(t *testing.T) {
 			assert.False(t, fv.Bool())
 		case "Filter":
 			assert.False(t, fv.IsNil(), "Filter must be assigned")
+		case "SecurityReviewer":
+			// A run-time dependency the update closure in cmd attaches, not policy.
+			assert.True(t, fv.IsNil(), "SecurityReviewer is attached at run time")
 		default:
 			assert.False(t, fv.IsZero(), "field %s must be assigned by UpdateParams", field.Name)
 		}

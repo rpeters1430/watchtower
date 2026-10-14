@@ -106,6 +106,13 @@ environment variables:
   WATCHTOWER_REVIVE_STOPPED
   WATCHTOWER_ROLLING_RESTART
   WATCHTOWER_RUN_ONCE
+  WATCHTOWER_SCAN
+  WATCHTOWER_SCAN_CACHE_VOLUME
+  WATCHTOWER_SCAN_DOCKER_SOCKET
+  WATCHTOWER_SCAN_GATE
+  WATCHTOWER_SCAN_IGNORE_UNFIXED
+  WATCHTOWER_SCAN_IMAGE
+  WATCHTOWER_SCAN_TIMEOUT
   WATCHTOWER_SCHEDULE
   WATCHTOWER_SCOPE
   WATCHTOWER_SKIP_IMAGE_NAMES
@@ -149,5 +156,6 @@ container labels:
   com.centurylinklabs.watchtower.lifecycle.uid
   com.centurylinklabs.watchtower.monitor-only
   com.centurylinklabs.watchtower.no-pull
+  com.centurylinklabs.watchtower.scanner
   com.centurylinklabs.watchtower.scope
   com.centurylinklabs.watchtower.stop-signal

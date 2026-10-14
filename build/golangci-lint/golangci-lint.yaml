@@ -334,7 +334,7 @@ linters:
       - path: "internal/actions/update.go"
         linters:
           - gocyclo
-        text: "of func `restartStaleContainer` is high"
+        text: "of func `restartStaleContainerUntracked` is high"
       - path: "internal/actions/git_compose.go"
         linters:
           - gocyclo

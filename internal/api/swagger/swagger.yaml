@@ -871,7 +871,7 @@ paths:
       parameters:
       - description: Notification parameters
         in: body
-        name: body
+        name: request
         schema:
           $ref: '#/definitions/settings.TestNotificationRequest'
       produces:
@@ -978,8 +978,8 @@ paths:
   /v1/update/status:
     get:
       description: Reports whether an update scan is running and, for each container
-        it is working on, the current step (pulling, stopping, starting, updated,
-        failed) and image download progress. Cheap to poll while an update runs.
+        in progress, the step (pulling, stopping, starting, updated, failed) and download
+        progress. Cheap to poll.
       produces:
       - application/json
       responses:

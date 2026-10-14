@@ -338,7 +338,9 @@ func TestHandler_Handle_BuildsCurrentParamsPerRequest(t *testing.T) {
 	require.NotNil(t, ch)
 
 	current := types.UpdateParams{Cleanup: true}
+
 	var checked []types.UpdateParams
+
 	h := New(testLogger(),
 		func(_ context.Context, _, _ []string, params types.UpdateParams) ([]ContainerCheck, error) {
 			checked = append(checked, params)

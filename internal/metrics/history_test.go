@@ -85,12 +85,14 @@ func TestMetrics_PersistHistoryConcurrentAppends(t *testing.T) {
 	m.PersistHistory(nil, path)
 
 	const count = 100
+
 	var wg sync.WaitGroup
 	wg.Add(count)
 
 	for range count {
 		go func() {
 			defer wg.Done()
+
 			m.RecordCheck(1, 0, 0, nil)
 		}()
 	}
@@ -103,7 +105,9 @@ func TestMetrics_PersistHistoryConcurrentAppends(t *testing.T) {
 	}
 
 	var history []HistoryEntry
-	if err := json.Unmarshal(data, &history); err != nil {
+
+	err = json.Unmarshal(data, &history)
+	if err != nil {
 		t.Fatal(err)
 	}
 

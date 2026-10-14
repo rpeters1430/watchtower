@@ -189,6 +189,7 @@ func GetContainerDetails(
 		scope, _ := c.Scope()
 
 		policy := "auto"
+
 		if params.ContainerOverrides != nil {
 			if p, ok := params.ContainerOverrides[c.Name()]; ok && p != "" {
 				policy = p
@@ -204,6 +205,7 @@ func GetContainerDetails(
 		}
 
 		var source string
+
 		info := c.ImageInfo()
 		if info != nil && info.Config != nil && info.Config.Labels != nil {
 			source = info.Config.Labels["org.opencontainers.image.source"]
