@@ -3,7 +3,6 @@ package details
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -232,11 +231,8 @@ func GetContainerDetails(
 			Source:         source,
 		}
 
-		if info != nil && len(info.RepoDigests) > 0 {
-			_, digest, found := strings.Cut(info.RepoDigests[0], "@")
-			if found {
-				containerDetails.Digest = digest
-			}
+		if info != nil {
+			containerDetails.Digest = container.ExtractImageDigest(info.RepoDigests, containerDetails.Image)
 		}
 
 		details = append(details, containerDetails)
