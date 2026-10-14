@@ -44,7 +44,7 @@ func Status(snapshot func() activity.Snapshot) fiber.Handler {
 // status writes the activity snapshot.
 //
 //	@Summary		Get update progress
-//	@Description	Reports whether an update scan is running and, for each container it is working on, the current step (pulling, stopping, starting, updated, failed) and image download progress. Cheap to poll while an update runs.
+//	@Description	Reports whether an update scan is running and, for each container in progress, the step (pulling, stopping, starting, updated, failed) and download progress. Cheap to poll.
 //	@Tags			update
 //	@Produce		json
 //	@Success		200	{object}	StatusResponse	"Current update activity"

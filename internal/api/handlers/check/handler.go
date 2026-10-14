@@ -113,6 +113,7 @@ func (h *Handler) Handle(c fiber.Ctx) error {
 
 	images := extractFilterParams(c, "image")
 	containers := extractFilterParams(c, "container")
+
 	var params types.UpdateParams
 	if h.buildUpdateParams != nil {
 		params = h.buildUpdateParams()

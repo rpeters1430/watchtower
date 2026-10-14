@@ -309,12 +309,12 @@ type PullProgress struct {
 // Observe records one progress message from the Docker pull stream.
 //
 // Parameters:
-//   - id: Layer ID the message is about. Messages without one are ignored.
+//   - layerID: Layer ID the message is about. Messages without one are ignored.
 //   - status: Docker's status text, such as "Downloading" or "Pull complete".
 //   - current: Bytes done for a download, from the message's progress detail.
 //   - total: Total bytes for a download, from the message's progress detail.
-func (p *PullProgress) Observe(id, status string, current, total int64) {
-	if p == nil || id == "" {
+func (p *PullProgress) Observe(layerID, status string, current, total int64) {
+	if p == nil || layerID == "" {
 		return
 	}
 
@@ -330,11 +330,11 @@ func (p *PullProgress) Observe(id, status string, current, total int64) {
 		p.layers = map[string]*layerState{}
 	}
 
-	layer, ok := p.layers[id]
+	layer, ok := p.layers[layerID]
 	if !ok {
 		layer = &layerState{}
-		p.layers[id] = layer
-		p.order = append(p.order, id)
+		p.layers[layerID] = layer
+		p.order = append(p.order, layerID)
 	}
 
 	// Progress messages can arrive out of order; never move a layer backwards.

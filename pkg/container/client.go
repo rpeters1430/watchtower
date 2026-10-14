@@ -1681,6 +1681,76 @@ func (c *client) WaitForContainerHealthy(
 	}
 }
 
+// RestartContainer restarts an existing container, respecting the given timeout.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control.
+//   - container: Container to restart.
+//   - timeout: Duration to wait before forcing stop.
+//
+// Returns:
+//   - error: Non-nil if restart fails, nil on success.
+func (c *client) RestartContainer(ctx context.Context, container types.Container, timeout time.Duration) error {
+	clogVal := c.logger().With().
+		Str("container", container.Name()).
+		Str("id", container.ID().ShortID()).
+		Logger()
+	clog := &clogVal
+
+	clog.Info().
+		Dur("timeout", timeout).
+		Msg("Restarting container")
+
+	effectiveTimeout := timeout
+
+	containerTimeout := container.StopTimeout()
+	if containerTimeout != nil && *containerTimeout >= 0 {
+		effectiveTimeout = time.Duration(*containerTimeout) * time.Second
+	}
+
+	timeoutSeconds := int(effectiveTimeout / time.Second)
+	signal := container.StopSignal()
+
+	_, err := c.api.ContainerRestart(
+		ctx,
+		string(container.ID()),
+		dockerClient.ContainerRestartOptions{
+			Signal:  signal,
+			Timeout: &timeoutSeconds,
+		},
+	)
+	if err != nil {
+		clog.Debug().
+			Err(err).
+			Msg("Failed to restart container")
+
+		return fmt.Errorf("failed to restart container %s: %w", container.Name(), err)
+	}
+
+	clog.Debug().Msg("Container restarted successfully")
+
+	return nil
+}
+
+// PullImageByName pulls an image from the registry using its full reference.
+//
+// Parameters:
+//   - ctx: Context for operation control.
+//   - imageName: Full image name or reference to pull.
+//
+// Returns:
+//   - error: Non-nil if pull fails, nil on success.
+func (c *client) PullImageByName(ctx context.Context, imageName string) error {
+	opts, err := registry.GetPullOptions(c.logger(), imageName)
+	if err != nil {
+		return fmt.Errorf("failed to load authentication credentials for %s: %w", imageName, err)
+	}
+
+	imgClient := newImageClient(c.api, c.logger())
+
+	return imgClient.performImagePull(ctx, imageName, opts)
+}
+
 // logger returns the client's process logger, or a discarded nop if unset.
 // Production paths always set a real logger via NewClient.
 // Tests may construct partial *client values without log.
@@ -2107,73 +2177,4 @@ func isDaemonConnectionError(err error) bool {
 		strings.Contains(errMsg, "connection refused") ||
 		errors.Is(err, io.EOF) ||
 		errors.Is(err, io.ErrUnexpectedEOF)
-}
-
-// RestartContainer restarts an existing container, respecting the given timeout.
-//
-// Parameters:
-//   - ctx: Context for cancellation and timeout control.
-//   - container: Container to restart.
-//   - timeout: Duration to wait before forcing stop.
-//
-// Returns:
-//   - error: Non-nil if restart fails, nil on success.
-func (c *client) RestartContainer(ctx context.Context, container types.Container, timeout time.Duration) error {
-	clogVal := c.logger().With().
-		Str("container", container.Name()).
-		Str("id", container.ID().ShortID()).
-		Logger()
-	clog := &clogVal
-
-	clog.Info().
-		Dur("timeout", timeout).
-		Msg("Restarting container")
-
-	effectiveTimeout := timeout
-	containerTimeout := container.StopTimeout()
-	if containerTimeout != nil && *containerTimeout >= 0 {
-		effectiveTimeout = time.Duration(*containerTimeout) * time.Second
-	}
-
-	timeoutSeconds := int(effectiveTimeout / time.Second)
-	signal := container.StopSignal()
-
-	_, err := c.api.ContainerRestart(
-		ctx,
-		string(container.ID()),
-		dockerClient.ContainerRestartOptions{
-			Signal:  signal,
-			Timeout: &timeoutSeconds,
-		},
-	)
-	if err != nil {
-		clog.Debug().
-			Err(err).
-			Msg("Failed to restart container")
-
-		return fmt.Errorf("failed to restart container %s: %w", container.Name(), err)
-	}
-
-	clog.Debug().Msg("Container restarted successfully")
-
-	return nil
-}
-
-// PullImageByName pulls an image from the registry using its full reference.
-//
-// Parameters:
-//   - ctx: Context for operation control.
-//   - imageName: Full image name or reference to pull.
-//
-// Returns:
-//   - error: Non-nil if pull fails, nil on success.
-func (c *client) PullImageByName(ctx context.Context, imageName string) error {
-	opts, err := registry.GetPullOptions(c.logger(), imageName)
-	if err != nil {
-		return fmt.Errorf("failed to load authentication credentials for %s: %w", imageName, err)
-	}
-
-	imgClient := newImageClient(c.api, c.logger())
-
-	return imgClient.performImagePull(ctx, imageName, opts)
 }

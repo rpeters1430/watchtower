@@ -117,4 +117,3 @@ func TestRegisterContainersRoute_NilClient(t *testing.T) {
 		assert.True(t, foundAction, "POST /v1/containers/:name/action should be registered")
 	})
 }
-

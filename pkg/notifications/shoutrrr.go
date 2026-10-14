@@ -1380,11 +1380,14 @@ func sanitizeURLForLogging(rawURL string) string {
 	return safeTruncate(sanitized)
 }
 
+// errNoNotificationURLs is returned when a test notification has nowhere to go.
+var errNoNotificationURLs = errors.New("no notification URLs specified")
+
 // SendTestNotification sends an immediate test notification using either the provided URLs
 // or configured notifier URLs.
 func SendTestNotification(log *zerolog.Logger, urls []string, title, message string) []error {
 	if len(urls) == 0 {
-		return []error{errors.New("no notification URLs specified")}
+		return []error{errNoNotificationURLs}
 	}
 
 	if title == "" {

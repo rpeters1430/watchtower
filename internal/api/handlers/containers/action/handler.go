@@ -67,22 +67,24 @@ func New(log *zerolog.Logger, executor Executor) *Handler {
 func (h *Handler) Handle(c fiber.Ctx) error {
 	name := c.Params("name")
 	if name == "" {
-		return c.Status(fiber.StatusBadRequest).SendString("container name is required")
+		return sendText(c, fiber.StatusBadRequest, "container name is required")
 	}
 
 	var req Request
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
+
+	err := json.Unmarshal(c.Body(), &req)
+	if err != nil {
 		h.log.Debug().
 			Err(err).
 			Str("container", name).
 			Msg("Failed to decode container action request")
 
-		return c.Status(fiber.StatusBadRequest).SendString("invalid request body")
+		return sendText(c, fiber.StatusBadRequest, "invalid request body")
 	}
 
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if action == "" {
-		return c.Status(fiber.StatusBadRequest).SendString("action is required")
+		return sendText(c, fiber.StatusBadRequest, "action is required")
 	}
 
 	targetTag := req.Tag
@@ -91,10 +93,10 @@ func (h *Handler) Handle(c fiber.Ctx) error {
 	}
 
 	if action == ActionSetTag && strings.TrimSpace(targetTag) == "" {
-		return c.Status(fiber.StatusBadRequest).SendString("tag or image is required for set_tag action")
+		return sendText(c, fiber.StatusBadRequest, "tag or image is required for set_tag action")
 	}
 
-	err := h.executor.Execute(c.Context(), name, action, targetTag)
+	err = h.executor.Execute(c.Context(), name, action, targetTag)
 	if err != nil {
 		h.log.Error().
 			Err(err).
@@ -104,18 +106,33 @@ func (h *Handler) Handle(c fiber.Ctx) error {
 
 		switch {
 		case errors.Is(err, ErrContainerNotFound):
-			return c.Status(fiber.StatusNotFound).SendString(err.Error())
+			return sendText(c, fiber.StatusNotFound, err.Error())
 		case errors.Is(err, ErrUnsupportedAction), errors.Is(err, ErrInvalidTag), errors.Is(err, ErrWatchtowerContainer):
-			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+			return sendText(c, fiber.StatusBadRequest, err.Error())
 		default:
-			return c.Status(fiber.StatusInternalServerError).SendString(fmt.Sprintf("action failed: %v", err))
+			return sendText(c, fiber.StatusInternalServerError, fmt.Sprintf("action failed: %v", err))
 		}
 	}
 
-	return c.Status(fiber.StatusOK).JSON(Response{
+	err = c.Status(fiber.StatusOK).JSON(Response{
 		Status:    "success",
 		Container: name,
 		Action:    action,
 		Message:   fmt.Sprintf("Action %s executed successfully on %s", action, name),
 	})
+	if err != nil {
+		return fmt.Errorf("failed to send JSON response: %w", err)
+	}
+
+	return nil
+}
+
+// sendText writes a plain-text response with the given status.
+func sendText(c fiber.Ctx, status int, body string) error {
+	err := c.Status(status).SendString(body)
+	if err != nil {
+		return fmt.Errorf("failed to send response: %w", err)
+	}
+
+	return nil
 }

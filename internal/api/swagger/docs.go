@@ -834,7 +834,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "description": "Notification parameters",
-                        "name": "body",
+                        "name": "request",
                         "in": "body",
                         "schema": {
                             "$ref": "#/definitions/settings.TestNotificationRequest"
@@ -990,7 +990,7 @@ const docTemplate = `{
         },
         "/v1/update/status": {
             "get": {
-                "description": "Reports whether an update scan is running and, for each container it is working on, the current step (pulling, stopping, starting, updated, failed) and image download progress. Cheap to poll while an update runs.",
+                "description": "Reports whether an update scan is running and, for each container in progress, the step (pulling, stopping, starting, updated, failed) and download progress. Cheap to poll.",
                 "produces": [
                     "application/json"
                 ],

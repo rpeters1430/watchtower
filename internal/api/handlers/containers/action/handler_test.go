@@ -206,11 +206,12 @@ func TestHandler_Handle(t *testing.T) {
 				bodyReader = bytes.NewReader(payload)
 			}
 
-			req := httptest.NewRequest(http.MethodPost, "/v1/containers/"+tt.containerName+"/action", bodyReader)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/containers/"+tt.containerName+"/action", bodyReader)
 			req.Header.Set("Content-Type", "application/json")
 
 			resp, err := app.Test(req)
 			require.NoError(t, err)
+
 			defer resp.Body.Close()
 
 			assert.Equal(t, tt.expectedStatus, resp.StatusCode)

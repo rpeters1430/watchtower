@@ -44,7 +44,7 @@ func TestStatusReportsActivity(t *testing.T) {
 func getStatus(t *testing.T, app *fiber.App) StatusResponse {
 	t.Helper()
 
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, StatusPath, nil))
+	resp, err := app.Test(httptest.NewRequestWithContext(t.Context(), http.MethodGet, StatusPath, nil))
 	require.NoError(t, err)
 
 	defer resp.Body.Close()

@@ -2360,7 +2360,9 @@ func restartStaleContainerUntracked(
 			checkCtx, checkCancel := context.WithTimeout(context.Background(), restartPolicyTimeout(config.Timeout))
 			//nolint:contextcheck // fresh context intentional
 			startedContainer, getErr := client.GetContainer(checkCtx, newContainerID)
+
 			checkCancel()
+
 			if getErr == nil && startedContainer != nil {
 				info := startedContainer.ContainerInfo()
 				if info != nil && info.State != nil && !info.State.Running && info.State.ExitCode != 0 {
@@ -2395,7 +2397,11 @@ func restartStaleContainerUntracked(
 								Str("rollback_id", rollbackID.ShortID()).
 								Msg("Successfully rolled back crashed container to previous image")
 
-							return rollbackID, renamed, fmt.Errorf("%w: new container crashed (exit code %d), automatically rolled back to previous image", errStartContainerFailed, info.State.ExitCode)
+							return rollbackID, renamed, fmt.Errorf(
+								"%w: new container crashed (exit code %d), automatically rolled back to previous image",
+								errStartContainerFailed,
+								info.State.ExitCode,
+							)
 						}
 					}
 				}
@@ -2480,6 +2486,7 @@ func restartPolicyTimeout(timeout time.Duration) time.Duration {
 // rollbackContainerWrapper wraps a types.Container to substitute the previous image ID during auto-rollback.
 type rollbackContainerWrapper struct {
 	types.Container
+
 	rollbackImage string
 }
 

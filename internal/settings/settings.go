@@ -471,9 +471,9 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 			return nil
 		}
 
-		var co map[string]string
+		var perContainer map[string]string
 
-		err := json.Unmarshal(raw, &co)
+		err := json.Unmarshal(raw, &perContainer)
 		if err != nil {
 			return fmt.Errorf("%w: %s", ErrInvalidValue, key)
 		}
@@ -482,7 +482,7 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 			o.ContainerOverrides = make(map[string]string)
 		}
 
-		for k, v := range co {
+		for k, v := range perContainer {
 			if v == "" || v == "auto" {
 				delete(o.ContainerOverrides, k)
 			} else {

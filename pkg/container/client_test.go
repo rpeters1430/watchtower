@@ -455,11 +455,9 @@ var _ = ginkgo.Describe("the client", func() {
 				)
 
 				client := &client{
-					api: docker,
-					ClientOptions: ClientOptions{
-						IncludeStopped:     false,
-						IncludeStoppedFunc: func() bool { return true },
-					},
+					api:                docker,
+					IncludeStopped:     false,
+					IncludeStoppedFunc: func() bool { return true },
 				}
 				containers, err := client.ListContainers(
 					context.Background(),
