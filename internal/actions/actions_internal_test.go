@@ -760,7 +760,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 				ExposedPorts: dockerNetwork.PortSet{},
 			},
 		)
-		result := hasSelfDependency(testLogger(), container)
+		result := hasSelfDependency(container)
 		gomega.Expect(result).To(gomega.BeFalse())
 	})
 
@@ -779,7 +779,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 				ExposedPorts: dockerNetwork.PortSet{},
 			},
 		)
-		result := hasSelfDependency(testLogger(), container)
+		result := hasSelfDependency(container)
 		gomega.Expect(result).To(gomega.BeFalse())
 	})
 
@@ -798,7 +798,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 				ExposedPorts: dockerNetwork.PortSet{},
 			},
 		)
-		result := hasSelfDependency(testLogger(), container)
+		result := hasSelfDependency(container)
 		gomega.Expect(result).To(gomega.BeFalse())
 	})
 
@@ -817,7 +817,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 				ExposedPorts: dockerNetwork.PortSet{},
 			},
 		)
-		result := hasSelfDependency(testLogger(), container)
+		result := hasSelfDependency(container)
 		gomega.Expect(result).To(gomega.BeTrue())
 	})
 
@@ -838,7 +838,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 					ExposedPorts: dockerNetwork.PortSet{},
 				},
 			)
-			result := hasSelfDependency(testLogger(), container)
+			result := hasSelfDependency(container)
 			gomega.Expect(result).To(gomega.BeTrue())
 		},
 	)
@@ -858,7 +858,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 				ExposedPorts: dockerNetwork.PortSet{},
 			},
 		)
-		result := hasSelfDependency(testLogger(), container)
+		result := hasSelfDependency(container)
 		gomega.Expect(result).To(gomega.BeTrue())
 	})
 
@@ -877,7 +877,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 				ExposedPorts: dockerNetwork.PortSet{},
 			},
 		)
-		result := hasSelfDependency(testLogger(), container)
+		result := hasSelfDependency(container)
 		gomega.Expect(result).To(gomega.BeTrue())
 	})
 
@@ -891,7 +891,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 			time.Now(),
 			nil,
 		) // Config is nil
-		result := hasSelfDependency(testLogger(), container)
+		result := hasSelfDependency(container)
 		gomega.Expect(result).To(gomega.BeFalse())
 	})
 
@@ -908,7 +908,7 @@ var _ = ginkgo.Describe("hasSelfDependency", func() {
 				ExposedPorts: dockerNetwork.PortSet{},
 			},
 		)
-		result := hasSelfDependency(testLogger(), container)
+		result := hasSelfDependency(container)
 		gomega.Expect(result).To(gomega.BeFalse())
 	})
 })
