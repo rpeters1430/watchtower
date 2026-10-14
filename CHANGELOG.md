@@ -1357,6 +1357,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update minor dependency updates by @renovate[bot]
 - Pin dependencies by @renovate[bot]
 - Update github.com/azure/go-ansiterm digest to 51075c6 by @renovate[bot]
 - Update module github.com/nicholas-fedor/shoutrrr to v0.22.0 by @renovate[bot]
@@ -2960,9 +2961,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#21](https://github.com/rpeters1430/watchtower/pull/21)
+- @rpeters1430 made their first contribution in [#22](https://github.com/rpeters1430/watchtower/pull/22)
+- @github-actions[bot] made their first contribution in [#24](https://github.com/rpeters1430/watchtower/pull/24)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#20](https://github.com/rpeters1430/watchtower/pull/20)
 - @claude made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
