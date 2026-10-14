@@ -1,68 +1,167 @@
 <div align="center">
-  <img src="./logo.png" width="450" />
+  <img src="./logo.png" width="450" alt="Watchtower logo" />
 
-# Watchtower
+# Watchtower (rpeters1430 fork)
 
-  Automate Docker container image updates
+  Automate Docker container image updates, now with a built-in web UI
   <br/><br/>
 
-  [![All Contributors](https://img.shields.io/github/all-contributors/nicholas-fedor/watchtower)](#contributors)
-  [![codecov](https://codecov.io/gh/nicholas-fedor/watchtower/branch/main/graph/badge.svg)](https://codecov.io/gh/nicholas-fedor/watchtower)
-  [![Pulls from DockerHub](https://img.shields.io/docker/pulls/nickfedor/watchtower.svg)](https://hub.docker.com/r/nickfedor/watchtower)
-  [![GoDoc](https://godoc.org/github.com/nicholas-fedor/watchtower?status.svg)](https://godoc.org/github.com/nicholas-fedor/watchtower)
-  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/nicholas-fedor/watchtower)
-  [![Apache-2.0 License](https://img.shields.io/github/license/nicholas-fedor/watchtower.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-  [![latest version](https://img.shields.io/github/tag/nicholas-fedor/watchtower.svg)](https://github.com/nicholas-fedor/watchtower/releases)
+  [![Apache-2.0 License](https://img.shields.io/github/license/rpeters1430/watchtower.svg)](./LICENSE.md)
+  [![Image](https://img.shields.io/badge/image-ghcr.io%2Frpeters1430%2Fwatchtower-blue)](https://github.com/rpeters1430/watchtower/pkgs/container/watchtower)
 
 </div>
 
-## Quick Start
+> [!NOTE]
+> This is a personal fork of [nicholas-fedor/watchtower](https://github.com/nicholas-fedor/watchtower), which is itself the maintained fork of [containrrr/watchtower](https://github.com/containrrr/watchtower).
+> It is not affiliated with or supported by either project. Report problems with this fork in [its issue tracker](https://github.com/rpeters1430/watchtower/issues), not upstream.
 
-With watchtower you can update the running version of your containerized app simply by pushing a new image to the Docker Hub or your own image registry.
+## What it does
 
-Watchtower will pull down your new image, gracefully shut down your existing container and restart it with the same options that were used when it was deployed initially. Run the watchtower container with the following command:
+Watchtower watches your running containers. When a newer image is pushed to Docker Hub or your own registry, it pulls the image, stops the old container gracefully, and starts a new one with the same options it was originally deployed with.
+
+Everything upstream Watchtower can do still works here: schedules, label filtering, monitor-only mode, lifecycle hooks, private registries, Git-driven updates, and notifications through [shoutrrr](https://github.com/nicholas-fedor/shoutrrr).
+
+Watchtower is meant for homelabs, media centers, local development, and similar setups. It is **not** recommended for commercial or production environments; look at Kubernetes with CI/CD for that.
+
+## What this fork adds
+
+The goal of this fork is to make Watchtower easier to use, with a web UI built into the same container.
+
+| Feature | What you get |
+| --- | --- |
+| **Web UI** | A page at `http://<host>:8080/` that lists watched containers, checks them for newer images, updates the ones you pick, and shows recent scans. Light and dark themes. Served by Watchtower itself: no extra container, and the page loads nothing from other sites. |
+| **Settings you can change while running** | Turn monitor-only mode, cleanup of old images, and rolling restarts on or off, and change the update schedule, from the UI or the `/v1/settings` API. No restart needed. |
+| **Scan history** | Every scheduled scan, update, and update check is recorded and shown in the UI or at `/v1/history`. |
+| **Saved state** | With a volume mounted at `/data`, changed settings and scan history survive restarts. Without it, both are kept in memory and nothing fails. |
+| **Single-container updates** | Update one container from the UI without touching the rest. |
+
+The image is published as `ghcr.io/rpeters1430/watchtower:latest` from the `main` branch. Each build is also tagged `sha-<commit>` if you need to pin or roll back to a specific one. Only `linux/amd64` images are built.
+
+## Docker Compose guide
+
+### 1. Create a folder and a token
 
 ```console
-$ docker run --detach \
-    --name watchtower \
-    --volume /var/run/docker.sock:/var/run/docker.sock \
-    nickfedor/watchtower
+mkdir -p ~/watchtower && cd ~/watchtower
+echo "WATCHTOWER_HTTP_API_TOKEN=$(openssl rand -hex 32)" > .env
+echo "WATCHTOWER_HTTP_API_EVENTS_TOKEN=$(openssl rand -hex 32)" >> .env
+chmod 600 .env
 ```
 
-Watchtower is intended to be used in homelabs, media centers, local dev environments, and similar. We do **not** recommend using Watchtower in a commercial or production environment.
-If that is you, you should be looking into using Kubernetes enabled with CI/CD, such as onedr0p's Talos Linux with FluxCD setup [here](https://github.com/onedr0p/cluster-template).
+The first token is what you type into the web UI to sign in. Keep the `.env` file private.
 
-**⚠️ Note:** It is recommended to use the latest version of Docker. You can check your host's Docker version using the [CLI command](https://docs.docker.com/reference/cli/docker/version/) `docker version`.
-This version of Watchtower has been tested to support v1.43 and higher; however, don't be surprised if you experience unexpected behavior when attempting to use newer features on older versions of Docker.
-This version autonegotiates the API version by default. If the `DOCKER_API_VERSION` [variable](https://watchtower.nickfedor.com/configuration/docker-connection/#docker_api_version) is explicitly set, Watchtower validates the version and falls back to autonegotiation on failure.
+### 2. Create `compose.yaml`
 
-## Supported Architectures
+```yaml
+services:
+  watchtower:
+    image: ghcr.io/rpeters1430/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Your time zone, so the schedule runs at the local time you expect.
+      TZ: America/New_York
 
-Watchtower supports the following architectures for its Docker images:
+      # Turn on the web UI and the API endpoints it uses.
+      WATCHTOWER_HTTP_API_ENDPOINTS: all
+      # Keep scheduled updates running while the update endpoint is enabled.
+      WATCHTOWER_HTTP_API_PERIODIC_POLLS: "true"
 
-- amd64
-- i386
-- armhf
-- arm64v8
-- riscv64
+      # When to check for updates: 4:00 every morning.
+      # Six fields: second minute hour day-of-month month day-of-week.
+      # You can change this later on the UI's Settings page.
+      WATCHTOWER_SCHEDULE: "0 0 4 * * *"
+
+      # Remove the old image after a container is updated.
+      WATCHTOWER_CLEANUP: "true"
+
+      # Optional: send a notification after each update. See the shoutrrr docs for URL formats.
+      # WATCHTOWER_NOTIFICATION_URL: discord://token@channel
+    volumes:
+      # Lets Watchtower see and recreate your containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Keeps changed settings and scan history across restarts.
+      - ./data:/data
+      # Optional: credentials for private registries (created by `docker login`).
+      # - ~/.docker/config.json:/config.json:ro
+    ports:
+      # Web UI and API. Only reachable from this machine; see "Opening the UI to your network".
+      - 127.0.0.1:8080:8080
+```
+
+### 3. Start it
+
+```console
+docker compose up -d
+docker compose logs -f watchtower
+```
+
+Open <http://localhost:8080/> and sign in with the `WATCHTOWER_HTTP_API_TOKEN` value from `.env`.
+
+### 4. Keep it up to date
+
+Watchtower updates itself along with your other containers. To update it by hand:
+
+```console
+docker compose pull && docker compose up -d
+```
+
+### Opening the UI to your network
+
+The sample binds the UI to `127.0.0.1`, so only the Docker host can reach it. To use it from other machines on your network, change the port line to `- 8080:8080`, ideally behind a reverse proxy (Caddy, Traefik, Nginx) that adds HTTPS. Without HTTPS, your token and the sign-in cookie cross the network in plain text.
+
+**Never expose the UI or API directly to the Internet.** Anyone who signs in can update containers and change the schedule.
+
+### Common changes
+
+| To... | Set |
+| --- | --- |
+| See available updates without applying them | `WATCHTOWER_MONITOR_ONLY: "true"` (or toggle it in the UI) |
+| Only watch containers you opt in | `WATCHTOWER_LABEL_ENABLE: "true"`, then add the label `com.centurylinklabs.watchtower.enable=true` to those containers |
+| Never update a particular container | Add the label `com.centurylinklabs.watchtower.enable=false` to it |
+| Check on an interval instead of a schedule | Replace `WATCHTOWER_SCHEDULE` with `WATCHTOWER_POLL_INTERVAL: "86400"` (seconds) |
+| Make the UI read-only | Replace `all` with `health,containers,check,history,config`. This leaves out `update` and `settings`, so nobody can update containers or change settings from the page |
+| Use the UI without the API changing your schedule | Keep `WATCHTOWER_HTTP_API_PERIODIC_POLLS: "true"` whenever `update` (or `all`) is enabled. Without it, scheduled updates stop and only the UI or API triggers them |
+
+### Which endpoints the UI needs
+
+`all` is the simplest choice. To enable only what you use, list the names in `WATCHTOWER_HTTP_API_ENDPOINTS` (comma separated). Parts of the page whose endpoint is off are hidden or explained.
+
+| Part of the page | Endpoint |
+| --- | --- |
+| The page itself | `ui` |
+| Container list | `containers` |
+| Check for updates | `check` |
+| Update a container | `update` |
+| Scan history | `history` |
+| Settings (view) | `config` |
+| Settings (change) | `settings` |
+
+## Requirements
+
+- Docker with API version 1.43 or newer (check with `docker version`). Watchtower negotiates the API version automatically.
+- A Linux `amd64` host for the published image. For other architectures, build the image yourself with `docker build -f build/docker/Dockerfile.self-local -t watchtower .`.
 
 ## Documentation
 
-The full documentation is available at <https://watchtower.nickfedor.com/>.
+- Fork-specific features: [Web UI](./docs/http-api/endpoints/ui/index.md), [Settings API](./docs/http-api/endpoints/settings/index.md), [History API](./docs/http-api/endpoints/history/index.md), [HTTP API configuration](./docs/configuration/http-api/index.md).
+- Everything else (all configuration options, notifications, labels, private registries) works as in upstream, documented at <https://watchtower.nickfedor.com/>. That site describes upstream's image (`nickfedor/watchtower`); use `ghcr.io/rpeters1430/watchtower:latest` in its examples to run this fork.
 
-<!-- markdownlint-restore -->
+## License and attribution
 
-## Star History
+Watchtower is licensed under the [Apache License, Version 2.0](./LICENSE.md). This fork is distributed under the same license.
 
-<a href="https://www.star-history.com/?repos=nicholas-fedor%2Fwatchtower&type=date&legend=bottom-right">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=nicholas-fedor/watchtower&type=date&theme=dark&legend=bottom-right" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=nicholas-fedor/watchtower&type=date&legend=bottom-right" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=nicholas-fedor/watchtower&type=date&legend=bottom-right" />
- </picture>
-</a>
+- Original work: Copyright 2015 Watchtower contributors ([containrrr/watchtower](https://github.com/containrrr/watchtower)), maintained by Nicholas Fedor and contributors at [nicholas-fedor/watchtower](https://github.com/nicholas-fedor/watchtower).
+- This fork modifies the original. The changes are the built-in web UI, the runtime settings, history and data directory features, and the container image publishing setup. The [commit history](https://github.com/rpeters1430/watchtower/commits/main) records every change, and [NOTICE](./NOTICE) summarises them.
+- Parts of Watchtower contain code under a BSD license from The Go Authors; see [LICENSE.md](./LICENSE.md).
+- The web UI embeds the Barlow typeface (Copyright 2017 The Barlow Project Authors), licensed under the SIL Open Font License 1.1; see [OFL.txt](./internal/api/handlers/ui/static/fonts/OFL.txt).
 
-## Contributors
+The software is provided "as is", without warranties or conditions of any kind. See the license for details.
+
+## Upstream contributors
+
+Watchtower exists thanks to the people who built and maintain it upstream.
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/en/reference/emoji-key/)):
 

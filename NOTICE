@@ -1,0 +1,22 @@
+Watchtower
+Copyright 2015 Watchtower contributors
+
+This product is a modified version of Watchtower
+(https://github.com/nicholas-fedor/watchtower, originally
+https://github.com/containrrr/watchtower), licensed under the Apache License,
+Version 2.0. See LICENSE.md.
+
+Modifications in this fork (https://github.com/rpeters1430/watchtower):
+
+- A web UI built into the Watchtower binary and served by its HTTP API.
+- Settings that can be changed while Watchtower runs (/v1/settings).
+- Update checks recorded in the scan history, and settings and history kept
+  in a data directory (--data-dir) across restarts.
+- A container image published to ghcr.io/rpeters1430/watchtower.
+- A standalone dashboard prototype (dashboard/).
+
+The full list of changes is in the Git history of this repository.
+
+The web UI embeds the Barlow typeface, Copyright 2017 The Barlow Project
+Authors (https://github.com/jpt/barlow), licensed under the SIL Open Font
+License 1.1. See internal/api/handlers/ui/static/fonts/OFL.txt.
