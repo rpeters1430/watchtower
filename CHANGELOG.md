@@ -957,6 +957,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Enable ephemeral self-update in the Compose sample by @claude
 - Rewrite README for this fork with a Docker Compose guide by @claude
 - Document settings persistence errors by @Copilot
 - Describe runtime settings in CLAUDE.md by @rpeters1430
@@ -2948,7 +2949,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New Contributors
 
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#8](https://github.com/rpeters1430/watchtower/pull/8)
+- @github-actions[bot] made their first contribution in [#9](https://github.com/rpeters1430/watchtower/pull/9)
 - @rpeters1430 made their first contribution in [#6](https://github.com/rpeters1430/watchtower/pull/6)
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
