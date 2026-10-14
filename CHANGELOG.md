@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Scan pending updates and hold them on an opt-in severity gate by @claude
+- Add image scanner package with a Trivy backend by @claude
 - Add initial Renovate configuration file by @rpeters1430
 - Keep check results on the server and set up notifications in the UI by @claude
 - Record which containers each scan changed by @claude
@@ -206,6 +208,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Resolve existing golangci-lint findings by @claude
 - Address review findings on check results and notifications by @claude
 - Log image pulls and queued update requests by @claude
 - Keep container details readable on mobile by @rpeters1430
@@ -2961,10 +2964,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#22](https://github.com/rpeters1430/watchtower/pull/22)
-- @github-actions[bot] made their first contribution in [#24](https://github.com/rpeters1430/watchtower/pull/24)
-- @renovate[bot] made their first contribution
+- @rpeters1430 made their first contribution in [#26](https://github.com/rpeters1430/watchtower/pull/26)
 - @claude made their first contribution
+- @github-actions[bot] made their first contribution in [#25](https://github.com/rpeters1430/watchtower/pull/25)
+- @renovate[bot] made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
 - @allcontributors[bot] made their first contribution
