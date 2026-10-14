@@ -653,3 +653,26 @@ func (client MockClient) BuildRemoteImage(ctx context.Context, _, _ string, tags
 
 	return types.ImageID("sha256:gitbuild"), nil
 }
+
+// RestartContainer simulates restarting a container.
+func (client MockClient) RestartContainer(ctx context.Context, c types.Container, _ time.Duration) error {
+	if client.TestData != nil {
+		client.TestData.recordOperation("RestartContainer")
+	}
+
+	if err := client.checkContextCancellation(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// PullImageByName simulates pulling an image by name.
+func (client MockClient) PullImageByName(ctx context.Context, _ string) error {
+	if client.TestData != nil {
+		client.TestData.recordOperation("PullImageByName")
+	}
+
+	return client.checkContextCancellation(ctx)
+}
+

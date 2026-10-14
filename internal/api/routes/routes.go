@@ -110,6 +110,7 @@ func Register(
 	if opts.EnableContainersAPI {
 		registerContainersRoute(app, auth, opts)
 		registerContainersDetailsRoute(app, auth, opts)
+		registerContainerActionRoute(app, auth, opts)
 	}
 
 	if opts.EnableCheckAPI {

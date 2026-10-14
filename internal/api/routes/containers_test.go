@@ -55,6 +55,27 @@ func TestRegisterContainersRoute_NilClient(t *testing.T) {
 		}
 	})
 
+	t.Run("nil client skips action route", func(t *testing.T) {
+		app := testApp()
+		auth := testAuthMiddleware()
+
+		opts := config.Options{
+			EnableContainersAPI: true,
+			Client:              nil,
+			UnblockHTTPAPI:      true,
+		}
+
+		registerContainerActionRoute(app, auth, opts)
+
+		routes := app.GetRoutes()
+
+		for _, r := range routes {
+			if r.Path == "/v1/containers/:name/action" {
+				t.Error("POST /v1/containers/:name/action should not be registered when client is nil")
+			}
+		}
+	})
+
 	t.Run("with client registers routes", func(t *testing.T) {
 		app := testApp()
 		auth := testAuthMiddleware()
@@ -69,11 +90,13 @@ func TestRegisterContainersRoute_NilClient(t *testing.T) {
 
 		registerContainersRoute(app, auth, opts)
 		registerContainersDetailsRoute(app, auth, opts)
+		registerContainerActionRoute(app, auth, opts)
 
 		routes := app.GetRoutes()
 
 		foundContainers := false
 		foundDetails := false
+		foundAction := false
 
 		for _, r := range routes {
 			if r.Path == "/v1/containers" && r.Method == http.MethodGet {
@@ -83,9 +106,15 @@ func TestRegisterContainersRoute_NilClient(t *testing.T) {
 			if r.Path == "/v1/containers/details" && r.Method == http.MethodGet {
 				foundDetails = true
 			}
+
+			if r.Path == "/v1/containers/:name/action" && r.Method == http.MethodPost {
+				foundAction = true
+			}
 		}
 
 		assert.True(t, foundContainers, "GET /v1/containers should be registered")
 		assert.True(t, foundDetails, "GET /v1/containers/details should be registered")
+		assert.True(t, foundAction, "POST /v1/containers/:name/action should be registered")
 	})
 }
+

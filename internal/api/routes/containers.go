@@ -4,9 +4,11 @@ import (
 	"context"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/timeout"
 
 	"github.com/nicholas-fedor/watchtower/internal/api/config"
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/containers"
+	"github.com/nicholas-fedor/watchtower/internal/api/handlers/containers/action"
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/containers/details"
 )
 
@@ -34,3 +36,22 @@ func registerContainersDetailsRoute(app *fiber.App, auth fiber.Handler, opts con
 	})
 	app.Get(handler.Path, auth, config.TimeoutMiddleware(), handler.Handle)
 }
+
+func registerContainerActionRoute(app *fiber.App, auth fiber.Handler, opts config.Options) {
+	if opts.Client == nil {
+		return
+	}
+
+	actionTimeout := opts.UpdateTimeout
+	if actionTimeout <= 0 {
+		actionTimeout = config.DefaultUpdateTimeout
+	}
+
+	executor := action.NewExecutor(opts.Logger, opts.Client, actionTimeout)
+	handler := action.New(opts.Logger, executor)
+
+	app.Post(handler.Path, auth, timeout.New(handler.Handle, timeout.Config{
+		Timeout: actionTimeout,
+	}))
+}
+

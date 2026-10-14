@@ -34,6 +34,8 @@
     settingsProblem: "",
     customSchedule: false,
     customScheduleDraft: null,
+    editingTag: new Map(),
+    acting: new Set(),
   };
 
   const app = document.getElementById("app");
@@ -360,6 +362,37 @@
     render();
   }
 
+  async function containerAction(containerName, action, payload = {}) {
+    if (state.acting.has(containerName)) {
+      return;
+    }
+
+    state.acting.add(containerName);
+    render();
+
+    try {
+      await request("POST", `/v1/containers/${encodeURIComponent(containerName)}/action`, {
+        action,
+        ...payload,
+      });
+
+      let actionDesc = action;
+      if (action === "start") actionDesc = "started";
+      else if (action === "stop") actionDesc = "stopped";
+      else if (action === "restart") actionDesc = "restarted";
+      else if (action === "set_tag") actionDesc = `recreated with tag ${payload.tag || payload.image}`;
+
+      notify(`Container ${containerName} ${actionDesc}.`);
+      state.editingTag.delete(containerName);
+      await loadContainers();
+    } catch (problem) {
+      notify(`Action ${action} on ${containerName} failed: ${problem.message}`, true);
+    } finally {
+      state.acting.delete(containerName);
+      render();
+    }
+  }
+
   // Container state, in the words the page uses for it.
 
   function describe(container) {
@@ -367,6 +400,10 @@
 
     if (state.updating.has(container.name)) {
       return { key: "working", label: "Updating" };
+    }
+
+    if (state.acting.has(container.name)) {
+      return { key: "working", label: "Working" };
     }
 
     if (check && check.error) {
@@ -532,7 +569,85 @@
     };
     const link = (href) => (/^https?:\/\//.test(href) ? el("a", { class: "link-subtle", href, rel: "noreferrer", target: "_blank" }, href) : href);
 
-    add("Image", code(container.image));
+    const isEditingTag = state.editingTag.has(container.name);
+    let imageCell;
+
+    if (!container.watchtower) {
+      if (isEditingTag) {
+        const input = el("input", {
+          class: "tag-input",
+          type: "text",
+          value: state.editingTag.get(container.name) || container.image,
+          placeholder: "e.g. latest, 1.40.1, or full image",
+          oninput: (e) => state.editingTag.set(container.name, e.target.value),
+        });
+
+        imageCell = el(
+          "div",
+          { class: "tag-field-wrapper" },
+          el(
+            "div",
+            { class: "tag-edit-form" },
+            input,
+            el(
+              "button",
+              {
+                class: "button button-primary button-tiny",
+                type: "button",
+                disabled: state.acting.has(container.name),
+                onclick: async () => {
+                  const val = input.value.trim();
+                  if (!val) {
+                    notify("Image tag or reference cannot be empty.", true);
+                    return;
+                  }
+                  await containerAction(container.name, "set_tag", { tag: val });
+                },
+              },
+              state.acting.has(container.name) ? "Recreating..." : "Apply & Recreate",
+            ),
+            el(
+              "button",
+              {
+                class: "button button-quiet button-tiny",
+                type: "button",
+                disabled: state.acting.has(container.name),
+                onclick: () => {
+                  state.editingTag.delete(container.name);
+                  renderManifest();
+                },
+              },
+              "Cancel",
+            ),
+          ),
+          el("p", { class: "tag-help" }, "Pulls the new image/tag, then recreates the container keeping all ports, volumes, and environment variables."),
+        );
+      } else {
+        imageCell = el(
+          "div",
+          { class: "tag-field-row" },
+          code(container.image),
+          el(
+            "button",
+            {
+              class: "button button-quiet button-tiny",
+              type: "button",
+              disabled: state.acting.has(container.name),
+              "aria-label": `Edit tag for ${container.name}`,
+              onclick: () => {
+                state.editingTag.set(container.name, container.image);
+                renderManifest();
+              },
+            },
+            "Edit tag",
+          ),
+        );
+      }
+    } else {
+      imageCell = code(container.image);
+    }
+
+    add("Image", imageCell);
 
     if (check.current_image_version || check.latest_image_version) {
       add(
@@ -658,30 +773,90 @@
       el("span", { class: `unit-state state-${status.key}` }, status.label),
     );
 
-    let action = null;
+    const actions = [];
+    const isBusy = state.updating.has(container.name) || state.acting.has(container.name);
+
+    if (!container.watchtower) {
+      if (container.running) {
+        actions.push(
+          el(
+            "button",
+            {
+              class: "button button-quiet button-tiny button-restart",
+              type: "button",
+              disabled: isBusy,
+              "aria-label": `Restart ${container.name}`,
+              onclick: (e) => {
+                e.stopPropagation();
+                containerAction(container.name, "restart");
+              },
+            },
+            "Restart",
+          ),
+          el(
+            "button",
+            {
+              class: "button button-quiet button-tiny button-stop",
+              type: "button",
+              disabled: isBusy,
+              "aria-label": `Stop ${container.name}`,
+              onclick: (e) => {
+                e.stopPropagation();
+                containerAction(container.name, "stop");
+              },
+            },
+            "Stop",
+          ),
+        );
+      } else {
+        actions.push(
+          el(
+            "button",
+            {
+              class: "button button-quiet button-tiny button-start",
+              type: "button",
+              disabled: isBusy,
+              "aria-label": `Start ${container.name}`,
+              onclick: (e) => {
+                e.stopPropagation();
+                containerAction(container.name, "start");
+              },
+            },
+            "Start",
+          ),
+        );
+      }
+    }
 
     if (container.policy === "pinned") {
-      action = el("span", { class: "setting-off" }, "Pinned");
+      actions.push(el("span", { class: "setting-off" }, "Pinned"));
     } else if (waiting && canUpdate(container)) {
-      action = el(
-        "button",
-        {
-          class: "button button-quiet",
-          type: "button",
-          disabled: state.updating.size > 0,
-          "aria-label": `Update ${container.name}`,
-          onclick: () => confirmUpdate([container]),
-        },
-        "Update",
+      actions.push(
+        el(
+          "button",
+          {
+            class: "button button-quiet button-tiny",
+            type: "button",
+            disabled: state.updating.size > 0 || isBusy,
+            "aria-label": `Update ${container.name}`,
+            onclick: (e) => {
+              e.stopPropagation();
+              confirmUpdate([container]);
+            },
+          },
+          "Update",
+        ),
       );
     } else if (waiting && (check || container.monitor_only) && feature("update")) {
-      action = el("span", { class: "setting-off" }, "Monitor only");
+      actions.push(el("span", { class: "setting-off" }, "Monitor only"));
     }
+
+    const actionWrapper = el("div", { class: "unit-actions-group" }, ...actions);
 
     return el(
       "li",
       { class: "unit" },
-      el("div", { class: "unit-head" }, toggle, el("div", { class: "unit-action" }, action)),
+      el("div", { class: "unit-head" }, toggle, el("div", { class: "unit-action" }, actionWrapper)),
       open && facts(container),
     );
   }

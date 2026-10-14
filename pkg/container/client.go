@@ -405,6 +405,27 @@ type Client interface {
 	//   - error: Non-nil if starting fails, nil on success.
 	StartContainerByID(ctx context.Context, containerID types.ContainerID) error
 
+	// RestartContainer restarts an existing container, respecting the given timeout.
+	//
+	// Parameters:
+	//   - ctx: Context for cancellation and timeout control.
+	//   - container: Container to restart.
+	//   - timeout: Duration to wait before forcing stop.
+	//
+	// Returns:
+	//   - error: Non-nil if restart fails, nil on success.
+	RestartContainer(ctx context.Context, container types.Container, timeout time.Duration) error
+
+	// PullImageByName pulls an image from the registry using its name/reference.
+	//
+	// Parameters:
+	//   - ctx: Context for operation control.
+	//   - imageName: Full image name or reference to pull.
+	//
+	// Returns:
+	//   - error: Non-nil if pull fails, nil on success.
+	PullImageByName(ctx context.Context, imageName string) error
+
 	// BuildRemoteImage builds an image from a Git URL context.
 	//
 	// The daemon clones the repository. Watchtower does not.
@@ -2079,3 +2100,73 @@ func isDaemonConnectionError(err error) bool {
 		errors.Is(err, io.EOF) ||
 		errors.Is(err, io.ErrUnexpectedEOF)
 }
+
+// RestartContainer restarts an existing container, respecting the given timeout.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control.
+//   - container: Container to restart.
+//   - timeout: Duration to wait before forcing stop.
+//
+// Returns:
+//   - error: Non-nil if restart fails, nil on success.
+func (c *client) RestartContainer(ctx context.Context, container types.Container, timeout time.Duration) error {
+	clogVal := c.logger().With().
+		Str("container", container.Name()).
+		Str("id", container.ID().ShortID()).
+		Logger()
+	clog := &clogVal
+
+	clog.Info().
+		Dur("timeout", timeout).
+		Msg("Restarting container")
+
+	effectiveTimeout := timeout
+	containerTimeout := container.StopTimeout()
+	if containerTimeout != nil && *containerTimeout >= 0 {
+		effectiveTimeout = time.Duration(*containerTimeout) * time.Second
+	}
+
+	timeoutSeconds := int(effectiveTimeout / time.Second)
+	signal := container.StopSignal()
+
+	_, err := c.api.ContainerRestart(
+		ctx,
+		string(container.ID()),
+		dockerClient.ContainerRestartOptions{
+			Signal:  signal,
+			Timeout: &timeoutSeconds,
+		},
+	)
+	if err != nil {
+		clog.Debug().
+			Err(err).
+			Msg("Failed to restart container")
+
+		return fmt.Errorf("failed to restart container %s: %w", container.Name(), err)
+	}
+
+	clog.Debug().Msg("Container restarted successfully")
+
+	return nil
+}
+
+// PullImageByName pulls an image from the registry using its full reference.
+//
+// Parameters:
+//   - ctx: Context for operation control.
+//   - imageName: Full image name or reference to pull.
+//
+// Returns:
+//   - error: Non-nil if pull fails, nil on success.
+func (c *client) PullImageByName(ctx context.Context, imageName string) error {
+	opts, err := registry.GetPullOptions(c.logger(), imageName)
+	if err != nil {
+		return fmt.Errorf("failed to load authentication credentials for %s: %w", imageName, err)
+	}
+
+	imgClient := newImageClient(c.api, c.logger())
+
+	return imgClient.performImagePull(ctx, imageName, opts)
+}
+

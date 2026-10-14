@@ -185,10 +185,12 @@ func (s *Store) Snapshot() Snapshot {
 		Effective: s.overrides.apply(s.defaults),
 		Defaults:  s.defaults,
 		Overridden: map[string]bool{
-			KeyMonitorOnly:    s.overrides.MonitorOnly != nil,
-			KeyCleanup:        s.overrides.Cleanup != nil,
-			KeyRollingRestart: s.overrides.RollingRestart != nil,
-			KeySchedule:       s.overrides.Schedule != nil,
+			KeyMonitorOnly:        s.overrides.MonitorOnly != nil,
+			KeyCleanup:            s.overrides.Cleanup != nil,
+			KeyRollingRestart:     s.overrides.RollingRestart != nil,
+			KeySchedule:           s.overrides.Schedule != nil,
+			KeyAutoRollback:       s.overrides.AutoRollback != nil,
+			KeyContainerOverrides: s.overrides.ContainerOverrides != nil,
 		},
 		Persistent: s.path != "",
 	}
