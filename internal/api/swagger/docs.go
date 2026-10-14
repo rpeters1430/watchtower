@@ -96,7 +96,7 @@ const docTemplate = `{
         },
         "/v1/check": {
             "get": {
-                "description": "Returns each container's update status from the most recent check or scan that looked at it, without contacting any registry. Statuses are saved in the data directory when one is",
+                "description": "Returns each container's status from the latest check or scan that looked at it, without contacting any registry.",
                 "produces": [
                     "application/json"
                 ],
@@ -671,7 +671,7 @@ const docTemplate = `{
         },
         "/v1/settings/notifications": {
             "get": {
-                "description": "Lists the notification services Watchtower sends to, without their credentials. Services from flags or environment variables have source \"config\"; services added through this endpoint",
+                "description": "Lists notification services without their URLs. Source is \"config\" for flags and environment variables, \"settings\" for services added here.",
                 "produces": [
                     "application/json"
                 ],
@@ -1253,7 +1253,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "description": "ID identifies the service. It is derived from the URL but does not reveal it.",
+                    "description": "ID identifies the service. It reveals nothing about the URL.",
                     "type": "string"
                 },
                 "name": {

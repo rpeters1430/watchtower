@@ -29,8 +29,9 @@ const (
 const statusRetention = 30 * 24 * time.Hour
 
 // ContainerStatus is the latest known update state of one container, from
-// whichever check or scan last looked at it. Its JSON keys match the
-// per-container results of POST /v1/check.
+// whichever check or scan last looked at it. It is a subset of the
+// per-container results of POST /v1/check, under the same JSON keys, so it
+// leaves out fields only a registry check knows, such as the local digest.
 type ContainerStatus struct {
 	Name                string    `json:"name"`
 	Image               string    `json:"image"`
@@ -97,11 +98,16 @@ func newScanStatuses(report types.Report, now time.Time) []ContainerStatus {
 			status.LatestImageID = string(item.LatestImageID())
 			status.LatestImageVersion = item.LatestImageVersion()
 		case session.FailedStateString:
-			// The scan found a newer image but could not apply it.
-			status.UpdateAvailable = true
-			status.LatestImageID = string(item.LatestImageID())
-			status.LatestImageVersion = item.LatestImageVersion()
 			status.Error = item.Error()
+
+			// A failure before the registry answered, such as a rate limit,
+			// leaves the latest image equal to the current one: no update
+			// was found. Otherwise the scan found one but could not apply it.
+			if latest := string(item.LatestImageID()); latest != "" && latest != status.ImageID {
+				status.UpdateAvailable = true
+				status.LatestImageID = latest
+				status.LatestImageVersion = item.LatestImageVersion()
+			}
 		}
 
 		statuses = append(statuses, status)
@@ -130,6 +136,12 @@ func (m *Metrics) RecordStatuses(statuses []ContainerStatus) {
 	latest := statuses[0].Timestamp
 
 	for _, status := range statuses {
+		// A check can overlap a scan and finish after it, so never let an
+		// older result replace a newer one.
+		if current, ok := m.statuses[status.Name]; ok && current.Timestamp.After(status.Timestamp) {
+			continue
+		}
+
 		m.statuses[status.Name] = status
 
 		if status.Timestamp.After(latest) {

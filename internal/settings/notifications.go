@@ -1,7 +1,7 @@
 package settings
 
 import (
-	"crypto/sha256"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// notificationIDLength is the number of hex characters in a service ID.
-const notificationIDLength = 12
+// notificationIDBytes is the number of random bytes in a service ID.
+const notificationIDBytes = 6
 
 // maxNotificationNameLength bounds the label a service is shown with.
 const maxNotificationNameLength = 80
@@ -25,29 +25,30 @@ var (
 
 // NotificationService is a notification destination added at run time.
 type NotificationService struct {
+	// ID identifies the service. It is random, so it reveals nothing about the URL.
+	ID string `json:"id"`
 	// Name is the label the service is shown with.
 	Name string `json:"name,omitempty"`
 	// URL is the Shoutrrr service URL. It usually carries credentials.
 	URL string `json:"url"`
 }
 
-// ID returns a stable identifier for the service that does not reveal its URL.
-func (n NotificationService) ID() string {
-	return NotificationID(n.URL)
+// newNotificationID returns a random identifier for a notification service.
+func newNotificationID() string {
+	id := make([]byte, notificationIDBytes)
+	_, _ = rand.Read(id) // crypto/rand.Read never returns an error.
+
+	return hex.EncodeToString(id)
 }
 
-// NotificationID returns the identifier of a notification URL. It is derived
-// from the URL so it stays the same across restarts without revealing it.
-//
-// Parameters:
-//   - rawURL: Shoutrrr service URL.
-//
-// Returns:
-//   - string: Short hex identifier.
-func NotificationID(rawURL string) string {
-	sum := sha256.Sum256([]byte(rawURL))
-
-	return hex.EncodeToString(sum[:])[:notificationIDLength]
+// assignNotificationIDs gives every service without an ID a new one, for
+// services saved before IDs were stored.
+func assignNotificationIDs(services []NotificationService) {
+	for i := range services {
+		if services[i].ID == "" {
+			services[i].ID = newNotificationID()
+		}
+	}
 }
 
 // NotificationSummary describes a notification URL without its credentials:
@@ -122,6 +123,7 @@ func (s *Store) OnNotificationChange(apply func(urls []string) error) error {
 //   - error: Non-nil if the URL is empty, already saved, rejected, or cannot be saved.
 func (s *Store) AddNotificationService(name, rawURL string) (NotificationService, error) {
 	service := NotificationService{
+		ID:   newNotificationID(),
 		Name: strings.TrimSpace(name),
 		URL:  strings.TrimSpace(rawURL),
 	}
@@ -167,7 +169,7 @@ func (s *Store) RemoveNotificationService(id string) error {
 	defer s.mu.Unlock()
 
 	index := slices.IndexFunc(s.overrides.NotificationServices, func(saved NotificationService) bool {
-		return saved.ID() == id
+		return saved.ID == id
 	})
 	if index < 0 {
 		return ErrNotificationNotFound

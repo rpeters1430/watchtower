@@ -3,6 +3,8 @@ package settings
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -28,7 +30,8 @@ func TestNotificationServices(t *testing.T) {
 
 	added, err := store.AddNotificationService(" Phone ", " ntfy://ntfy.sh/topic ")
 	require.NoError(t, err)
-	assert.Equal(t, NotificationService{Name: "Phone", URL: "ntfy://ntfy.sh/topic"}, added)
+	assert.Len(t, added.ID, 2*notificationIDBytes)
+	assert.Equal(t, NotificationService{ID: added.ID, Name: "Phone", URL: "ntfy://ntfy.sh/topic"}, added)
 	assert.Equal(t, []string{"ntfy://ntfy.sh/topic"}, applied)
 
 	_, err = store.AddNotificationService("", "ntfy://ntfy.sh/topic")
@@ -54,7 +57,8 @@ func TestNotificationServices(t *testing.T) {
 	assert.Equal(t, []string{"ntfy://ntfy.sh/topic"}, restored)
 
 	require.ErrorIs(t, reopened.RemoveNotificationService("unknown"), ErrNotificationNotFound)
-	require.NoError(t, reopened.RemoveNotificationService(added.ID()))
+	assert.Equal(t, added.ID, reopened.NotificationServices()[0].ID, "IDs are saved")
+	require.NoError(t, reopened.RemoveNotificationService(added.ID))
 	assert.Empty(t, restored)
 	assert.Empty(t, reopened.NotificationServices())
 }
@@ -83,7 +87,15 @@ func TestNotificationSummary(t *testing.T) {
 		assert.Equal(t, tt.service, service, tt.url)
 		assert.Equal(t, tt.host, host, tt.url)
 	}
+}
 
-	assert.Len(t, NotificationID("ntfy://ntfy.sh/a"), notificationIDLength)
-	assert.NotEqual(t, NotificationID("ntfy://ntfy.sh/a"), NotificationID("ntfy://ntfy.sh/b"))
+func TestNotificationServicesSavedWithoutIDs(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, FileName),
+		[]byte(`{"notification_services":[{"url":"ntfy://ntfy.sh/a"},{"url":"ntfy://ntfy.sh/b"}]}`), 0o600))
+
+	services := Open(nil, dir, Values{}, Validators{}).NotificationServices()
+	require.Len(t, services, 2)
+	assert.NotEmpty(t, services[0].ID)
+	assert.NotEqual(t, services[0].ID, services[1].ID)
 }

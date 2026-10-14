@@ -57,10 +57,7 @@ func NewLatest(log *zerolog.Logger, statuses func() []metrics.ContainerStatus) *
 // as recorded by the most recent check or scan that looked at it.
 //
 //	@Summary		Latest check results
-//	@Description	Returns each container's update status from the most recent check or scan that looked at it, without contacting any registry. Statuses are saved in the data directory when one is
-//
-// mounted.
-//
+//	@Description	Returns each container's status from the latest check or scan that looked at it, without contacting any registry.
 //	@Tags			check
 //	@Produce		json
 //	@Success		200	{object}	LatestResponse	"Latest known container statuses"

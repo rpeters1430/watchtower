@@ -71,7 +71,7 @@ func TestNotificationsLifecycle(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	require.Len(t, list.Services, 1)
 	assert.Equal(t, NotificationService{
-		ID:      runtime.NotificationID("discord://token@123456789"),
+		ID:      "config-1",
 		Service: "discord",
 		Source:  SourceConfig,
 	}, list.Services[0])

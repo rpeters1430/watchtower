@@ -70,18 +70,21 @@ func registerCheckRoute(app *fiber.App, auth fiber.Handler, opts config.Options)
 		),
 	)
 
-	if opts.DefaultMetrics != nil {
-		latest := check.NewLatest(opts.Logger, func() []metrics.ContainerStatus {
-			store := opts.DefaultMetrics()
-			if store == nil {
-				return nil
-			}
+	// Without a metrics store there is nothing remembered, so report no results.
+	latest := check.NewLatest(opts.Logger, func() []metrics.ContainerStatus {
+		if opts.DefaultMetrics == nil {
+			return nil
+		}
 
-			return store.GetStatuses()
-		})
+		store := opts.DefaultMetrics()
+		if store == nil {
+			return nil
+		}
 
-		app.Get(latest.Path, auth, latest.Handle)
-	}
+		return store.GetStatuses()
+	})
+
+	app.Get(latest.Path, auth, latest.Handle)
 }
 
 // recordCheck adds a completed check to the scan history so that checks

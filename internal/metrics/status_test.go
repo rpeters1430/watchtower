@@ -68,6 +68,43 @@ func TestNewScanStatuses(t *testing.T) {
 	}
 }
 
+func TestNewScanStatuses_LookupFailure(t *testing.T) {
+	// A registry lookup that fails records the current image as the latest one.
+	item := mockTypes.NewMockContainerReport(t)
+	item.EXPECT().Name().Return("web")
+	item.EXPECT().ImageName().Return("nginx:latest")
+	item.EXPECT().CurrentImageID().Return(types.ImageID("sha256:same"))
+	item.EXPECT().LatestImageID().Return(types.ImageID("sha256:same"))
+	item.EXPECT().CurrentImageVersion().Return("")
+	item.EXPECT().Changelog().Return("")
+	item.EXPECT().Source().Return("")
+	item.EXPECT().GitRepo().Return("")
+	item.EXPECT().GitRef().Return("")
+	item.EXPECT().Error().Return("429 too many requests")
+	item.EXPECT().State().Return(session.FailedStateString)
+
+	report := mockTypes.NewMockReport(t)
+	report.EXPECT().All().Return([]types.ContainerReport{item})
+
+	statuses := newScanStatuses(report, time.Now())
+	if len(statuses) != 1 || statuses[0].UpdateAvailable || statuses[0].Error == "" {
+		t.Errorf("newScanStatuses() = %+v, want a failure with no update found", statuses)
+	}
+}
+
+func TestMetrics_RecordStatusesKeepsNewer(t *testing.T) {
+	now := time.Now().UTC()
+	m := &Metrics{}
+
+	m.RecordStatuses([]ContainerStatus{{Name: "web", Timestamp: now, CheckedBy: StatusSourceScan}})
+	// A check that started before the scan but finished after it.
+	m.RecordStatuses([]ContainerStatus{{Name: "web", UpdateAvailable: true, Timestamp: now.Add(-time.Minute), CheckedBy: StatusSourceCheck}})
+
+	if got := m.GetStatuses(); len(got) != 1 || got[0].CheckedBy != StatusSourceScan {
+		t.Errorf("GetStatuses() = %+v, want the newer scan result kept", got)
+	}
+}
+
 func TestMetrics_RecordStatuses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "checks.json")
 	now := time.Now().UTC()

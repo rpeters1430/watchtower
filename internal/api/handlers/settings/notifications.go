@@ -35,7 +35,7 @@ type NotificationStore interface {
 
 // NotificationService describes one notification destination without its credentials.
 type NotificationService struct {
-	// ID identifies the service. It is derived from the URL but does not reveal it.
+	// ID identifies the service. It reveals nothing about the URL.
 	ID string `json:"id"`
 	// Name is the label given when the service was added, if any.
 	Name string `json:"name,omitempty"`
@@ -104,10 +104,7 @@ func NewNotifications(log *zerolog.Logger, store NotificationStore, notifier typ
 // List responds with every notification destination.
 //
 //	@Summary		List notification services
-//	@Description	Lists the notification services Watchtower sends to, without their credentials. Services from flags or environment variables have source "config"; services added through this endpoint
-//
-// have source "settings".
-//
+//	@Description	Lists notification services without their URLs. Source is "config" for flags and environment variables, "settings" for services added here.
 //	@Tags			settings
 //	@Produce		json
 //	@Success		200	{object}	NotificationsResponse	"Notification services"
@@ -211,10 +208,10 @@ func (h *NotificationsHandler) send(c fiber.Ctx, status int) error {
 	saved := h.store.NotificationServices()
 	services := make([]NotificationService, 0, len(configured)+len(saved))
 
-	for _, url := range configured {
+	for index, url := range configured {
 		service, host := runtime.NotificationSummary(url)
 		services = append(services, NotificationService{
-			ID:      runtime.NotificationID(url),
+			ID:      fmt.Sprintf("config-%d", index+1),
 			Service: service,
 			Host:    host,
 			Source:  SourceConfig,
@@ -224,7 +221,7 @@ func (h *NotificationsHandler) send(c fiber.Ctx, status int) error {
 	for _, added := range saved {
 		service, host := runtime.NotificationSummary(added.URL)
 		services = append(services, NotificationService{
-			ID:      added.ID(),
+			ID:      added.ID,
 			Name:    added.Name,
 			Service: service,
 			Host:    host,

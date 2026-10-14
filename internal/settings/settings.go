@@ -373,11 +373,13 @@ func (s *Store) load() {
 		s.log.Warn().Err(err).Str("path", s.path).Msg("Saved settings no longer apply, using defaults")
 
 		// Notification services do not depend on the other settings, so keep them.
+		assignNotificationIDs(saved.NotificationServices)
 		s.overrides = overrides{NotificationServices: saved.NotificationServices}
 
 		return
 	}
 
+	assignNotificationIDs(saved.NotificationServices)
 	s.overrides = saved
 
 	s.log.Debug().Str("path", s.path).Msg("Loaded saved settings")

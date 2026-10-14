@@ -107,7 +107,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/settings/notifi
 ```json
 {
     "services": [
-        {"id": "3f9a1c0b7e2d", "service": "discord", "source": "config"},
+        {"id": "config-1", "service": "discord", "source": "config"},
         {"id": "8c41d2e6a90f", "name": "Phone", "service": "ntfy", "host": "ntfy.sh", "source": "settings"}
     ],
     "saved": true,

@@ -428,7 +428,7 @@ func sendNotifications(notifier *shoutrrrTypeNotifier) {
 			log.Trace().
 				Int("msg_length", len(msg)).
 				Str("notification_type", shoutrrrType).
-				Int("total_urls", len(notifier.Urls)).
+				Int("total_urls", notifier.urlCount()).
 				Msg("Notification goroutine received message from channel")
 
 			log.Debug().Str("message", msg).Msg("Sending notification")
@@ -453,7 +453,7 @@ func sendNotifications(notifier *shoutrrrTypeNotifier) {
 
 			// Diagnostic logging: Log attempt details before sending
 			log.Trace().
-				Int("total_urls", len(notifier.Urls)).
+				Int("total_urls", notifier.urlCount()).
 				Str("delay", notifier.delay.String()).
 				Int("msg_length", len(msg)).
 				Msg("Attempting to send notification to configured services")
@@ -461,7 +461,7 @@ func sendNotifications(notifier *shoutrrrTypeNotifier) {
 			// Log before calling Router.Send
 			log.Trace().
 				Int("msg_length", len(msg)).
-				Int("total_urls", len(notifier.Urls)).
+				Int("total_urls", notifier.urlCount()).
 				Str("notification_type", shoutrrrType).
 				Msg("Calling Router.Send with message")
 
@@ -477,7 +477,7 @@ func sendNotifications(notifier *shoutrrrTypeNotifier) {
 					log.Trace().
 						Int("msg_length", len(msg)).
 						Str("notification_type", shoutrrrType).
-						Int("total_urls", len(notifier.Urls)).
+						Int("total_urls", notifier.urlCount()).
 						Bool("shutdown_mode", true).
 						Msg("Processing remaining notification message during shutdown")
 
@@ -487,7 +487,7 @@ func sendNotifications(notifier *shoutrrrTypeNotifier) {
 
 					// Diagnostic logging: Log attempt details before sending
 					log.Trace().
-						Int("total_urls", len(notifier.Urls)).
+						Int("total_urls", notifier.urlCount()).
 						Str("delay", notifier.delay.String()).
 						Int("msg_length", len(msg)).
 						Msg("Attempting to send notification to configured services during shutdown")
@@ -495,7 +495,7 @@ func sendNotifications(notifier *shoutrrrTypeNotifier) {
 					// Log before calling Router.Send
 					log.Trace().
 						Int("msg_length", len(msg)).
-						Int("total_urls", len(notifier.Urls)).
+						Int("total_urls", notifier.urlCount()).
 						Str("notification_type", shoutrrrType).
 						Msg("Calling Router.Send with message during shutdown")
 
@@ -941,6 +941,14 @@ func (n *shoutrrrTypeNotifier) Run(event *zerolog.Event, level zerolog.Level, me
 		Bool("legacy_template", n.legacyTemplate).
 		Msg("Log entry sent immediately (not batching)")
 	n.sendEntries([]*notificationEntry{entry}, nil)
+}
+
+// urlCount returns how many URLs messages are sent to.
+func (n *shoutrrrTypeNotifier) urlCount() int {
+	n.routeMu.RLock()
+	defer n.routeMu.RUnlock()
+
+	return len(n.Urls)
 }
 
 // route returns the current URLs and the router that sends to them.

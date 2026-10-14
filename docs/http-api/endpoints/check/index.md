@@ -133,7 +133,7 @@ curl -H "Authorization: Bearer mytoken" localhost:8080/v1/check
 }
 ```
 
-The fields match those of `POST /v1/check`, plus `checked_by`, which is `check` or `scan`. A container whose update failed during a scan has `update_available: true` and an `error`. `checked_at` is the newest `timestamp`, or `null` before the first check or scan.
+Each entry carries a subset of the fields of `POST /v1/check`, under the same names, plus `checked_by`, which is `check` or `scan`. Fields that only a registry check produces, such as `digest`, `update_source`, `git_commit`, and the image revisions, are left out; send a `POST` for those. A container whose update failed during a scan has an `error`, and `update_available: true` only when the scan had found a newer image before failing. `checked_at` is the newest `timestamp`, or `null` before the first check or scan.
 
 The results are saved to `checks.json` in the [data directory](../../../configuration/http-api/index.md#data_directory) when one is mounted. A container that no check or scan has looked at for 30 days, for example because it was removed, is dropped.
 
