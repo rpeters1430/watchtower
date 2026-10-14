@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Implement next-level update engine, UI stack grouping, and auto-rollback by @rpeters1430
 - Change settings at run time and keep history across restarts by @rpeters1430
 - Record update checks in scan history by @rpeters1430
 - Add built-in web UI by @rpeters1430
@@ -1276,6 +1277,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Continuous Integration
 
+- Publish multi-arch images with :latest tag for NAS deployment by @rpeters1430
 - Publish only from main as latest by @claude
 - Publish container image to GHCR on push by @rpeters1430
 - Make the indirect changes check informational by @nicholas-fedor
@@ -2948,9 +2950,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
+- @rpeters1430 made their first contribution
+- @github-actions[bot] made their first contribution in [#10](https://github.com/rpeters1430/watchtower/pull/10)
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#9](https://github.com/rpeters1430/watchtower/pull/9)
-- @rpeters1430 made their first contribution in [#6](https://github.com/rpeters1430/watchtower/pull/6)
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
 - @renovate[bot] made their first contribution
