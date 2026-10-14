@@ -15,6 +15,7 @@ The UI has no data of its own. It reads the other HTTP API endpoints, so each pa
 | Update a container     |      `update`       |
 | Live update progress   |      `update`       |
 | Scan history           |      `history`      |
+| Update history         |      `history`      |
 | Settings               |      `config`       |
 | Changing settings      |     `settings`      |
 

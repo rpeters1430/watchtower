@@ -54,10 +54,30 @@ The `/v1/history` endpoint returns a JSON object with scan history entries:
             "failed": 0,
             "restarted": 0,
             "skipped": 2
+        },
+        {
+            "timestamp": "2025-01-20T12:30:45Z",
+            "kind": "scan",
+            "scanned": 8,
+            "updated": 1,
+            "failed": 0,
+            "restarted": 0,
+            "skipped": 0,
+            "containers": [
+                {
+                    "name": "sonarr",
+                    "image": "lscr.io/linuxserver/sonarr:latest",
+                    "outcome": "updated",
+                    "from_image_id": "sha256:5d1a...",
+                    "to_image_id": "sha256:9b7c...",
+                    "from_version": "4.0.14",
+                    "to_version": "4.0.15"
+                }
+            ]
         }
     ],
-    "count": 1,
-    "timestamp": "2025-01-20T11:35:00Z",
+    "count": 2,
+    "timestamp": "2025-01-20T12:35:00Z",
     "api_version": "v1"
 }
 ```
@@ -66,6 +86,19 @@ Each entry has a `kind`:
 
 - `scan`: an update scan, whether scheduled or started through [`/v1/update`](../update/index.md).
 - `check`: an update availability check started through [`/v1/check`](../check/index.md). No containers are changed, so `updated` and `restarted` are `0`. `scanned` is the number of containers checked, `failed` is the number that could not be checked, and `updates_available` is the number with a newer image.
+
+### Containers
+
+`containers` names the containers an entry is about. It lists only containers with something to report, so a scan that changed nothing has no `containers` field. Entries recorded before this field existed don't have it either.
+
+| **Field**                         | **Description**                                                                                     |
+|:----------------------------------|:----------------------------------------------------------------------------------------------------|
+| `name`                            | Container name                                                                                      |
+| `image`                           | Image name with tag                                                                                 |
+| `outcome`                         | `updated`, `failed`, `restarted` (because a container it depends on was updated), or `available` (a check found a newer image) |
+| `from_image_id`, `to_image_id`    | Image IDs before and after the update, or the running and newer image for `available`             |
+| `from_version`, `to_version`      | The images' `org.opencontainers.image.version` annotations, when the image sets them              |
+| `error`                           | Why the container failed, for `failed`                                                              |
 
 ## HTTP Status Codes
 

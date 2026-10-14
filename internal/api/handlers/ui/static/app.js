@@ -32,6 +32,7 @@
     groupByCompose: false,
     history: null,
     historyProblem: "",
+    historyChangesOnly: false,
     config: null,
     configProblem: "",
     settings: null,
@@ -270,7 +271,9 @@
     }
 
     try {
-      const data = await request("GET", "/v1/history?limit=100");
+      // The server keeps at most 500 entries; the Containers view reads each
+      // container's own updates out of the whole log.
+      const data = await request("GET", "/v1/history");
 
       state.history = (data.entries || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       state.historyProblem = "";
@@ -390,7 +393,7 @@
       return;
     }
 
-    await loadContainers();
+    await Promise.all([loadContainers(), loadHistory()]);
 
     if (updated.length > 0) {
       notify(`Updated ${updated.length === 1 ? updated[0] : count(updated.length, "container")}.`);
@@ -525,9 +528,8 @@
 
       state.checks = new Map((data.containers || []).map((item) => [cleanName(item.name), item]));
       state.checkedAt = new Date();
-      state.history = null;
       saveChecks();
-      await loadContainers();
+      await Promise.all([loadContainers(), loadHistory()]);
     } catch (problem) {
       notify(`Couldn't check for updates. ${problem.message}`, true);
     }
@@ -584,7 +586,7 @@
     // The response above already reported this update, so the next poll
     // must not report it again as one that finished elsewhere.
     state.activity = null;
-    await loadContainers();
+    await Promise.all([loadContainers(), loadHistory()]);
     render();
   }
 
@@ -617,6 +619,115 @@
       state.acting.delete(containerName);
       render();
     }
+  }
+
+  // What a scan did to one container, from the history log.
+
+  const CHANGE_LIMIT = 5;
+
+  // The image change as words, preferring release versions over digests.
+  function changeSummary(item) {
+    if (item.from_version && item.to_version && item.from_version !== item.to_version) {
+      return [" from ", el("strong", null, item.from_version), " to ", el("strong", null, item.to_version)];
+    }
+
+    if (item.to_version) {
+      return [" to ", el("strong", null, item.to_version)];
+    }
+
+    if (item.from_image_id && item.to_image_id) {
+      return [" from ", code(shortDigest(item.from_image_id)), " to ", code(shortDigest(item.to_image_id))];
+    }
+
+    return [];
+  }
+
+  const OUTCOMES = {
+    // Colours match the scan bars on the History view.
+    updated: { key: "waiting", verb: "updated", change: true },
+    available: { key: "waiting", verb: "can be updated", change: true },
+    restarted: { key: "unknown", verb: "restarted after a container it depends on was updated" },
+    failed: { key: "failed", verb: "failed" },
+  };
+
+  // One line saying what happened to a container. `named` leads with the
+  // container's name, for lists that cover several containers.
+  function changeLine(item, named) {
+    const outcome = OUTCOMES[item.outcome] || { key: "unknown", verb: item.outcome };
+    const verb = named ? ` ${outcome.verb}` : capitalise(outcome.verb);
+
+    return [
+      el("span", { class: `end end-tiny end-${outcome.key}`, "aria-hidden": "true" }),
+      el(
+        "span",
+        null,
+        named && el("strong", null, item.name),
+        verb,
+        outcome.change && changeSummary(item),
+        item.error ? `: ${item.error}` : ".",
+      ),
+    ];
+  }
+
+  // The scans that changed or failed on a container, newest first.
+  function changesFor(name) {
+    const found = [];
+
+    for (const entry of state.history || []) {
+      if (entry.kind === "check") {
+        continue;
+      }
+
+      for (const item of entry.containers || []) {
+        if (item.name === name) {
+          found.push({ when: new Date(entry.timestamp), item });
+        }
+      }
+    }
+
+    return found;
+  }
+
+  function lastUpdated(name) {
+    return changesFor(name).find((change) => change.item.outcome === "updated") || null;
+  }
+
+  function changeLog(container) {
+    if (!feature("history")) {
+      return null;
+    }
+
+    const changes = changesFor(container.name);
+    const title = el("h3", { class: "detail-title" }, "Update history");
+
+    if (changes.length === 0) {
+      return el(
+        "div",
+        { class: "changes" },
+        title,
+        el("p", { class: "setting-help" }, state.history ? "Watchtower hasn't updated this container in the scans it remembers." : "Loading history."),
+      );
+    }
+
+    return el(
+      "div",
+      { class: "changes" },
+      title,
+      el(
+        "ul",
+        { class: "change-list" },
+        changes.slice(0, CHANGE_LIMIT).map(({ when, item }) =>
+          el(
+            "li",
+            { class: "change" },
+            el("time", { class: "change-when", datetime: when.toISOString(), title: exact.format(when) }, capitalise(ago(when))),
+            el("span", { class: "change-what" }, changeLine(item, false)),
+          ),
+        ),
+      ),
+      changes.length > CHANGE_LIMIT &&
+        el("p", { class: "setting-help" }, `${count(changes.length - CHANGE_LIMIT, "older change")} in `, el("a", { href: "#/history" }, "History"), "."),
+    );
   }
 
   // Container state, in the words the page uses for it.
@@ -988,6 +1099,7 @@
       check.error && el("p", { class: "problem" }, `Watchtower couldn't check this image: ${check.error}`),
       el("dl", { class: "facts" }, rows),
       notes.map((text) => el("p", null, text)),
+      changeLog(container),
     );
   }
 
@@ -997,6 +1109,7 @@
     const check = state.checks.get(container.name);
     const waiting = status.key === "waiting";
     const health = container.health ? String(container.health).toLowerCase() : "";
+    const recent = feature("history") ? lastUpdated(container.name) : null;
 
     const toggle = el(
       "button",
@@ -1026,6 +1139,7 @@
           health && el("span", { class: `badge-health health-${health}` }, health),
         ),
         el("span", { class: "unit-image" }, container.image),
+        recent && el("span", { class: "unit-last" }, `Updated ${ago(recent.when)}`),
       ),
       el("span", { class: `unit-state state-${status.key}` }, status.label),
     );
@@ -1365,11 +1479,19 @@
     segment("failed", entry.failed || 0);
     segment("fresh", Math.max(scanned - changed - (entry.failed || 0), 0));
 
+    const named = entry.containers || [];
+
     return el(
       "li",
       { class: "scan" },
       el("div", { class: "scan-when" }, capitalise(ago(when)), el("span", { class: "scan-exact" }, exact.format(when))),
-      el("div", null, parts.join(", "), bar),
+      el(
+        "div",
+        null,
+        parts.join(", "),
+        bar,
+        named.length > 0 && el("ul", { class: "change-list scan-changes" }, named.map((item) => el("li", { class: "change-what" }, changeLine(item, true)))),
+      ),
     );
   }
 
@@ -1397,7 +1519,7 @@
       el(
         "p",
         { class: "lede" },
-        "Every time Watchtower looks for new images, whether on its schedule or when you check or update from this page. This log is kept in memory, so it starts again when Watchtower restarts.",
+        "Every time Watchtower looks for new images, whether on its schedule or when you check or update from this page, with the containers each scan changed. Watchtower keeps the latest 500 and saves them in its data directory when one is mounted.",
       ),
     );
 
@@ -1428,7 +1550,35 @@
       );
     }
 
-    return el("div", null, header, el("ul", { class: "manifest" }, state.history.map(scan)));
+    // Scans that changed something, including checks that found an update waiting.
+    const eventful = (entry) => entry.updated || entry.failed || entry.restarted || entry.updates_available;
+    const shown = state.historyChangesOnly ? state.history.filter(eventful) : state.history;
+
+    return el(
+      "div",
+      null,
+      header,
+      el(
+        "div",
+        { class: "toolbar" },
+        el(
+          "label",
+          { class: "toggle" },
+          el("input", {
+            type: "checkbox",
+            checked: state.historyChangesOnly,
+            onchange: (event) => {
+              state.historyChangesOnly = event.target.checked;
+              render();
+            },
+          }),
+          "Only scans that found or changed something",
+        ),
+      ),
+      shown.length > 0
+        ? el("ul", { class: "manifest" }, shown.map(scan))
+        : el("p", { class: "blank" }, el("strong", null, "Nothing changed."), "None of the scans Watchtower remembers updated or found anything."),
+    );
   }
 
   // Settings view
@@ -2056,7 +2206,7 @@
       await loadHistory();
       render();
     } else if (view.draw === containersView) {
-      await loadContainers();
+      await Promise.all([loadContainers(), loadHistory()]);
       renderManifest();
     }
   }
@@ -2064,15 +2214,11 @@
   async function start() {
     restoreChecks();
     render();
-    await Promise.all([loadContainers(), loadConfig(), loadSettings()]);
+    // History also feeds each container's update history on the Containers view.
+    await Promise.all([loadContainers(), loadConfig(), loadSettings(), loadHistory()]);
     render();
     // Picks up an update that was already running, for example before a reload.
     await pollActivity();
-
-    if (currentView().draw === historyView) {
-      await loadHistory();
-      render();
-    }
   }
 
   window.addEventListener("hashchange", async () => {

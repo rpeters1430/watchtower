@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/timeout"
@@ -10,6 +11,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/api/config"
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/check"
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/update"
+	"github.com/nicholas-fedor/watchtower/internal/metrics"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -82,14 +84,32 @@ func recordCheck(opts config.Options, results []check.ContainerCheck) {
 
 	available, failed := 0, 0
 
+	var containers []metrics.HistoryContainer
+
 	for _, result := range results {
+		item := metrics.HistoryContainer{
+			Name:        strings.TrimPrefix(result.Name, "/"),
+			Image:       result.Image,
+			FromImageID: result.ImageID,
+			FromVersion: result.CurrentImageVersion,
+		}
+
 		switch {
 		case result.Error != "":
 			failed++
+			item.Outcome = metrics.HistoryOutcomeFailed
+			item.Error = result.Error
 		case result.UpdateAvailable:
 			available++
+			item.Outcome = metrics.HistoryOutcomeAvailable
+			item.ToImageID = result.LatestImageID
+			item.ToVersion = result.LatestImageVersion
+		default:
+			continue
 		}
+
+		containers = append(containers, item)
 	}
 
-	store.RecordCheck(len(results), available, failed)
+	store.RecordCheck(len(results), available, failed, containers)
 }

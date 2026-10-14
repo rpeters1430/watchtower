@@ -953,6 +953,21 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Restarted().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
 
+			// Updated and failed containers are named in the metric for the history.
+			for _, item := range []struct {
+				mock *mockTypes.MockContainerReport
+				name string
+				err  string
+			}{{mockContainer3, "web", ""}, {mockContainer4, "db", "pull failed"}} {
+				item.mock.EXPECT().Name().Return(item.name)
+				item.mock.EXPECT().ImageName().Return(item.name + ":latest")
+				item.mock.EXPECT().CurrentImageID().Return(types.ImageID("sha256:old"))
+				item.mock.EXPECT().LatestImageID().Return(types.ImageID("sha256:new"))
+				item.mock.EXPECT().CurrentImageVersion().Return("")
+				item.mock.EXPECT().LatestImageVersion().Return("")
+				item.mock.EXPECT().Error().Return(item.err)
+			}
+
 			metric := generateAndLogMetric(testLogger(), mockReport)
 
 			gomega.Expect(metric).NotTo(gomega.BeNil())
@@ -960,6 +975,9 @@ var _ = ginkgo.Describe("Actions", func() {
 			gomega.Expect(metric.Updated).To(gomega.Equal(1))
 			gomega.Expect(metric.Failed).To(gomega.Equal(1))
 			gomega.Expect(metric.Restarted).To(gomega.Equal(0))
+			gomega.Expect(metric.Containers).To(gomega.HaveLen(2))
+			gomega.Expect(metric.Containers[0].Name).To(gomega.Equal("web"))
+			gomega.Expect(metric.Containers[1].Error).To(gomega.Equal("pull failed"))
 		})
 
 		ginkgo.It("should handle empty report gracefully", func() {

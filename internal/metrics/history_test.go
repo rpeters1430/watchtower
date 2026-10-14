@@ -12,7 +12,7 @@ func TestMetrics_RecordCheck(t *testing.T) {
 	m := &Metrics{}
 
 	m.RecordHistory(&Metric{Scanned: 5, Updated: 2, Failed: 1})
-	m.RecordCheck(21, 3, 1)
+	m.RecordCheck(21, 3, 1, nil)
 
 	history := m.GetHistory(nil, nil, 0)
 	if len(history) != 2 {
@@ -49,7 +49,7 @@ func TestMetrics_PersistHistory(t *testing.T) {
 	first := &Metrics{}
 	first.PersistHistory(nil, path)
 	first.RecordHistory(&Metric{Scanned: 5, Updated: 2})
-	first.RecordCheck(21, 3, 0)
+	first.RecordCheck(21, 3, 0, nil)
 
 	// A new process over the same file sees what the first one recorded.
 	second := &Metrics{}
@@ -69,7 +69,7 @@ func TestMetrics_PersistHistory(t *testing.T) {
 	}
 
 	// New entries are appended to the restored ones and saved again.
-	second.RecordCheck(21, 0, 0)
+	second.RecordCheck(21, 0, 0, nil)
 
 	third := &Metrics{}
 	third.PersistHistory(nil, path)
@@ -91,7 +91,7 @@ func TestMetrics_PersistHistoryConcurrentAppends(t *testing.T) {
 	for range count {
 		go func() {
 			defer wg.Done()
-			m.RecordCheck(1, 0, 0)
+			m.RecordCheck(1, 0, 0, nil)
 		}()
 	}
 
@@ -128,7 +128,7 @@ func TestMetrics_PersistHistoryIgnoresUnreadableFile(t *testing.T) {
 	}
 
 	// The store keeps working and replaces the bad file on the next entry.
-	m.RecordCheck(4, 1, 0)
+	m.RecordCheck(4, 1, 0, nil)
 
 	restored := &Metrics{}
 	restored.PersistHistory(nil, path)
@@ -145,7 +145,7 @@ func TestMetrics_PersistHistoryKeepsBufferBound(t *testing.T) {
 	m.PersistHistory(nil, path)
 
 	for range historyBufferSize + 5 {
-		m.RecordCheck(1, 0, 0)
+		m.RecordCheck(1, 0, 0, nil)
 	}
 
 	restored := &Metrics{}
@@ -160,10 +160,38 @@ func TestMetrics_RecordCheckWrapsRingBuffer(t *testing.T) {
 	m := &Metrics{}
 
 	for range historyBufferSize + 3 {
-		m.RecordCheck(1, 0, 0)
+		m.RecordCheck(1, 0, 0, nil)
 	}
 
 	if got := len(m.GetHistory(nil, nil, 0)); got != historyBufferSize {
 		t.Errorf("history holds %d entries, want %d", got, historyBufferSize)
+	}
+}
+
+func TestMetrics_RecordHistoryKeepsContainers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+
+	first := &Metrics{}
+	first.PersistHistory(nil, path)
+
+	containers := []HistoryContainer{
+		{Name: "web", Image: "nginx:latest", Outcome: HistoryOutcomeUpdated, FromImageID: "sha256:old", ToImageID: "sha256:new"},
+	}
+	first.RecordHistory(&Metric{Scanned: 3, Updated: 1, Containers: containers})
+
+	// The entry owns its copy of the slice.
+	containers[0].Name = "changed"
+
+	second := &Metrics{}
+	second.PersistHistory(nil, path)
+
+	history := second.GetHistory(nil, nil, 0)
+	if len(history) != 1 || len(history[0].Containers) != 1 {
+		t.Fatalf("GetHistory() = %+v, want one entry naming one container", history)
+	}
+
+	got := history[0].Containers[0]
+	if got.Name != "web" || got.Outcome != HistoryOutcomeUpdated || got.ToImageID != "sha256:new" {
+		t.Errorf("saved container = %+v, want web updated to sha256:new", got)
 	}
 }

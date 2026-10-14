@@ -137,7 +137,7 @@ func TestRecordCheck(t *testing.T) {
 
 	recordCheck(opts, []check.ContainerCheck{
 		{Name: "current"},
-		{Name: "waiting", UpdateAvailable: true},
+		{Name: "/waiting", Image: "nginx:latest", UpdateAvailable: true, CurrentImageVersion: "1.27", LatestImageVersion: "1.28"},
 		{Name: "also-waiting", UpdateAvailable: true},
 		{Name: "unreachable", UpdateAvailable: true, Error: "registry returned 429"},
 	})
@@ -148,6 +148,20 @@ func TestRecordCheck(t *testing.T) {
 	assert.Equal(t, 4, history[0].Scanned)
 	assert.Equal(t, 2, history[0].UpdatesAvailable)
 	assert.Equal(t, 1, history[0].Failed)
+
+	// Only containers with something to report are named.
+	containers := history[0].Containers
+	require.Len(t, containers, 3)
+	assert.Equal(t, metrics.HistoryContainer{
+		Name:        "waiting",
+		Image:       "nginx:latest",
+		Outcome:     metrics.HistoryOutcomeAvailable,
+		FromVersion: "1.27",
+		ToVersion:   "1.28",
+	}, containers[0])
+	assert.Equal(t, metrics.HistoryOutcomeAvailable, containers[1].Outcome)
+	assert.Equal(t, metrics.HistoryOutcomeFailed, containers[2].Outcome)
+	assert.Equal(t, "registry returned 429", containers[2].Error)
 }
 
 func TestRecordCheck_NoMetricsStore(t *testing.T) {

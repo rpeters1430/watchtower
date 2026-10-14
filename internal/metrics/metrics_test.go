@@ -124,6 +124,56 @@ func TestNewMetric(t *testing.T) {
 	}
 }
 
+func TestNewMetric_NamesChangedContainers(t *testing.T) {
+	updated := mockTypes.NewMockContainerReport(t)
+	updated.EXPECT().Name().Return("/web")
+	updated.EXPECT().ImageName().Return("nginx:latest")
+	updated.EXPECT().CurrentImageID().Return(types.ImageID("sha256:old"))
+	updated.EXPECT().LatestImageID().Return(types.ImageID("sha256:new"))
+	updated.EXPECT().CurrentImageVersion().Return("1.27")
+	updated.EXPECT().LatestImageVersion().Return("1.28")
+	updated.EXPECT().Error().Return("")
+
+	failed := mockTypes.NewMockContainerReport(t)
+	failed.EXPECT().Name().Return("db")
+	failed.EXPECT().ImageName().Return("postgres:17")
+	failed.EXPECT().CurrentImageID().Return(types.ImageID("sha256:pg"))
+	failed.EXPECT().LatestImageID().Return(types.ImageID(""))
+	failed.EXPECT().CurrentImageVersion().Return("")
+	failed.EXPECT().LatestImageVersion().Return("")
+	failed.EXPECT().Error().Return("pull failed")
+
+	report := mockTypes.NewMockReport(t)
+	report.EXPECT().Scanned().Return(make([]types.ContainerReport, 4))
+	report.EXPECT().Updated().Return([]types.ContainerReport{updated})
+	report.EXPECT().Failed().Return([]types.ContainerReport{failed})
+	report.EXPECT().Restarted().Return([]types.ContainerReport{})
+	report.EXPECT().Skipped().Return([]types.ContainerReport{})
+
+	want := []HistoryContainer{
+		{
+			Name:        "web",
+			Image:       "nginx:latest",
+			Outcome:     HistoryOutcomeUpdated,
+			FromImageID: "sha256:old",
+			ToImageID:   "sha256:new",
+			FromVersion: "1.27",
+			ToVersion:   "1.28",
+		},
+		{
+			Name:        "db",
+			Image:       "postgres:17",
+			Outcome:     HistoryOutcomeFailed,
+			FromImageID: "sha256:pg",
+			Error:       "pull failed",
+		},
+	}
+
+	if got := NewMetric(report).Containers; !reflect.DeepEqual(got, want) {
+		t.Errorf("NewMetric().Containers = %+v, want %+v", got, want)
+	}
+}
+
 func TestNewMetric_ErrorHandling(t *testing.T) {
 	tests := []struct {
 		name        string
