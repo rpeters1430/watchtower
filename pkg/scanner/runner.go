@@ -327,3 +327,19 @@ func tail(s string, limit int) string {
 
 	return s[len(s)-limit:]
 }
+
+// NewDockerAPI creates a Docker client from the same DOCKER_HOST,
+// DOCKER_TLS_VERIFY, DOCKER_CERT_PATH, and DOCKER_API_VERSION settings
+// Watchtower's own client uses.
+//
+// Returns:
+//   - *dockerClient.Client: Docker client with API version negotiation.
+//   - error: Non-nil when the environment settings are invalid.
+func NewDockerAPI() (*dockerClient.Client, error) {
+	cli, err := dockerClient.New(dockerClient.FromEnv)
+	if err != nil {
+		return nil, fmt.Errorf("creating Docker client for scanner: %w", err)
+	}
+
+	return cli, nil
+}

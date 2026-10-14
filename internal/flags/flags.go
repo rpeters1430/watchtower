@@ -24,6 +24,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/flags/mode"
 	"github.com/nicholas-fedor/watchtower/internal/flags/notify"
 	"github.com/nicholas-fedor/watchtower/internal/flags/registry"
+	"github.com/nicholas-fedor/watchtower/internal/flags/scan"
 	"github.com/nicholas-fedor/watchtower/internal/flags/schedule"
 	"github.com/nicholas-fedor/watchtower/internal/flags/update"
 	"github.com/nicholas-fedor/watchtower/internal/flags/utils"
@@ -85,6 +86,7 @@ func RegisterSystemFlags(rootCmd *cobra.Command) {
 	api.Register(rootCmd)
 	flagslogging.Register(rootCmd)
 	git.Register(rootCmd)
+	scan.Register(rootCmd)
 }
 
 // RegisterNotificationFlags adds notification flags to the root command.

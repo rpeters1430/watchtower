@@ -14,6 +14,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/flags/mode"
 	"github.com/nicholas-fedor/watchtower/internal/flags/notify"
 	"github.com/nicholas-fedor/watchtower/internal/flags/registry"
+	"github.com/nicholas-fedor/watchtower/internal/flags/scan"
 	"github.com/nicholas-fedor/watchtower/internal/flags/schedule"
 	"github.com/nicholas-fedor/watchtower/internal/flags/spec"
 	"github.com/nicholas-fedor/watchtower/internal/flags/update"
@@ -22,7 +23,7 @@ import (
 // RegisterAll registers every domain's flags on the root command.
 //
 // Domain packages match the config taxonomy: docker, client, schedule, mode,
-// update, lifecycle, filter, registry, compat, api, notify, logging, git.
+// update, lifecycle, filter, registry, compat, api, notify, logging, git, scan.
 //
 // Parameters:
 //   - rootCmd: Root Cobra command.
@@ -40,6 +41,7 @@ func RegisterAll(rootCmd *cobra.Command) {
 	notify.Register(rootCmd)
 	logging.Register(rootCmd)
 	git.Register(rootCmd)
+	scan.Register(rootCmd)
 }
 
 // AllSpecs returns aggregated FlagSpec rows from every domain.
@@ -61,5 +63,6 @@ func AllSpecs() []spec.FlagSpec {
 		notify.Specs(),
 		logging.Specs(),
 		git.Specs(),
+		scan.Specs(),
 	)
 }

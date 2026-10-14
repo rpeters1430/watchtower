@@ -40,5 +40,7 @@ Update failed for app (org/app:latest): image pull: registry rate limited: retry
 Ignored depends-on missing-db for app: no container has that name
 Skipped app: depends on itself
 Skipped app: circular dependency
+Updated app fixed 2 known vulnerabilities: CVE-2024-0001 (critical), CVE-2024-0003 (high)
+Held update for app (org/app:latest): the new image adds CVE-2024-0004 (critical) at or above the critical gate
 Unrecognized message with fields | alpha=one beta=2 
 Unrecognized message without fields

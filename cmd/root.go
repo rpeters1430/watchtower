@@ -618,6 +618,8 @@ func (p *process) runMain(cfg types.RunConfig) int {
 		InsecureSkipTLS: appCfg.Git.InsecureSkipTLS,
 	})
 
+	securityReviewer := newSecurityReviewer(p.log, appCfg.Scan)
+
 	ctx, stop := createSignalContext(
 		context.Background(),
 		os.Interrupt,
@@ -677,6 +679,8 @@ func (p *process) runMain(cfg types.RunConfig) int {
 		if update.CurrentContainerID == "" {
 			update.CurrentContainerID = currentWatchtowerContainerID
 		}
+
+		update.SecurityReviewer = securityReviewer
 
 		return actions.RunUpdatesWithNotifications(ctx, actions.RunUpdatesWithNotificationsParams{
 			Logger:                       p.log,

@@ -40,5 +40,7 @@ Registry rate limit retries exhausted. Container failed for this cycle
 Ignoring depends-on entry that names no container
 Skipping container update (self-dependency)
 Skipping container update (circular dependency)
+Update changed known vulnerabilities
+Holding update. The new image adds findings at or above the scan gate
 Unrecognized message with fields
 Unrecognized message without fields

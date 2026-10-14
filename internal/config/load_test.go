@@ -17,6 +17,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/config/git"
 	"github.com/nicholas-fedor/watchtower/internal/config/update"
 	"github.com/nicholas-fedor/watchtower/internal/flags"
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -288,6 +289,46 @@ func TestLoadLifecycle(t *testing.T) {
 	assert.True(t, got.Enabled)
 	assert.Equal(t, 1000, got.UID)
 	assert.Equal(t, 1001, got.GID)
+}
+
+func TestLoadScan(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		vCfg, _, _ := bindLoad(t)
+
+		got, err := loadScan(vCfg)
+		require.NoError(t, err)
+		assert.False(t, got.Enabled)
+		assert.Equal(t, scanner.GateOff, got.Gate)
+		assert.Equal(t, scanner.DefaultTrivyImage, got.Image)
+		assert.Equal(t, scanner.DefaultTimeout, got.Timeout)
+		assert.Equal(t, scanner.DefaultTrivyCacheVolume, got.CacheVolume)
+		assert.Equal(t, scanner.DefaultDockerSocket, got.DockerSocket)
+	})
+
+	t.Run("flags", func(t *testing.T) {
+		vCfg, _, _ := bindLoad(t,
+			"--scan",
+			"--scan-gate", "Critical",
+			"--scan-image", " mirror.local/trivy:0.67.0 ",
+			"--scan-timeout", "2m",
+			"--scan-ignore-unfixed",
+		)
+
+		got, err := loadScan(vCfg)
+		require.NoError(t, err)
+		assert.True(t, got.Enabled)
+		assert.Equal(t, scanner.GateCritical, got.Gate)
+		assert.Equal(t, "mirror.local/trivy:0.67.0", got.Image)
+		assert.Equal(t, 2*time.Minute, got.Timeout)
+		assert.True(t, got.IgnoreUnfixed)
+	})
+
+	t.Run("invalid gate fails Load", func(t *testing.T) {
+		_, _, cmd := bindLoad(t, "--scan-gate", "severe")
+
+		_, err := Load(nopLog(), cmd, nil)
+		require.ErrorIs(t, err, scanner.ErrInvalidGate)
+	})
 }
 
 func TestNormalizedStringSlice(t *testing.T) {

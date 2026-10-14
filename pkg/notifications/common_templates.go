@@ -22,7 +22,9 @@ var commonTemplates = map[string]string{
 	// "Registry rate limit retries exhausted. Container failed for this cycle" (update failed on a registry rate limit),
 	// "Ignoring depends-on entry that names no container" (depends-on label entry matched nothing),
 	// "Skipping container update (self-dependency)" (container depends on itself),
-	// "Skipping container update (circular dependency)" (container is in a dependency cycle).
+	// "Skipping container update (circular dependency)" (container is in a dependency cycle),
+	// "Update changed known vulnerabilities" (an update fixed or added scanner findings),
+	// "Holding update. The new image adds findings at or above the scan gate" (scan gate held an update).
 	// For unrecognized messages, displays the message with key=value data pairs if Data exists, otherwise just the message.
 	// Expects .Entries []Entry where each Entry has Message string and Data map[string]interface{}.
 	"default-legacy": `
@@ -117,6 +119,10 @@ var commonTemplates = map[string]string{
     Skipped {{with (index $e.Data "container")}}{{.}}{{else}}container{{end}}: depends on itself
 {{- else if eq $msg "Skipping container update (circular dependency)" -}}
     Skipped {{with (index $e.Data "container")}}{{.}}{{else}}container{{end}}: circular dependency
+{{- else if eq $msg "Update changed known vulnerabilities" -}}
+    Updated {{with (index $e.Data "container")}}{{.}}{{else}}container{{end}} fixed {{with (index $e.Data "fixed_count")}}{{.}}{{else}}0{{end}} known vulnerabilit{{if eq (index $e.Data "fixed_count") 1}}y{{else}}ies{{end}}{{with (index $e.Data "fixed")}}: {{.}}{{end}}{{with (index $e.Data "introduced")}}. New in this image: {{.}}{{end}}
+{{- else if eq $msg "Holding update. The new image adds findings at or above the scan gate" -}}
+    Held update for {{with (index $e.Data "container")}}{{.}}{{else}}container{{end}} ({{with (index $e.Data "image")}}{{.}}{{else}}unknown{{end}}): the new image adds {{with (index $e.Data "introduced")}}{{.}}{{else}}findings{{end}} at or above the {{with (index $e.Data "gate")}}{{.}}{{else}}scan{{end}} gate
 {{- else if $e.Data -}}
     {{- /* For messages with data, show message and key=value pairs */ -}}
     {{$msg}} | {{range $k, $v := $e.Data}}{{$k}}={{$v}} {{end}}

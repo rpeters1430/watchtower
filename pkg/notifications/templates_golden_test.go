@@ -75,6 +75,8 @@ var legacyTemplateMessages = []string{
 	"Ignoring depends-on entry that names no container",
 	"Skipping container update (self-dependency)",
 	"Skipping container update (circular dependency)",
+	"Update changed known vulnerabilities",
+	"Holding update. The new image adds findings at or above the scan gate",
 }
 
 // Disk sizes used by the image-usage budget fixtures, in bytes.
@@ -203,6 +205,20 @@ func goldenEntryData(message string) map[string]any {
 	case "Skipping container update (self-dependency)",
 		"Skipping container update (circular dependency)":
 		return map[string]any{"container": "app", "id": "abcdef123456"}
+	case "Update changed known vulnerabilities":
+		return map[string]any{
+			"container":   "app",
+			"image":       "org/app:latest",
+			"fixed_count": int64(2),
+			"fixed":       "CVE-2024-0001 (critical), CVE-2024-0003 (high)",
+		}
+	case "Holding update. The new image adds findings at or above the scan gate":
+		return map[string]any{
+			"container":  "app",
+			"image":      "org/app:latest",
+			"gate":       "critical",
+			"introduced": "CVE-2024-0004 (critical)",
+		}
 	case "Only checking containers in scope":
 		return map[string]any{"scope": "production"}
 	case "Starting HTTP API server", "HTTP API server is enabled":

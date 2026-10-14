@@ -108,6 +108,13 @@ Global Flags:
       --revive-stopped                              Will also start stopped containers that were updated, if include-stopped is active
       --rolling-restart                             Restart containers one at a time
   -R, --run-once                                    Run once now and exit
+      --scan                                        Scan the new image of each pending update for known vulnerabilities with Trivy before updating
+      --scan-cache-volume string                    Docker volume that keeps the vulnerability database between scans (default "watchtower-trivy-cache")
+      --scan-docker-socket string                   Host path of the Docker socket mounted into the scanner container (default "/var/run/docker.sock")
+      --scan-gate string                            Hold an update when its new image adds findings at or above this severity (off, low, medium, high, critical) (default "off")
+      --scan-ignore-unfixed                         Leave out vulnerabilities that have no published fix
+      --scan-image string                           Trivy image used to scan images (default "aquasec/trivy:latest")
+      --scan-timeout duration                       Timeout for scanning one image, including the first vulnerability database download (default 5m0s)
   -s, --schedule string                             The cron expression which defines when to update
       --scope string                                Defines a monitoring scope for the Watchtower instance.
       --skip-image-names strings                    Comma-separated list of image names to explicitly exclude from monitoring.

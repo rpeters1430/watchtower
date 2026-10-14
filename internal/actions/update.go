@@ -774,6 +774,10 @@ func Update(
 		Int("failed", staleCheckFailed).
 		Msg("Completed container staleness check")
 
+	// Scan the new image of each pending update, and hold updates the scan
+	// gate rejects, before any container is stopped.
+	securityReviews := reviewSecurity(log, ctx, filteredContainers, progress, config)
+
 	// Build a map for a lookup of containers by ID.
 	containerByID := make(map[types.ContainerID]types.Container, len(allContainers))
 	for _, ac := range allContainers {
@@ -964,6 +968,8 @@ func Update(
 		)
 		recordRestartOutcomes(log, progress, failedStart)
 	}
+
+	logSecurityFixes(log, progress, securityReviews)
 
 	// Run post-check lifecycle hooks if enabled to finalize the update process.
 	// Passing nil lists the containers again, so the hooks run in the
