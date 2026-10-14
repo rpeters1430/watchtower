@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Keep check results on the server and set up notifications in the UI by @claude
+- Record which containers each scan changed by @claude
 - Show live update progress and allow stopped containers by @claude
 - Add container actions and tag editing by @rpeters1430
 - Implement next-level update engine, UI stack grouping, and auto-rollback by @rpeters1430
@@ -203,6 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Address review findings on check results and notifications by @claude
 - Log image pulls and queued update requests by @claude
 - Keep container details readable on mobile by @rpeters1430
 - Resolve runtime settings review findings by @Copilot
@@ -2954,9 +2957,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#15](https://github.com/rpeters1430/watchtower/pull/15)
+- @rpeters1430 made their first contribution in [#17](https://github.com/rpeters1430/watchtower/pull/17)
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#14](https://github.com/rpeters1430/watchtower/pull/14)
+- @github-actions[bot] made their first contribution in [#16](https://github.com/rpeters1430/watchtower/pull/16)
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
 - @renovate[bot] made their first contribution
