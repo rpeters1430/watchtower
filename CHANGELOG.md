@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add initial Renovate configuration file by @rpeters1430
 - Keep check results on the server and set up notifications in the UI by @claude
 - Record which containers each scan changed by @claude
 - Show live update progress and allow stopped containers by @claude
@@ -2957,9 +2958,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#17](https://github.com/rpeters1430/watchtower/pull/17)
+- @rpeters1430 made their first contribution
+- @github-actions[bot] made their first contribution in [#18](https://github.com/rpeters1430/watchtower/pull/18)
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#16](https://github.com/rpeters1430/watchtower/pull/16)
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
 - @renovate[bot] made their first contribution
