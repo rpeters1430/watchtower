@@ -2272,6 +2272,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#notification_services" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notification Services
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#security" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2925,6 +2936,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#notification_services" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notification Services
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#security" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3013,7 +3035,7 @@ Include <code>settings</code> in <a href="../../../configuration/http-api/#http_
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./watchtower-data:/data</span>
 </code></pre></div>
 <p>Without a writable data directory, changes still take effect but are lost when Watchtower restarts. The <code>saved</code> field of the response reports which applies.</p>
-<p>The same directory holds <code>history.json</code>, the scan history returned by <a href="../history/"><code>/v1/history</code></a>.</p>
+<p>The same directory holds <code>history.json</code>, the scan history returned by <a href="../history/"><code>/v1/history</code></a>, and <code>checks.json</code>, the latest check results returned by <a href="../check/#latest_results"><code>GET /v1/check</code></a>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Saved settings are ignored for <code>--run-once</code>, which always follows its flags.</p>
@@ -3031,14 +3053,16 @@ Include <code>settings</code> in <a href="../../../configuration/http-api/#http_
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="p">},</span>
 <a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="nt">"saved"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="nt">"schedule_active"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2025-01-20T11:35:00Z"</span><span class="p">,</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="nt">"api_version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v1"</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="p">}</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="nt">"next_run"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2025-01-20T12:00:00Z"</span><span class="p">,</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2025-01-20T11:35:00Z"</span><span class="p">,</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">    </span><span class="nt">"api_version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v1"</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="p">}</span>
 </code></pre></div>
 <ul>
 <li><code>value</code> is the value in force, <code>default</code> is the starting value from flags and environment variables, and <code>changed</code> is <code>true</code> when the value was set through this endpoint.</li>
 <li><code>saved</code> is <code>true</code> when changes are written to the data directory.</li>
 <li><code>schedule_active</code> is <code>false</code> when the <a href="../update/"><code>update</code></a> endpoint is enabled without <a href="../../../configuration/scheduling/#http_api_periodic_polls"><code>http-api-periodic-polls</code></a>. Watchtower then only updates on request, so the schedule has no effect.</li>
+<li><code>next_run</code> is when the next scheduled scan starts. It is left out when no scan is scheduled.</li>
 </ul>
 <h2 id="changing_settings">Changing Settings<a class="headerlink" href="#changing_settings" title="Permanent link">&para;</a></h2>
 <p>Send a <code>PATCH</code> request naming only the settings to change. Send <code>null</code> to return a setting to its starting value.</p>
@@ -3079,8 +3103,37 @@ Include <code>settings</code> in <a href="../../../configuration/http-api/#http_
 </tr>
 </tbody>
 </table>
+<h2 id="notification_services">Notification Services<a class="headerlink" href="#notification_services" title="Permanent link">&para;</a></h2>
+<p><code>/v1/settings/notifications</code> adds and removes <a href="../../../notifications/introduction/">Shoutrrr</a> notification URLs while Watchtower runs. They are sent to in addition to any set with <a href="../../../notifications/introduction/#enabling_notifications"><code>notification-url</code></a>, and are saved in <code>settings.json</code> with the other changes. The web UI's Settings page uses it to set up ntfy, Discord, Telegram, Gotify, Pushover, Slack, email, webhooks, and any other Shoutrrr service.</p>
+<p>List the services. Responses never include the URLs, because they usually carry tokens or passwords:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer &lt;token&gt;"</span><span class="w"> </span>http://localhost:8080/v1/settings/notifications
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="nt">"services"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">        </span><span class="p">{</span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"config-1"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"discord"</span><span class="p">,</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"config"</span><span class="p">},</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">        </span><span class="p">{</span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"8c41d2e6a90f"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Phone"</span><span class="p">,</span><span class="w"> </span><span class="nt">"service"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ntfy"</span><span class="p">,</span><span class="w"> </span><span class="nt">"host"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ntfy.sh"</span><span class="p">,</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"settings"</span><span class="p">}</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="p">],</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span><span class="nt">"saved"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2025-01-20T11:35:00Z"</span><span class="p">,</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="nt">"api_version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v1"</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="p">}</span>
+</code></pre></div>
+<p>Services with <code>source: "config"</code> come from flags or environment variables and can only be changed there.</p>
+<p>Add a service with a <code>POST</code>. Watchtower checks that Shoutrrr accepts the URL before saving it, and answers <code>201</code> with the new list, <code>400</code> for a URL it cannot use, or <code>409</code> if the service is already set up:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer &lt;token&gt;"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">'{"name": "Phone", "url": "ntfy://ntfy.sh/my-watchtower-topic"}'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>http://localhost:8080/v1/settings/notifications
+</code></pre></div>
+<p>Remove one by its <code>id</code> with <code>DELETE /v1/settings/notifications/&lt;id&gt;</code>. It answers <code>404</code> for an unknown ID or a service from configuration.</p>
+<p>To try a URL before adding it, send it to <code>POST /v1/settings/test-notification</code> as <code>{"url": "..."}</code>. Without a body, that endpoint sends a test message to every service.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code>settings.json</code> then holds the notification URLs, including any tokens or passwords in them. Keep the data directory readable only by the account that runs Watchtower.</p>
+</div>
 <h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
-<p>Anyone holding the API token can turn <code>monitor_only</code> off or change when updates run. Treat this endpoint like <a href="../update/"><code>update</code></a>: leave <code>settings</code> out of the list if the token is shared with read-only consumers.</p>
+<p>Anyone holding the API token can turn <code>monitor_only</code> off, change when updates run, or add a notification service that receives Watchtower's update reports. Treat this endpoint like <a href="../update/"><code>update</code></a>: leave <code>settings</code> out of the list if the token is shared with read-only consumers.</p>
 
 
 
@@ -3103,7 +3156,7 @@ Include <code>settings</code> in <a href="../../../configuration/http-api/#http_
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 14, 2026 05:01:41 UTC"><span class="timeago" datetime="2026-10-14T05:01:41+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 14, 2026 05:01:41 UTC">2026-10-14</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 14, 2026 15:35:39 UTC"><span class="timeago" datetime="2026-10-14T15:35:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 14, 2026 15:35:39 UTC">2026-10-14</span>
   </span>
 
     
