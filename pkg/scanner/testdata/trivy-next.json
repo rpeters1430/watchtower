@@ -1,0 +1,61 @@
+{
+  "SchemaVersion": 2,
+  "CreatedAt": "2026-10-14T20:05:00Z",
+  "ArtifactName": "nginx:1.27",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "ImageID": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "Results": [
+    {
+      "Target": "nginx:1.27 (debian 12.8)",
+      "Class": "os-pkgs",
+      "Type": "debian",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2024-0002",
+          "PkgName": "zlib1g",
+          "InstalledVersion": "1.2.13",
+          "Status": "affected",
+          "Severity": "MEDIUM",
+          "Title": "zlib: heap overflow"
+        },
+        {
+          "VulnerabilityID": "CVE-2024-0004",
+          "PkgName": "libxml2",
+          "InstalledVersion": "2.9.14",
+          "FixedVersion": "2.9.15",
+          "Status": "fixed",
+          "Severity": "HIGH",
+          "Title": "libxml2: use after free"
+        }
+      ]
+    },
+    {
+      "Target": "Dockerfile",
+      "Class": "config",
+      "Type": "dockerfile",
+      "Misconfigurations": [
+        {
+          "ID": "DS002",
+          "Title": "Image user should not be 'root'",
+          "Severity": "HIGH",
+          "Resolution": "Add 'USER <non root user name>' line to the Dockerfile",
+          "Status": "FAIL"
+        }
+      ]
+    },
+    {
+      "Target": "/app/.env",
+      "Class": "secret",
+      "Secrets": [
+        {
+          "RuleID": "aws-access-key-id",
+          "Category": "AWS",
+          "Severity": "CRITICAL",
+          "Title": "AWS Access Key ID"
+        }
+      ]
+    }
+  ]
+}
