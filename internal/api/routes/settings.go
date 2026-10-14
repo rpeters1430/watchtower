@@ -20,4 +20,9 @@ func registerSettingsRoute(app *fiber.App, auth fiber.Handler, opts config.Optio
 	app.Patch(handler.Path, auth, config.TimeoutMiddleware(), handler.Patch)
 	app.Post(handler.Path+"/test-notification", auth, config.TimeoutMiddleware(), handler.TestNotification)
 	app.Post("/v1/notify/test", auth, config.TimeoutMiddleware(), handler.TestNotification)
+
+	notifications := settings.NewNotifications(opts.Logger, opts.Settings, opts.Notifier)
+	app.Get(notifications.Path, auth, config.TimeoutMiddleware(), notifications.List)
+	app.Post(notifications.Path, auth, config.TimeoutMiddleware(), notifications.Add)
+	app.Delete(notifications.Path+"/:id", auth, config.TimeoutMiddleware(), notifications.Remove)
 }

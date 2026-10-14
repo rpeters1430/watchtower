@@ -251,6 +251,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainerReport})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Stale().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
@@ -276,6 +277,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainerReport})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Stale().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
@@ -427,6 +429,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 			sendNotifications(testLogger(), notifier, true, false, mockReport, []types.RemovedImageInfo{})
@@ -451,6 +454,7 @@ var _ = ginkgo.Describe("Actions", func() {
 				mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 				mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 				mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+				mockReport.EXPECT().All().Return(nil).Maybe()
 				mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 				// Mock the SendNotification call
@@ -474,6 +478,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 			// With empty results, no notifications should be sent
@@ -498,6 +503,7 @@ var _ = ginkgo.Describe("Actions", func() {
 				mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 				mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 				mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+				mockReport.EXPECT().All().Return(nil).Maybe()
 				mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 				notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -523,6 +529,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 			notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -546,6 +553,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 			notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -572,6 +580,7 @@ var _ = ginkgo.Describe("Actions", func() {
 				mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 				mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 				mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+				mockReport.EXPECT().All().Return(nil).Maybe()
 				mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 				notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -598,6 +607,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 			notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -623,6 +633,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 			notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -649,6 +660,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 			notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -669,6 +681,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 			notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -693,6 +706,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer}).Maybe()
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{}).Maybe()
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{}).Maybe()
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{}).Maybe()
 
 			notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -753,6 +767,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{containerA, containerB}).Maybe()
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{}).Maybe()
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{}).Maybe()
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{}).Maybe()
 
 			// Split path sends one SingleContainerReport-focused notification per updated container.
@@ -845,6 +860,7 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer}).Maybe()
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{}).Maybe()
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{}).Maybe()
+			mockReport.EXPECT().All().Return(nil).Maybe()
 			mockReport.EXPECT().Fresh().Return([]types.ContainerReport{}).Maybe()
 
 			notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -879,6 +895,7 @@ var _ = ginkgo.Describe("Actions", func() {
 				mockReport.EXPECT().Scanned().Return([]types.ContainerReport{mockContainer})
 				mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 				mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+				mockReport.EXPECT().All().Return(nil).Maybe()
 				mockReport.EXPECT().Fresh().Return([]types.ContainerReport{})
 
 				notifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
@@ -952,6 +969,23 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{mockContainer4})
 			mockReport.EXPECT().Restarted().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().Stale().Return(nil).Maybe()
+			mockReport.EXPECT().All().Return(nil).Maybe()
+
+			// Updated and failed containers are named in the metric for the history.
+			for _, item := range []struct {
+				mock *mockTypes.MockContainerReport
+				name string
+				err  string
+			}{{mockContainer3, "web", ""}, {mockContainer4, "db", "pull failed"}} {
+				item.mock.EXPECT().Name().Return(item.name)
+				item.mock.EXPECT().ImageName().Return(item.name + ":latest")
+				item.mock.EXPECT().CurrentImageID().Return(types.ImageID("sha256:old"))
+				item.mock.EXPECT().LatestImageID().Return(types.ImageID("sha256:new"))
+				item.mock.EXPECT().CurrentImageVersion().Return("")
+				item.mock.EXPECT().LatestImageVersion().Return("")
+				item.mock.EXPECT().Error().Return(item.err)
+			}
 
 			metric := generateAndLogMetric(testLogger(), mockReport)
 
@@ -960,6 +994,9 @@ var _ = ginkgo.Describe("Actions", func() {
 			gomega.Expect(metric.Updated).To(gomega.Equal(1))
 			gomega.Expect(metric.Failed).To(gomega.Equal(1))
 			gomega.Expect(metric.Restarted).To(gomega.Equal(0))
+			gomega.Expect(metric.Containers).To(gomega.HaveLen(2))
+			gomega.Expect(metric.Containers[0].Name).To(gomega.Equal("web"))
+			gomega.Expect(metric.Containers[1].Error).To(gomega.Equal("pull failed"))
 		})
 
 		ginkgo.It("should handle empty report gracefully", func() {
@@ -970,6 +1007,8 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Restarted().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().Stale().Return(nil).Maybe()
+			mockReport.EXPECT().All().Return(nil).Maybe()
 
 			metric := generateAndLogMetric(testLogger(), mockReport)
 
@@ -988,6 +1027,8 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Restarted().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{})
+			mockReport.EXPECT().Stale().Return(nil).Maybe()
+			mockReport.EXPECT().All().Return(nil).Maybe()
 
 			log, buf := newCaptureLogger()
 			_ = generateAndLogMetric(log, mockReport)
@@ -1017,6 +1058,8 @@ var _ = ginkgo.Describe("Actions", func() {
 			mockReport.EXPECT().Failed().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Restarted().Return([]types.ContainerReport{})
 			mockReport.EXPECT().Skipped().Return([]types.ContainerReport{skippedA, skippedB})
+			mockReport.EXPECT().Stale().Return(nil).Maybe()
+			mockReport.EXPECT().All().Return(nil).Maybe()
 
 			log, buf := newCaptureLogger()
 			metric := generateAndLogMetric(log, mockReport)

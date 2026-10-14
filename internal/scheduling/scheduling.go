@@ -73,6 +73,9 @@ type ScheduleDeps struct {
 	// ScheduleChanges delivers a replacement schedule while the scheduler is
 	// running. An empty value stops periodic updates. Nil disables rescheduling.
 	ScheduleChanges <-chan string
+	// ReportNextRun, when set, receives a function that reports the next
+	// scheduled scan time, or the zero time when none is scheduled.
+	ReportNextRun func(next func() time.Time)
 	// Startup holds resolved values for startup messaging (no flag reads).
 	// Callers must set Filtering, Scope, Client, Notifier, and Version on Startup.
 	// RunUpgradesOnSchedule only applies Sched and UpdateOnStart at send time.
@@ -137,6 +140,18 @@ func RunUpgradesOnSchedule(ctx context.Context, deps ScheduleDeps) error {
 			cron.Recover(cron.DefaultLogger),
 		),
 	)
+
+	if deps.ReportNextRun != nil {
+		// Only one schedule entry exists at a time; a new schedule replaces it.
+		deps.ReportNextRun(func() time.Time {
+			entries := scheduler.Entries()
+			if len(entries) == 0 {
+				return time.Time{}
+			}
+
+			return entries[0].Next
+		})
+	}
 
 	// Determine if self-update should be skipped due to exposed port conflicts.
 	// When a port is configured (e.g., HTTP API), the old container holds the port

@@ -259,6 +259,8 @@ var _ = ginkgo.Describe("handleUpdateResult", func() {
 		mockReport.EXPECT().Failed().Return(make([]types.ContainerReport, 2))
 		mockReport.EXPECT().Restarted().Return(nil)
 		mockReport.EXPECT().Skipped().Return(nil)
+		mockReport.EXPECT().Stale().Return(nil).Maybe()
+		mockReport.EXPECT().All().Return(nil).Maybe()
 
 		err := errors.New("rolling restart canceled")
 		result := handleUpdateResult(testLogger(), mockReport, err, nil)
@@ -301,6 +303,8 @@ var _ = ginkgo.Describe("handleUpdateResult", func() {
 		mockReport.EXPECT().Failed().Return(nil)
 		mockReport.EXPECT().Restarted().Return(nil)
 		mockReport.EXPECT().Skipped().Return(nil)
+		mockReport.EXPECT().Stale().Return(nil).Maybe()
+		mockReport.EXPECT().All().Return(nil).Maybe()
 
 		mockNotifier := mockTypes.NewMockNotifier(ginkgo.GinkgoT())
 		mockNotifier.EXPECT().SendNotification(mockReport).Times(1)

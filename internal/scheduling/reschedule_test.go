@@ -102,3 +102,56 @@ func TestRunUpgradesOnSchedule_AppliesScheduleChanges(t *testing.T) {
 		t.Fatal("scheduler did not stop")
 	}
 }
+
+// TestRunUpgradesOnSchedule_ReportsNextRun expects the reported next run to
+// follow the live schedule, and to be zero once the schedule is turned off.
+func TestRunUpgradesOnSchedule_ReportsNextRun(t *testing.T) {
+	log := logging.NopLogger()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	changes := make(chan string, 1)
+	reported := make(chan func() time.Time, 1)
+	done := make(chan error, 1)
+
+	go func() {
+		done <- RunUpgradesOnSchedule(ctx, ScheduleDeps{
+			Logger:          log,
+			ScheduleSpec:    "@every 1h",
+			ScheduleChanges: changes,
+			ReportNextRun:   func(next func() time.Time) { reported <- next },
+			RunUpdate: func(context.Context, types.Filter, types.UpdateParams) *metrics.Metric {
+				return nil
+			},
+		})
+	}()
+
+	var next func() time.Time
+
+	select {
+	case next = <-reported:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the scheduler did not report its next run")
+	}
+
+	require.Eventually(t, func() bool {
+		at := next()
+
+		return at.After(time.Now().Add(50*time.Minute)) && at.Before(time.Now().Add(61*time.Minute))
+	}, 5*time.Second, 20*time.Millisecond, "next run should be about an hour away")
+
+	changes <- ""
+
+	require.Eventually(t, func() bool { return next().IsZero() }, 5*time.Second, 20*time.Millisecond,
+		"no next run once the schedule is off")
+
+	cancel()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("scheduler did not stop")
+	}
+}

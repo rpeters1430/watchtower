@@ -103,6 +103,40 @@ The check does not clone or build.
 See [Git Monitoring](../../../advanced-features/git-monitoring/index.md).
 Git and OCI report fields are documented under [notification templates](../../../notifications/templates/index.md#git_and_oci_report_fields).
 
+## Latest Results
+
+`GET /v1/check` returns each container's status from the most recent check or scan that looked at it, without contacting any registry. Both `POST /v1/check` and update scans, scheduled or started through [`/v1/update`](../update/index.md), keep it current, so it also reports updates that a [monitor-only](../../../configuration/update-behavior/index.md#monitor_only) scan found but did not apply. The [web UI](../ui/index.md) reads it to show which containers have an update waiting.
+
+```bash
+curl -H "Authorization: Bearer mytoken" localhost:8080/v1/check
+```
+
+```json
+{
+    "containers": [
+        {
+            "name": "radarr",
+            "image": "lscr.io/linuxserver/radarr:latest",
+            "image_id": "sha256:5d1a...",
+            "update_available": true,
+            "latest_image_id": "sha256:9b7c...",
+            "current_image_version": "5.1",
+            "latest_image_version": "5.2",
+            "timestamp": "2025-01-20T11:30:45Z",
+            "checked_by": "scan"
+        }
+    ],
+    "count": 1,
+    "checked_at": "2025-01-20T11:30:45Z",
+    "timestamp": "2025-01-20T11:35:00Z",
+    "api_version": "v1"
+}
+```
+
+Each entry carries a subset of the fields of `POST /v1/check`, under the same names, plus `checked_by`, which is `check` or `scan`. Fields that only a registry check produces, such as `digest`, `update_source`, `git_commit`, and the image revisions, are left out; send a `POST` for those. A container whose update failed during a scan has an `error`, and `update_available: true` only when the scan had found a newer image before failing. `checked_at` is the newest `timestamp`, or `null` before the first check or scan.
+
+The results are saved to `checks.json` in the [data directory](../../../configuration/http-api/index.md#data_directory) when one is mounted. A container that no check or scan has looked at for 30 days, for example because it was removed, is dropped.
+
 ## HTTP Status Codes
 
 | Status Code | Description                                    |

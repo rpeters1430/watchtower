@@ -32,7 +32,7 @@ services:
 
 Without a writable data directory, changes still take effect but are lost when Watchtower restarts. The `saved` field of the response reports which applies.
 
-The same directory holds `history.json`, the scan history returned by [`/v1/history`](../history/index.md).
+The same directory holds `history.json`, the scan history returned by [`/v1/history`](../history/index.md), and `checks.json`, the latest check results returned by [`GET /v1/check`](../check/index.md#latest_results).
 
 !!! Note
     Saved settings are ignored for `--run-once`, which always follows its flags.
@@ -54,6 +54,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/settings
     },
     "saved": true,
     "schedule_active": true,
+    "next_run": "2025-01-20T12:00:00Z",
     "timestamp": "2025-01-20T11:35:00Z",
     "api_version": "v1"
 }
@@ -62,6 +63,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/settings
 - `value` is the value in force, `default` is the starting value from flags and environment variables, and `changed` is `true` when the value was set through this endpoint.
 - `saved` is `true` when changes are written to the data directory.
 - `schedule_active` is `false` when the [`update`](../update/index.md) endpoint is enabled without [`http-api-periodic-polls`](../../../configuration/scheduling/index.md#http_api_periodic_polls). Watchtower then only updates on request, so the schedule has no effect.
+- `next_run` is when the next scheduled scan starts. It is left out when no scan is scheduled.
 
 ## Changing Settings
 
@@ -92,6 +94,47 @@ A request is applied in full or not at all. It is rejected with `400` and an `er
 |   `400`    | The change was rejected                      |
 |   `401`    | Missing or invalid API token                 |
 
+## Notification Services
+
+`/v1/settings/notifications` adds and removes [Shoutrrr](../../../notifications/introduction/index.md) notification URLs while Watchtower runs. They are sent to in addition to any set with [`notification-url`](../../../notifications/introduction/index.md#enabling_notifications), and are saved in `settings.json` with the other changes. The web UI's Settings page uses it to set up ntfy, Discord, Telegram, Gotify, Pushover, Slack, email, webhooks, and any other Shoutrrr service.
+
+List the services. Responses never include the URLs, because they usually carry tokens or passwords:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/settings/notifications
+```
+
+```json
+{
+    "services": [
+        {"id": "config-1", "service": "discord", "source": "config"},
+        {"id": "8c41d2e6a90f", "name": "Phone", "service": "ntfy", "host": "ntfy.sh", "source": "settings"}
+    ],
+    "saved": true,
+    "timestamp": "2025-01-20T11:35:00Z",
+    "api_version": "v1"
+}
+```
+
+Services with `source: "config"` come from flags or environment variables and can only be changed there.
+
+Add a service with a `POST`. Watchtower checks that Shoutrrr accepts the URL before saving it, and answers `201` with the new list, `400` for a URL it cannot use, or `409` if the service is already set up:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Phone", "url": "ntfy://ntfy.sh/my-watchtower-topic"}' \
+  http://localhost:8080/v1/settings/notifications
+```
+
+Remove one by its `id` with `DELETE /v1/settings/notifications/<id>`. It answers `404` for an unknown ID or a service from configuration.
+
+To try a URL before adding it, send it to `POST /v1/settings/test-notification` as `{"url": "..."}`. Without a body, that endpoint sends a test message to every service.
+
+!!! Warning
+    `settings.json` then holds the notification URLs, including any tokens or passwords in them. Keep the data directory readable only by the account that runs Watchtower.
+
 ## Security
 
-Anyone holding the API token can turn `monitor_only` off or change when updates run. Treat this endpoint like [`update`](../update/index.md): leave `settings` out of the list if the token is shared with read-only consumers.
+Anyone holding the API token can turn `monitor_only` off, change when updates run, or add a notification service that receives Watchtower's update reports. Treat this endpoint like [`update`](../update/index.md): leave `settings` out of the list if the token is shared with read-only consumers.

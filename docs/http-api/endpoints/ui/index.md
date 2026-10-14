@@ -15,6 +15,7 @@ The UI has no data of its own. It reads the other HTTP API endpoints, so each pa
 | Update a container     |      `update`       |
 | Live update progress   |      `update`       |
 | Scan history           |      `history`      |
+| Update history         |      `history`      |
 | Settings               |      `config`       |
 | Changing settings      |     `settings`      |
 
@@ -39,7 +40,13 @@ services:
 !!! Warning
     Enabling the `update` endpoint stops Watchtower's scheduled updates unless [`http-api-periodic-polls`](../../../configuration/scheduling/index.md#http_api_periodic_polls) is also set.
 
-The `/data` volume is optional. With it, settings changed on the page and the scan history survive a restart. Without it, both are kept in memory only.
+The `/data` volume is optional. With it, settings changed on the page, notification services added there, the scan history, and each container's latest check result survive a restart. Without it, they are kept in memory only.
+
+## What the Page Shows
+
+- **Containers**: each container's state comes from the most recent check or scan, kept by the server through [`GET /v1/check`](../check/index.md#latest_results), so it is the same in every browser and includes what scheduled scans found. The line at the top says when Watchtower last checked and when the next scheduled scan starts. Expanding a container lists its recent updates.
+- **History**: every scan and check, with the containers each one updated, found an update for, or failed on.
+- **Settings**: the schedule and switches that can change while Watchtower runs, and the notification services. Pick a service such as ntfy, Discord, Telegram, Gotify, Pushover, Slack, email, or a webhook, fill in its details, send a test, and add it. Watchtower sends its update reports there from then on, alongside any [`notification-url`](../../../notifications/introduction/index.md#enabling_notifications) set in its configuration. See [notification services](../settings/index.md#notification_services) for how they are stored.
 
 ## Endpoints
 

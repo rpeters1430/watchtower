@@ -239,6 +239,17 @@ input {
   background-size: 7px 100%;
 }
 
+.end-tiny {
+  width: 0.8rem;
+  height: 0.8rem;
+  background-size: 4px 100%;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--end, var(--unknown)) 0 3px,
+    var(--end-rib, var(--unknown-rib)) 3px 4px
+  );
+}
+
 .end-fresh {
   --end: var(--fresh);
   --end-rib: var(--fresh-rib);
@@ -452,6 +463,13 @@ input {
   white-space: nowrap;
 }
 
+.unit-last {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--ink-soft);
+  font-size: var(--step--1);
+}
+
 .unit-action {
   display: flex;
   justify-content: flex-end;
@@ -557,6 +575,53 @@ input {
 
 .facts dd {
   overflow-wrap: anywhere;
+}
+
+/* A container's own update history, inside its details. */
+
+.changes {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.detail-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.change-list {
+  display: grid;
+  gap: 0.4rem;
+  list-style: none;
+}
+
+.change {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr);
+  gap: 0.15rem 1.5rem;
+}
+
+.change-when {
+  color: var(--ink-soft);
+}
+
+.change-what {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.change-what .end-tiny {
+  flex: none;
+  align-self: center;
+}
+
+.scan-changes {
+  margin-top: 0.75rem;
 }
 
 .problem {
@@ -798,6 +863,34 @@ input {
 
 .form .field {
   width: 100%;
+}
+
+.field-optional {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+/* Notifications */
+
+.section-note {
+  max-width: 62ch;
+  margin-bottom: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.notify-add-title {
+  margin: 1.75rem 0 0.75rem;
+}
+
+.notify-form {
+  max-width: 34rem;
+  padding: 1.25rem 1rem;
+  border-top: 2px solid var(--ink);
+  background: var(--deck);
+}
+
+.notify-form .actions {
+  margin-top: 0.25rem;
 }
 
 /* Confirmation */
@@ -1144,6 +1237,7 @@ input {
 
   .facts,
   .scan,
+  .change,
   .setting-wide {
     grid-template-columns: minmax(0, 1fr);
   }
