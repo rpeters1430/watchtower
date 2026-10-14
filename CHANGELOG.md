@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add container actions and tag editing by @rpeters1430
 - Implement next-level update engine, UI stack grouping, and auto-rollback by @rpeters1430
 - Change settings at run time and keep history across restarts by @rpeters1430
 - Record update checks in scan history by @rpeters1430
@@ -2951,7 +2952,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New Contributors
 
 - @rpeters1430 made their first contribution
-- @github-actions[bot] made their first contribution in [#10](https://github.com/rpeters1430/watchtower/pull/10)
+- @github-actions[bot] made their first contribution in [#11](https://github.com/rpeters1430/watchtower/pull/11)
 - @claude made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
