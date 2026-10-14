@@ -8,7 +8,7 @@ The same endpoint name also enables [`GET /v1/images/usage`](#disk_usage) and [`
 
 ## Response Format
 
-The `/v1/images` endpoint returns a JSON object with image statuses:
+The `/v1/images` endpoint returns a JSON object with image statuses, sorted by image name and then by image ID:
 
 ```json
 {
