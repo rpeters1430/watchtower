@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -94,6 +95,12 @@ var (
 	// remains nil if retrieval fails or yields an unexpected type, and is used for operations like updating
 	// restart policy, validating restarts, and cleaning up excess instances.
 	currentWatchtowerContainer types.Container
+
+	// liveSettings holds the runtime settings store once runMain opens it.
+	//
+	// The Docker client is built in preRun, before the store exists, and asks
+	// through this pointer whether stopped containers are included.
+	liveSettings atomic.Pointer[settings.Store]
 
 	// sleepFunc is a function variable for time.Sleep, allowing it to be overridden in tests.
 	//
@@ -255,7 +262,17 @@ func (p *process) preRun(cmd *cobra.Command, _ []string) {
 	}
 
 	// Initialize the Docker client from the resolved ClientOptions projection.
-	client = newClient(p.log, appCfg.ClientOptions())
+	clientOptions := appCfg.ClientOptions()
+	includeStoppedDefault := clientOptions.IncludeStopped
+	clientOptions.IncludeStoppedFunc = func() bool {
+		if store := liveSettings.Load(); store != nil {
+			return store.Effective().IncludeStopped
+		}
+
+		return includeStoppedDefault
+	}
+
+	client = newClient(p.log, clientOptions)
 
 	// Check for orchestrator mode early. This is an internal mode where Watchtower
 	// runs as a one-shot orchestrator for self-update.
@@ -620,6 +637,7 @@ func (p *process) runMain(cfg types.RunConfig) int {
 			Cleanup:        appCfg.Update.Cleanup,
 			RollingRestart: appCfg.Update.RollingRestart,
 			Schedule:       appCfg.Schedule.Spec,
+			IncludeStopped: appCfg.Client.IncludeStopped,
 		},
 		settings.Validators{
 			Schedule: scheduling.ValidateSpec,
@@ -634,6 +652,8 @@ func (p *process) runMain(cfg types.RunConfig) int {
 			},
 		},
 	)
+
+	liveSettings.Store(runtimeSettings)
 
 	if dataDir != "" {
 		metrics.Default().PersistHistory(p.log, filepath.Join(dataDir, historyFileName))

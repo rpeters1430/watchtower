@@ -303,6 +303,70 @@
                 ]
             }
         },
+        "/v1/containers/{name}/action": {
+            "post": {
+                "description": "Performs start, stop, restart, or image tag change (set_tag) on a container.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "containers"
+                ],
+                "summary": "Perform container lifecycle action",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Action request payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/action.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Action executed successfully",
+                        "schema": {
+                            "$ref": "#/definitions/action.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request or action",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Container not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to execute action",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/events": {
             "get": {
                 "description": "Streams Watchtower operational events (scan started/completed, update started/completed/failed) via Server-Sent Events (SSE).\n\n**SSE is not supported by \"Try it out\"**.",
@@ -512,7 +576,7 @@
                 ]
             },
             "patch": {
-                "description": "Changes the named settings: monitor_only, cleanup, rolling_restart (booleans) and schedule (cron). JSON null resets one.",
+                "description": "Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped (booleans), schedule (cron) and container_overrides (map). JSON null resets one.",
                 "consumes": [
                     "application/json"
                 ],
@@ -564,6 +628,59 @@
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/settings/test-notification": {
+            "post": {
+                "description": "Sends an immediate test alert to verify notification services. Optionally accepts a custom URL, title, or message.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "settings"
+                ],
+                "summary": "Test notification delivery",
+                "parameters": [
+                    {
+                        "description": "Notification parameters",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/settings.TestNotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Notification test result",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "No URLs configured or invalid request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "Delivery failed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 },
@@ -690,9 +807,148 @@
                     }
                 ]
             }
+        },
+        "/v1/update/status": {
+            "get": {
+                "description": "Reports whether an update scan is running and, for each container it is working on, the current step (pulling, stopping, starting, updated, failed) and image download progress. Cheap to poll while an update runs.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "update"
+                ],
+                "summary": "Get update progress",
+                "responses": {
+                    "200": {
+                        "description": "Current update activity",
+                        "schema": {
+                            "$ref": "#/definitions/update.StatusResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
         }
     },
     "definitions": {
+        "action.Request": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "Action specifies the operation: \"start\", \"stop\", \"restart\", or \"set_tag\".",
+                    "type": "string"
+                },
+                "image": {
+                    "description": "Image is an alias for Tag.",
+                    "type": "string"
+                },
+                "tag": {
+                    "description": "Tag specifies the new image tag or full reference when Action is \"set_tag\".",
+                    "type": "string"
+                }
+            }
+        },
+        "action.Response": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "container": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "activity.Container": {
+            "type": "object",
+            "properties": {
+                "image": {
+                    "description": "Image is the image reference the container is updated to.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the container name.",
+                    "type": "string"
+                },
+                "pull": {
+                    "description": "Pull is the download progress of the container's image while Step is pulling.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activity.Pull"
+                        }
+                    ]
+                },
+                "since": {
+                    "description": "Since is when the container entered this step, in RFC 3339.",
+                    "type": "string"
+                },
+                "step": {
+                    "description": "Step is one of the Step constants.",
+                    "type": "string"
+                }
+            }
+        },
+        "activity.FinishedScan": {
+            "type": "object",
+            "properties": {
+                "containers": {
+                    "description": "Containers is the final step of each container the scan worked on.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/activity.Container"
+                    }
+                },
+                "finished_at": {
+                    "description": "FinishedAt is when the scan ended, in RFC 3339.",
+                    "type": "string"
+                }
+            }
+        },
+        "activity.Pull": {
+            "type": "object",
+            "properties": {
+                "downloaded_bytes": {
+                    "description": "DownloadedBytes is the number of bytes downloaded across reported layers.",
+                    "type": "integer"
+                },
+                "layers": {
+                    "description": "Layers is the number of layers Docker has reported so far.",
+                    "type": "integer"
+                },
+                "layers_done": {
+                    "description": "LayersDone counts layers that are downloaded and unpacked.",
+                    "type": "integer"
+                },
+                "layers_downloaded": {
+                    "description": "LayersDownloaded counts layers that have finished downloading.",
+                    "type": "integer"
+                },
+                "phase": {
+                    "description": "Phase is one of the Phase constants.",
+                    "type": "string"
+                },
+                "total_bytes": {
+                    "description": "TotalBytes is the download size of the layers reported so far. It can\ngrow while the pull runs, because Docker reports sizes as layers start.",
+                    "type": "integer"
+                }
+            }
+        },
         "check.CheckResponse": {
             "type": "object",
             "properties": {
@@ -821,6 +1077,56 @@
                 },
                 "value": {
                     "description": "Value is the value in force."
+                }
+            }
+        },
+        "settings.TestNotificationRequest": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "update.StatusResponse": {
+            "type": "object",
+            "properties": {
+                "api_version": {
+                    "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "containers": {
+                    "description": "Containers lists what the scan is doing to each container it has started on.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/activity.Container"
+                    }
+                },
+                "last_scan": {
+                    "description": "LastScan is how the most recent scan ended. Omitted while a scan runs.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activity.FinishedScan"
+                        }
+                    ]
+                },
+                "running": {
+                    "description": "Running is true while an update scan is in progress, scheduled or requested.",
+                    "type": "boolean"
+                },
+                "started_at": {
+                    "description": "StartedAt is when the running scan began, in RFC 3339. Omitted when idle.",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "Timestamp is when the response was produced.",
+                    "type": "string"
                 }
             }
         }

@@ -2,6 +2,87 @@ basePath: /
 consumes:
 - application/json
 definitions:
+  action.Request:
+    properties:
+      action:
+        description: 'Action specifies the operation: "start", "stop", "restart",
+          or "set_tag".'
+        type: string
+      image:
+        description: Image is an alias for Tag.
+        type: string
+      tag:
+        description: Tag specifies the new image tag or full reference when Action
+          is "set_tag".
+        type: string
+    type: object
+  action.Response:
+    properties:
+      action:
+        type: string
+      container:
+        type: string
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  activity.Container:
+    properties:
+      image:
+        description: Image is the image reference the container is updated to.
+        type: string
+      name:
+        description: Name is the container name.
+        type: string
+      pull:
+        allOf:
+        - $ref: '#/definitions/activity.Pull'
+        description: Pull is the download progress of the container's image while
+          Step is pulling.
+      since:
+        description: Since is when the container entered this step, in RFC 3339.
+        type: string
+      step:
+        description: Step is one of the Step constants.
+        type: string
+    type: object
+  activity.FinishedScan:
+    properties:
+      containers:
+        description: Containers is the final step of each container the scan worked
+          on.
+        items:
+          $ref: '#/definitions/activity.Container'
+        type: array
+      finished_at:
+        description: FinishedAt is when the scan ended, in RFC 3339.
+        type: string
+    type: object
+  activity.Pull:
+    properties:
+      downloaded_bytes:
+        description: DownloadedBytes is the number of bytes downloaded across reported
+          layers.
+        type: integer
+      layers:
+        description: Layers is the number of layers Docker has reported so far.
+        type: integer
+      layers_done:
+        description: LayersDone counts layers that are downloaded and unpacked.
+        type: integer
+      layers_downloaded:
+        description: LayersDownloaded counts layers that have finished downloading.
+        type: integer
+      phase:
+        description: Phase is one of the Phase constants.
+        type: string
+      total_bytes:
+        description: |-
+          TotalBytes is the download size of the layers reported so far. It can
+          grow while the pull runs, because Docker reports sizes as layers start.
+        type: integer
+    type: object
   check.CheckResponse:
     properties:
       api_version:
@@ -92,6 +173,43 @@ definitions:
         description: Default is the value from flags and environment variables.
       value:
         description: Value is the value in force.
+    type: object
+  settings.TestNotificationRequest:
+    properties:
+      message:
+        type: string
+      title:
+        type: string
+      url:
+        type: string
+    type: object
+  update.StatusResponse:
+    properties:
+      api_version:
+        description: APIVersion is the API version of the response.
+        type: string
+      containers:
+        description: Containers lists what the scan is doing to each container it
+          has started on.
+        items:
+          $ref: '#/definitions/activity.Container'
+        type: array
+      last_scan:
+        allOf:
+        - $ref: '#/definitions/activity.FinishedScan'
+        description: LastScan is how the most recent scan ended. Omitted while a scan
+          runs.
+      running:
+        description: Running is true while an update scan is in progress, scheduled
+          or requested.
+        type: boolean
+      started_at:
+        description: StartedAt is when the running scan began, in RFC 3339. Omitted
+          when idle.
+        type: string
+      timestamp:
+        description: Timestamp is when the response was produced.
+        type: string
     type: object
 host: localhost:8080
 info:
@@ -258,6 +376,48 @@ paths:
       security:
       - BearerAuth: []
       summary: List watched container statuses
+      tags:
+      - containers
+  /v1/containers/{name}/action:
+    post:
+      consumes:
+      - application/json
+      description: Performs start, stop, restart, or image tag change (set_tag) on
+        a container.
+      parameters:
+      - description: Container name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Action request payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/action.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Action executed successfully
+          schema:
+            $ref: '#/definitions/action.Response'
+        "400":
+          description: Invalid request or action
+          schema:
+            type: string
+        "404":
+          description: Container not found
+          schema:
+            type: string
+        "500":
+          description: Failed to execute action
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Perform container lifecycle action
       tags:
       - containers
   /v1/containers/details:
@@ -438,8 +598,9 @@ paths:
     patch:
       consumes:
       - application/json
-      description: 'Changes the named settings: monitor_only, cleanup, rolling_restart
-        (booleans) and schedule (cron). JSON null resets one.'
+      description: 'Changes the named settings: monitor_only, cleanup, rolling_restart,
+        auto_rollback, include_stopped (booleans), schedule (cron) and container_overrides
+        (map). JSON null resets one.'
       parameters:
       - description: Setting names mapped to new values
         in: body
@@ -474,6 +635,41 @@ paths:
       security:
       - BearerAuth: []
       summary: Change runtime settings
+      tags:
+      - settings
+  /v1/settings/test-notification:
+    post:
+      consumes:
+      - application/json
+      description: Sends an immediate test alert to verify notification services.
+        Optionally accepts a custom URL, title, or message.
+      parameters:
+      - description: Notification parameters
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/settings.TestNotificationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Notification test result
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: No URLs configured or invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: Delivery failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test notification delivery
       tags:
       - settings
   /v1/status:
@@ -552,6 +748,27 @@ paths:
       security:
       - BearerAuth: []
       summary: Trigger container update scan
+      tags:
+      - update
+  /v1/update/status:
+    get:
+      description: Reports whether an update scan is running and, for each container
+        it is working on, the current step (pulling, stopping, starting, updated,
+        failed) and image download progress. Cheap to poll while an update runs.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Current update activity
+          schema:
+            $ref: '#/definitions/update.StatusResponse'
+        "401":
+          description: Missing or invalid API token
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get update progress
       tags:
       - update
 produces:

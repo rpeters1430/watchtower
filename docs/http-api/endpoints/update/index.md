@@ -236,6 +236,45 @@ The `/v1/update` endpoint handles concurrent requests differently based on wheth
 
 This behavior ensures that full updates (which may be resource-intensive) are not queued up, while targeted updates (which are typically faster) can wait for their turn.
 
+## Update Progress
+
+`GET /v1/update/status` reports what the running update is doing. It is registered together with `/v1/update` and covers every update, whether it was requested through the API or started by the schedule. The [web UI](../ui/index.md) polls it every few seconds while an update runs.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/update/status
+```
+
+```json
+{
+    "running": true,
+    "started_at": "2025-01-20T11:35:00Z",
+    "containers": [
+        {
+            "name": "ytdlp-gui",
+            "image": "ghcr.io/example/yt-dlp-gui:latest",
+            "step": "pulling",
+            "since": "2025-01-20T11:35:02Z",
+            "pull": {
+                "phase": "downloading",
+                "layers": 9,
+                "layers_downloaded": 4,
+                "layers_done": 3,
+                "downloaded_bytes": 312400000,
+                "total_bytes": 540100000
+            }
+        }
+    ],
+    "timestamp": "2025-01-20T11:36:10Z",
+    "api_version": "v1"
+}
+```
+
+- `running` is `false` and `containers` is empty when no update is running. `last_scan` then holds `finished_at` and the final `step` of each container the most recent update worked on, so a client that polls still learns the outcome of steps that finished between two polls.
+- `containers` lists the containers the update has started working on, in order. A container appears once its new image starts downloading, or when it is stopped for a linked restart. `step` is `pulling`, `stopping`, `starting`, `updated`, or `failed`.
+- `pull` is present while `step` is `pulling`. `phase` is `starting`, `downloading`, `extracting`, `finishing`, `done`, or `failed`. `total_bytes` counts the layers Docker has reported so far, so it can grow during the download. Docker reports unpacking by layer, not by byte.
+
+Successful requests to this route are left out of the access log so that polling does not bury the update's own log lines. Watchtower also logs a `Pulling image` line with the same progress every 15 seconds while an image downloads.
+
 ## Security
 
 ### Rate Limiting

@@ -478,6 +478,9 @@ type ClientOptions struct {
 	CPUCopyMode             string
 	WarnOnHeadFailed        WarningStrategy
 	Fs                      afero.Fs
+	// IncludeStoppedFunc, when set, is asked on every container listing and
+	// overrides IncludeStopped, so the setting can change while running.
+	IncludeStoppedFunc func() bool
 }
 
 // NewClient initializes a new Client instance for Docker API interactions.
@@ -628,11 +631,16 @@ func (c *client) ListContainers(ctx context.Context, filter ...types.Filter) ([]
 		err        error
 	)
 
+	listOptions := c.ClientOptions
+	if c.IncludeStoppedFunc != nil {
+		listOptions.IncludeStopped = c.IncludeStoppedFunc()
+	}
+
 	for attempt := range maxListRetries {
 		containers, err = ListSourceContainers(c.logger(),
 			ctx,
 			c.api,
-			c.ClientOptions,
+			listOptions,
 			containerFilter,
 			isPodman,
 		)
@@ -2169,4 +2177,3 @@ func (c *client) PullImageByName(ctx context.Context, imageName string) error {
 
 	return imgClient.performImagePull(ctx, imageName, opts)
 }
-

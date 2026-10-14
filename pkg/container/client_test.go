@@ -441,6 +441,35 @@ var _ = ginkgo.Describe("the client", func() {
 			})
 		})
 
+		ginkgo.When(`include stopped is switched on while running`, func() {
+			ginkgo.It("should follow the live setting over the startup value", func() {
+				mockServer.AppendHandlers(
+					mockContainer.ListContainersHandler("running", "exited", "created"),
+				)
+				mockServer.AppendHandlers(
+					mockContainer.GetContainerHandlers(
+						&mockContainer.Stopped,
+						&mockContainer.Watchtower,
+						&mockContainer.Running,
+					)...,
+				)
+
+				client := &client{
+					api: docker,
+					ClientOptions: ClientOptions{
+						IncludeStopped:     false,
+						IncludeStoppedFunc: func() bool { return true },
+					},
+				}
+				containers, err := client.ListContainers(
+					context.Background(),
+					filters.NoFilter,
+				)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(containers).To(gomega.ContainElement(havingRunningState(false)))
+			})
+		})
+
 		ginkgo.When(`include restarting is enabled`, func() {
 			ginkgo.It("should return both restarting and running containers", func() {
 				// Set up mock server to return running and restarting containers.

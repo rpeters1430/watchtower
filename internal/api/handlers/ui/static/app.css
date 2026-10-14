@@ -476,6 +476,69 @@ input {
   color: var(--ink);
 }
 
+/* What a container is doing while an update runs. */
+
+.unit-progress {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 1rem 0.9rem 4.5rem;
+}
+
+.unit-progress-text {
+  color: var(--ink-soft);
+  font-size: var(--step--1);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  height: 0.5rem;
+  border: 0;
+  border-radius: 1px;
+  background: var(--line);
+  color: var(--fresh);
+  appearance: none;
+}
+
+.progress::-webkit-progress-bar {
+  border-radius: 1px;
+  background: var(--line);
+}
+
+.progress::-webkit-progress-value {
+  border-radius: 1px;
+  background: var(--fresh);
+  transition: width 0.4s ease-out;
+}
+
+.progress::-moz-progress-bar {
+  border-radius: 1px;
+  background: var(--fresh);
+}
+
+/* No value yet: ribs slide along the track, like the working container end. */
+.progress:indeterminate {
+  background: repeating-linear-gradient(90deg, var(--line) 0 10px, var(--line-strong) 10px 14px);
+  background-size: 28px 100%;
+  animation: ribs-track 0.9s linear infinite;
+}
+
+.progress:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}
+
+.progress:indeterminate::-moz-progress-bar {
+  background: transparent;
+}
+
+@keyframes ribs-track {
+  to {
+    background-position: 28px 0;
+  }
+}
+
 .unit-detail {
   display: grid;
   gap: 1rem;
@@ -822,8 +885,13 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .end-working {
+  .end-working,
+  .progress:indeterminate {
     animation: none;
+  }
+
+  .progress::-webkit-progress-value {
+    transition: none;
   }
 
   .switch::before {
@@ -1069,7 +1137,8 @@ input {
     display: none;
   }
 
-  .unit-detail {
+  .unit-detail,
+  .unit-progress {
     padding-left: 1rem;
   }
 

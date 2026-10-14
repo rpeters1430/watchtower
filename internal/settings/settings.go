@@ -29,6 +29,8 @@ const (
 	KeyRollingRestart = "rolling_restart"
 	// KeySchedule is the cron expression that decides when scans run.
 	KeySchedule = "schedule"
+	// KeyIncludeStopped is the setting that watches containers that aren't running.
+	KeyIncludeStopped = "include_stopped"
 	// KeyAutoRollback is the setting that rolls back on start/healthcheck failure.
 	KeyAutoRollback = "auto_rollback"
 	// KeyContainerOverrides maps container names to policy overrides (auto, monitor_only, pinned, update).
@@ -58,6 +60,8 @@ type Values struct {
 	Schedule string
 	// AutoRollback rolls back container to previous image if new image fails to start or healthcheck.
 	AutoRollback bool
+	// IncludeStopped lists, checks, and updates created and exited containers too.
+	IncludeStopped bool
 	// ContainerOverrides maps container names to policies ("auto", "monitor_only", "pinned", "update").
 	ContainerOverrides map[string]string
 }
@@ -86,6 +90,7 @@ type overrides struct {
 	RollingRestart     *bool             `json:"rolling_restart,omitempty"`
 	Schedule           *string           `json:"schedule,omitempty"`
 	AutoRollback       *bool             `json:"auto_rollback,omitempty"`
+	IncludeStopped     *bool             `json:"include_stopped,omitempty"`
 	ContainerOverrides map[string]string `json:"container_overrides,omitempty"`
 }
 
@@ -172,6 +177,7 @@ func (s *Store) Overridden() map[string]bool {
 		KeyRollingRestart:     s.overrides.RollingRestart != nil,
 		KeySchedule:           s.overrides.Schedule != nil,
 		KeyAutoRollback:       s.overrides.AutoRollback != nil,
+		KeyIncludeStopped:     s.overrides.IncludeStopped != nil,
 		KeyContainerOverrides: s.overrides.ContainerOverrides != nil,
 	}
 }
@@ -190,6 +196,7 @@ func (s *Store) Snapshot() Snapshot {
 			KeyRollingRestart:     s.overrides.RollingRestart != nil,
 			KeySchedule:           s.overrides.Schedule != nil,
 			KeyAutoRollback:       s.overrides.AutoRollback != nil,
+			KeyIncludeStopped:     s.overrides.IncludeStopped != nil,
 			KeyContainerOverrides: s.overrides.ContainerOverrides != nil,
 		},
 		Persistent: s.path != "",
@@ -383,6 +390,10 @@ func (o *overrides) apply(defaults Values) Values {
 		values.AutoRollback = *o.AutoRollback
 	}
 
+	if o.IncludeStopped != nil {
+		values.IncludeStopped = *o.IncludeStopped
+	}
+
 	if o.ContainerOverrides != nil {
 		values.ContainerOverrides = maps.Clone(o.ContainerOverrides)
 	}
@@ -401,6 +412,8 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 		return decode(key, raw, &o.RollingRestart)
 	case KeyAutoRollback:
 		return decode(key, raw, &o.AutoRollback)
+	case KeyIncludeStopped:
+		return decode(key, raw, &o.IncludeStopped)
 	case KeySchedule:
 		err := decode(key, raw, &o.Schedule)
 		if err == nil && o.Schedule != nil {

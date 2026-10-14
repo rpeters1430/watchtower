@@ -240,6 +240,13 @@ func (h *Handler) acquireLock(c fiber.Ctx, images, containers []string) lockResu
 		Msg("Handler: trying to acquire lock")
 
 	if len(images) > 0 || len(containers) > 0 {
+		// Without this, a request queued behind a long update logs nothing until it ends.
+		if len(h.lock) == 0 {
+			h.log.Info().
+				Str("notify", "no").
+				Msg("Another update is running, this update will start when it finishes")
+		}
+
 		select {
 		case token := <-h.lock:
 			h.log.Debug().

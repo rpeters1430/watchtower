@@ -10,6 +10,9 @@
 
   const CHECK_STORE = "watchtower.check";
   const REFRESH_MS = 60_000;
+  // Update progress is polled this often while an update runs. Every request
+  // counts toward the API's per-IP rate limit, so keep it gentle.
+  const ACTIVITY_MS = 3_000;
   const NOTICE_MS = 8_000;
   const SEARCH_THRESHOLD = 8;
 
@@ -22,6 +25,7 @@
     checkedAt: null,
     checking: false,
     updating: new Set(),
+    activity: null,
     expanded: new Set(),
     search: "",
     waitingOnly: false,
@@ -121,6 +125,19 @@
 
   function cleanName(name) {
     return String(name || "").replace(/^\//, "");
+  }
+
+  function bytes(value) {
+    const units = ["B", "kB", "MB", "GB", "TB"];
+    let size = Number(value) || 0;
+    let unit = 0;
+
+    while (size >= 1000 && unit < units.length - 1) {
+      size /= 1000;
+      unit++;
+    }
+
+    return `${unit === 0 ? size : size.toFixed(size < 10 ? 1 : 0)} ${units[unit]}`;
   }
 
   // Notices
@@ -290,6 +307,211 @@
     }
   }
 
+  // Update progress
+
+  let activityTimer = null;
+
+  function updateRunning() {
+    return state.updating.size > 0 || Boolean(state.activity && state.activity.running);
+  }
+
+  function activityFor(name) {
+    if (!state.activity || !state.activity.running) {
+      return null;
+    }
+
+    return (state.activity.containers || []).find((entry) => cleanName(entry.name) === name) || null;
+  }
+
+  function scheduleActivity(delay = ACTIVITY_MS) {
+    if (!activityTimer && feature("update")) {
+      activityTimer = setTimeout(pollActivity, delay);
+    }
+  }
+
+  async function pollActivity() {
+    activityTimer = null;
+
+    if (!feature("update") || !state.session || !state.session.authenticated) {
+      return;
+    }
+
+    const before = state.activity;
+    let data;
+
+    try {
+      data = await request("GET", "/v1/update/status");
+    } catch {
+      // Keep showing the last progress and try again shortly.
+      if (updateRunning()) {
+        scheduleActivity();
+      }
+
+      return;
+    }
+
+    // The page's own update finishing resets state.activity; that update has
+    // reported itself, so this poll must not report it a second time.
+    const resetMeanwhile = state.activity !== before;
+
+    state.activity = data;
+
+    if (!resetMeanwhile && before && before.running && !data.running) {
+      await activityEnded(data.last_scan || before);
+    }
+
+    if (updateRunning()) {
+      scheduleActivity();
+    }
+
+    renderProgress();
+  }
+
+  // An update this page didn't start (a schedule, another tab, or one started
+  // before a reload) has finished, so catch the page up with it. `last` is the
+  // server's record of the finished scan, or the last progress seen.
+  async function activityEnded(last) {
+    const updated = (last.containers || []).filter((entry) => entry.step === "updated").map((entry) => cleanName(entry.name));
+
+    for (const name of updated) {
+      const check = state.checks.get(name);
+
+      if (check) {
+        state.checks.set(name, { ...check, update_available: false });
+      }
+    }
+
+    if (updated.length > 0 && state.checkedAt) {
+      saveChecks();
+    }
+
+    if (state.updating.size > 0) {
+      // This page's own update request reports the outcome when it returns.
+      return;
+    }
+
+    await loadContainers();
+
+    if (updated.length > 0) {
+      notify(`Updated ${updated.length === 1 ? updated[0] : count(updated.length, "container")}.`);
+    }
+
+    render();
+  }
+
+  // What a container is doing, in the words the page uses for it.
+  function activityStatus(entry) {
+    const pull = entry.pull || {};
+
+    switch (entry.step) {
+      case "pulling":
+        if (pull.phase === "downloading" && pull.total_bytes > 0) {
+          return { key: "working", label: `Downloading ${Math.floor((100 * pull.downloaded_bytes) / pull.total_bytes)}%` };
+        }
+
+        if (pull.phase === "extracting") {
+          return { key: "working", label: "Unpacking" };
+        }
+
+        if (pull.phase === "finishing" || pull.phase === "done") {
+          return { key: "working", label: "Finishing download" };
+        }
+
+        if (pull.phase === "failed") {
+          return { key: "failed", label: "Download failed" };
+        }
+
+        return { key: "working", label: "Downloading" };
+      case "stopping":
+        return { key: "working", label: "Stopping" };
+      case "starting":
+        return { key: "working", label: "Starting" };
+      case "updated":
+        return { key: "fresh", label: "Updated" };
+      case "failed":
+        return { key: "failed", label: "Couldn't update" };
+      default:
+        return { key: "working", label: "Updating" };
+    }
+  }
+
+  // One sentence on what the step is doing, with numbers where Docker gives them.
+  function activityDetail(entry) {
+    const pull = entry.pull || {};
+    const layers = pull.layers ? ` ${pull.layers_done} of ${count(pull.layers, "layer")} in place.` : "";
+
+    switch (entry.step) {
+      case "pulling":
+        if (pull.phase === "downloading") {
+          return pull.total_bytes > 0
+            ? `Downloading the new image: ${bytes(pull.downloaded_bytes)} of ${bytes(pull.total_bytes)} so far.${layers}`
+            : `Downloading the new image.${layers}`;
+        }
+
+        if (pull.phase === "extracting") {
+          return `Unpacking the downloaded image.${layers}`;
+        }
+
+        if (pull.phase === "finishing" || pull.phase === "done") {
+          return "The image is downloaded. Docker is finishing up.";
+        }
+
+        return "Asking the registry for the new image.";
+      case "stopping":
+        return "Stopping the old container. It gets its stop timeout to shut down cleanly.";
+      case "starting":
+        return "Creating and starting the new container with the same settings.";
+      case "updated":
+        return "Running the new image.";
+      case "failed":
+        return "The update didn't finish. Watchtower's log has the reason.";
+      default:
+        return "";
+    }
+  }
+
+  // The bar shows download bytes, then unpacked layers.
+  function activityBar(entry) {
+    const pull = entry.pull;
+
+    if (entry.step !== "pulling" || !pull) {
+      return null;
+    }
+
+    let value = null;
+
+    if (pull.phase === "downloading" && pull.total_bytes > 0) {
+      value = pull.downloaded_bytes / pull.total_bytes;
+    } else if (pull.phase === "extracting" && pull.layers > 0) {
+      value = pull.layers_done / pull.layers;
+    } else if (pull.phase === "finishing" || pull.phase === "done") {
+      value = 1;
+    }
+
+    const props = { class: "progress", "aria-label": `Progress for ${cleanName(entry.name)}`, max: "1" };
+
+    // A progress element without a value shows Docker hasn't said how much is left.
+    if (value !== null) {
+      props.value = String(Math.min(1, Math.max(0, value)));
+    }
+
+    return el("progress", props);
+  }
+
+  function renderProgress() {
+    if (currentView().draw !== containersView) {
+      return;
+    }
+
+    const slot = document.getElementById("lookout-slot");
+
+    if (slot) {
+      slot.replaceChildren(lookout());
+    }
+
+    renderManifest();
+  }
+
   async function checkForUpdates() {
     if (state.checking) {
       return;
@@ -325,6 +547,7 @@
 
     names.forEach((name) => state.updating.add(name));
     render();
+    scheduleActivity(1_000);
 
     try {
       const data = await request("POST", `/v1/update?${query}`);
@@ -358,6 +581,9 @@
     }
 
     names.forEach((name) => state.updating.delete(name));
+    // The response above already reported this update, so the next poll
+    // must not report it again as one that finished elsewhere.
+    state.activity = null;
     await loadContainers();
     render();
   }
@@ -398,8 +624,14 @@
   function describe(container) {
     const check = state.checks.get(container.name);
 
+    const entry = activityFor(container.name);
+
+    if (entry) {
+      return activityStatus(entry);
+    }
+
     if (state.updating.has(container.name)) {
-      return { key: "working", label: "Updating" };
+      return { key: "working", label: "Waiting to start" };
     }
 
     if (state.acting.has(container.name)) {
@@ -497,8 +729,33 @@
     const updatable = waiting.filter(canUpdate);
     let line;
     let note;
+    const activity = state.activity && state.activity.running ? state.activity : null;
+    const entries = activity ? activity.containers || [] : [];
+    const active = entries.filter((entry) => entry.step !== "updated" && entry.step !== "failed");
+    const done = entries.filter((entry) => entry.step === "updated").length;
 
-    if (state.containersProblem && total === 0) {
+    if (activity) {
+      const started = activity.started_at ? ` Started ${ago(new Date(activity.started_at))}.` : "";
+
+      if (active.length === 1) {
+        line = `Updating ${cleanName(active[0].name)}.`;
+        note = activityDetail(active[0]) + started;
+      } else if (active.length > 1) {
+        const names = active.map((entry) => cleanName(entry.name)).join(", ");
+        // Containers sharing an image share one download, so its progress speaks for all of them.
+        const shared = active.every((entry) => entry.step === active[0].step && entry.image === active[0].image);
+
+        line = `Updating ${count(active.length, "container")}.`;
+        note = shared ? `${activityDetail(active[0])} For ${names}.${started}` : `${names}.${started}`;
+      } else {
+        line = "Checking for new images.";
+        note = `Watchtower is comparing each container's image with its registry.${started}`;
+      }
+
+      if (done > 0) {
+        note += ` ${capitalise(count(done, "container"))} updated so far.`;
+      }
+    } else if (state.containersProblem && total === 0) {
       line = "The container list didn't load.";
       note = state.containersProblem;
     } else if (!state.containersLoaded) {
@@ -550,7 +807,7 @@
             {
               class: "button button-primary",
               type: "button",
-              disabled: state.updating.size > 0,
+              disabled: updateRunning(),
               onclick: () => confirmUpdate(updatable),
             },
             `Update all ${updatable.length}`,
@@ -774,7 +1031,7 @@
     );
 
     const actions = [];
-    const isBusy = state.updating.has(container.name) || state.acting.has(container.name);
+    const isBusy = state.updating.has(container.name) || state.acting.has(container.name) || Boolean(activityFor(container.name));
 
     if (!container.watchtower) {
       if (container.running) {
@@ -837,7 +1094,7 @@
           {
             class: "button button-quiet button-tiny",
             type: "button",
-            disabled: state.updating.size > 0 || isBusy,
+            disabled: updateRunning() || isBusy,
             "aria-label": `Update ${container.name}`,
             onclick: (e) => {
               e.stopPropagation();
@@ -852,11 +1109,20 @@
     }
 
     const actionWrapper = el("div", { class: "unit-actions-group" }, ...actions);
+    const entry = activityFor(container.name);
+    const working = entry && entry.step !== "updated" && entry.step !== "failed";
 
     return el(
       "li",
       { class: "unit" },
       el("div", { class: "unit-head" }, toggle, actions.length > 0 && el("div", { class: "unit-action" }, actionWrapper)),
+      working &&
+        el(
+          "div",
+          { class: "unit-progress", role: "status" },
+          activityBar(entry),
+          el("p", { class: "unit-progress-text" }, activityDetail(entry)),
+        ),
       open && facts(container),
     );
   }
@@ -951,7 +1217,7 @@
                     {
                       class: "button button-quiet button-sm",
                       type: "button",
-                      disabled: state.updating.size > 0,
+                      disabled: updateRunning(),
                       onclick: () => confirmUpdate(updatableInStack),
                     },
                     `Update Stack (${updatableInStack.length})`,
@@ -1044,7 +1310,7 @@
     return el(
       "div",
       null,
-      lookout(),
+      el("div", { id: "lookout-slot" }, lookout()),
       toolbar,
       state.containersLoaded && state.containers.length > 0 && el("div", { id: "manifest-slot" }, manifest()),
     );
@@ -1218,6 +1484,11 @@
       state.customSchedule = false;
       state.customScheduleDraft = null;
       await loadConfig();
+
+      if ("include_stopped" in changes) {
+        await loadContainers();
+      }
+
       notify(state.settings.saved ? "Settings saved." : "Settings changed until Watchtower restarts.");
     } catch (problem) {
       notify(`That change wasn't made. ${capitalise(problem.message)}.`, true);
@@ -1540,7 +1811,13 @@
               code("com.centurylinklabs.watchtower.enable=true"),
               ".",
             ]),
-            setting("Stopped containers", config.include_stopped, "Include containers that aren't running."),
+            editable && state.settings.settings.include_stopped
+              ? switchSetting(
+                  "include_stopped",
+                  "Stopped containers",
+                  "List, check, and update containers that aren't running. An updated container stays stopped.",
+                )
+              : setting("Stopped containers", config.include_stopped, "Include containers that aren't running."),
             setting("Restarting containers", config.include_restarting, "Include containers that are restarting."),
             config.scope &&
               el(
@@ -1763,7 +2040,13 @@
       return;
     }
 
-    if (state.updating.size > 0 || state.checking || document.querySelector("dialog[open]")) {
+    // A scheduled update shows up here within a minute; while one runs the
+    // progress poll keeps the page current instead.
+    if (!activityTimer) {
+      await pollActivity();
+    }
+
+    if (updateRunning() || state.checking || document.querySelector("dialog[open]")) {
       return;
     }
 
@@ -1783,6 +2066,8 @@
     render();
     await Promise.all([loadContainers(), loadConfig(), loadSettings()]);
     render();
+    // Picks up an update that was already running, for example before a reload.
+    await pollActivity();
 
     if (currentView().draw === historyView) {
       await loadHistory();

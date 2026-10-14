@@ -14,13 +14,18 @@ func registerConfigRoute(app *fiber.App, auth fiber.Handler, opts apiconfig.Opti
 		// Read the settings per request so run-time changes show up.
 		params := opts.Settings.ApplyTo(opts.BaseParams)
 
+		includeStopped := opts.IncludeStopped
+		if opts.Settings != nil {
+			includeStopped = opts.Settings.Effective().IncludeStopped
+		}
+
 		return config.ConfigData{
 			MonitorOnly:       params.MonitorOnly,
 			Cleanup:           params.Cleanup,
 			NoPull:            params.NoPull,
 			NoRestart:         params.NoRestart,
 			RollingRestart:    params.RollingRestart,
-			IncludeStopped:    opts.IncludeStopped,
+			IncludeStopped:    includeStopped,
 			IncludeRestarting: opts.IncludeRestarting,
 			LifecycleHooks:    params.LifecycleHooks,
 			LabelEnable:       opts.LabelEnable,

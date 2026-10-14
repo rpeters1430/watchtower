@@ -11,6 +11,8 @@ Environment Variable: WATCHTOWER_INCLUDE_STOPPED
              Default: false
 ```
 
+This is the starting value. With the [`settings`](../../http-api/endpoints/settings/index.md) endpoint enabled it can be switched while Watchtower runs, from the web UI's Settings page or as `include_stopped`. The change applies to the container list, checks, and updates straight away.
+
 ## Revive Stopped Containers
 
 Restarts stopped containers after their images are updated.
