@@ -639,6 +639,7 @@ func (p *process) runMain(cfg types.RunConfig) int {
 			MonitorOnly:    appCfg.Update.MonitorOnly,
 			Cleanup:        appCfg.Update.Cleanup,
 			RollingRestart: appCfg.Update.RollingRestart,
+			AutoRollback:   appCfg.Update.AutoRollback,
 			Schedule:       appCfg.Schedule.Spec,
 			IncludeStopped: appCfg.Client.IncludeStopped,
 			Scan:           appCfg.Scan.Enabled,

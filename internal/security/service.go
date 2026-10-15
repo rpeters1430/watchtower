@@ -216,7 +216,9 @@ func (s *Service) RecordReview(
 	now := s.now()
 
 	if updated {
-		s.store.Record(newReport(name, image, latestImageID, review.Latest, nil, now))
+		report := newReport(name, image, latestImageID, review.Latest, nil, now)
+		report.LastUpdate = newAppliedUpdate(currentImageID, review, now)
+		s.store.Record(report)
 
 		return
 	}
@@ -228,6 +230,11 @@ func (s *Service) RecordReview(
 
 	report := newReport(name, image, currentImageID, review.Current, scanErr, now)
 	report.Update = newUpdate(latestImageID, review)
+
+	if previous, ok := s.store.Get(name); ok && previous.LastUpdate != nil {
+		report.LastUpdate = previous.LastUpdate
+	}
+
 	s.store.Record(report)
 }
 
@@ -332,8 +339,13 @@ func (s *Service) run(ctx context.Context, order []string, byImage map[string][]
 				report := newReport(target.Name, target.Image, imageID, result, err, now)
 
 				// A waiting update is still waiting while the container runs the same image.
-				if previous, ok := s.store.Get(target.Name); ok && previous.Update != nil && previous.ImageID == imageID {
-					report.Update = previous.Update
+				if previous, ok := s.store.Get(target.Name); ok {
+					if previous.Update != nil && previous.ImageID == imageID {
+						report.Update = previous.Update
+					}
+					if previous.LastUpdate != nil {
+						report.LastUpdate = previous.LastUpdate
+					}
 				}
 
 				s.store.Record(report)

@@ -143,7 +143,8 @@ func TestRecordReview(t *testing.T) {
 	assert.Nil(t, summary.Update.Fixed)
 	assert.Equal(t, 1, summary.Update.FixedCounts.Critical)
 
-	// After the update the container runs the new image, with no update waiting.
+	// After the update the container runs the new image, with no update waiting,
+	// and records what the update fixed.
 	service.now = func() time.Time { return time.Now().Add(time.Minute) }
 	service.RecordReview("web", "nginx", "sha256:old", "sha256:new", review, true)
 
@@ -151,6 +152,14 @@ func TestRecordReview(t *testing.T) {
 	assert.Equal(t, "sha256:new", report.ImageID)
 	assert.Nil(t, report.Update)
 	assert.Equal(t, 0, report.Counts.Critical)
+	require.NotNil(t, report.LastUpdate)
+	assert.Equal(t, "sha256:old", report.LastUpdate.PreviousImageID)
+	assert.Equal(t, 1, report.LastUpdate.FixedCounts.Critical)
+	assert.Equal(t, "CVE-1", report.LastUpdate.Fixed[0].ID)
+
+	summary = service.Store().Summaries()[0]
+	assert.Nil(t, summary.LastUpdate.Fixed)
+	assert.Equal(t, 1, summary.LastUpdate.FixedCounts.Critical)
 }
 
 func TestStartScansEachImageOnce(t *testing.T) {
@@ -200,6 +209,17 @@ func TestStartKeepsWaitingUpdate(t *testing.T) {
 	report, _ := service.Store().Get("web")
 	require.NotNil(t, report.Update, "the same image still has the same update waiting")
 	assert.Equal(t, "sha256:new", report.Update.LatestImageID)
+
+	// Now apply update and run an on-demand scan; verify LastUpdate is kept.
+	service.RecordReview("web", "nginx", "sha256:old", "sha256:new", review, true)
+	service.now = func() time.Time { return time.Now().Add(2 * time.Minute) }
+	_, err = service.Start(t.Context(), []Target{{Name: "web", Image: "nginx", ImageID: "sha256:new"}})
+	require.NoError(t, err)
+	waitForJob(t, service)
+
+	report, _ = service.Store().Get("web")
+	require.NotNil(t, report.LastUpdate, "the last update info is kept across on-demand scans")
+	assert.Equal(t, "sha256:old", report.LastUpdate.PreviousImageID)
 }
 
 func TestStartRejectsOverlapAndEmpty(t *testing.T) {

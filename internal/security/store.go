@@ -49,6 +49,22 @@ type Update struct {
 	Gate scanner.Gate `json:"gate"`
 }
 
+// AppliedUpdate records the security diff of the most recently applied update.
+type AppliedUpdate struct {
+	// PreviousImageID is the image the container ran before the update.
+	PreviousImageID string `json:"previous_image_id,omitempty"`
+	// Fixed are findings of the previous image that the new image no longer has.
+	Fixed []scanner.Finding `json:"fixed,omitempty"`
+	// Introduced are findings the new image added.
+	Introduced []scanner.Finding `json:"introduced,omitempty"`
+	// FixedCounts tallies Fixed by severity.
+	FixedCounts scanner.Counts `json:"fixed_counts"`
+	// IntroducedCounts tallies Introduced by severity.
+	IntroducedCounts scanner.Counts `json:"introduced_counts"`
+	// AppliedAt is when the update was applied.
+	AppliedAt time.Time `json:"applied_at"`
+}
+
 // Report is the latest scan of one container's running image.
 type Report struct {
 	// Name is the container name without a leading slash.
@@ -75,6 +91,8 @@ type Report struct {
 	Truncated bool `json:"truncated,omitempty"`
 	// Update compares the running image with a waiting update, when there is one.
 	Update *Update `json:"update,omitempty"`
+	// LastUpdate records what the most recent update of this container fixed and introduced.
+	LastUpdate *AppliedUpdate `json:"last_update,omitempty"`
 }
 
 // Summary returns the report without its finding lists.
@@ -89,6 +107,13 @@ func (r Report) Summary() Report {
 		update.Fixed = nil
 		update.Introduced = nil
 		r.Update = &update
+	}
+
+	if r.LastUpdate != nil {
+		last := *r.LastUpdate
+		last.Fixed = nil
+		last.Introduced = nil
+		r.LastUpdate = &last
 	}
 
 	return r
@@ -107,6 +132,10 @@ func (r Report) Summary() Report {
 // Returns:
 //   - Report: Report for the container.
 func newReport(name, image, imageID string, result *scanner.Result, scanErr error, now time.Time) Report {
+	if now.IsZero() {
+		now = time.Now()
+	}
+
 	report := Report{
 		Name:      strings.TrimPrefix(name, "/"),
 		Image:     image,
@@ -125,10 +154,6 @@ func newReport(name, image, imageID string, result *scanner.Result, scanErr erro
 	report.Scanner = result.Scanner
 	report.ScannerVersion = result.ScannerVersion
 	report.Counts = result.Counts()
-
-	if !result.ScannedAt.IsZero() {
-		report.ScannedAt = result.ScannedAt
-	}
 
 	for _, finding := range result.Findings {
 		if finding.Fixable() {
@@ -162,6 +187,30 @@ func newUpdate(latestImageID string, review *scanner.Review) *Update {
 		IntroducedCounts: scanner.CountFindings(review.Diff.Introduced),
 		Held:             review.Hold,
 		Gate:             review.Gate,
+	}
+}
+
+// newAppliedUpdate builds the record of an applied update from its review.
+//
+// Parameters:
+//   - previousImageID: Image the container ran before the update.
+//   - review: Security review of the update.
+//   - now: Time the update completed.
+//
+// Returns:
+//   - *AppliedUpdate: Record of what the applied update fixed and introduced.
+func newAppliedUpdate(previousImageID string, review *scanner.Review, now time.Time) *AppliedUpdate {
+	if review == nil {
+		return nil
+	}
+
+	return &AppliedUpdate{
+		PreviousImageID:  previousImageID,
+		Fixed:            capFindings(review.Diff.Fixed),
+		Introduced:       capFindings(review.Diff.Introduced),
+		FixedCounts:      scanner.CountFindings(review.Diff.Fixed),
+		IntroducedCounts: scanner.CountFindings(review.Diff.Introduced),
+		AppliedAt:        now,
 	}
 }
 

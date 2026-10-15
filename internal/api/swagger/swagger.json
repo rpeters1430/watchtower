@@ -1672,6 +1672,14 @@
                     "description": "Truncated is true when Findings was cut to maxFindings.",
                     "type": "boolean"
                 },
+                "last_update": {
+                    "description": "LastUpdate records what the most recent update of this container fixed and introduced.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/security.AppliedUpdate"
+                        }
+                    ]
+                },
                 "update": {
                     "description": "Update compares the running image with a waiting update, when there is one.",
                     "allOf": [
@@ -1679,6 +1687,49 @@
                             "$ref": "#/definitions/security.Update"
                         }
                     ]
+                }
+            }
+        },
+        "security.AppliedUpdate": {
+            "type": "object",
+            "properties": {
+                "applied_at": {
+                    "description": "AppliedAt is when the update was applied.",
+                    "type": "string"
+                },
+                "fixed": {
+                    "description": "Fixed are findings of the previous image that the new image no longer has.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scanner.Finding"
+                    }
+                },
+                "fixed_counts": {
+                    "description": "FixedCounts tallies Fixed by severity.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "introduced": {
+                    "description": "Introduced are findings the new image added.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scanner.Finding"
+                    }
+                },
+                "introduced_counts": {
+                    "description": "IntroducedCounts tallies Introduced by severity.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "previous_image_id": {
+                    "description": "PreviousImageID is the image the container ran before the update.",
+                    "type": "string"
                 }
             }
         },

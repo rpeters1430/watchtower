@@ -599,12 +599,16 @@
     }
 
     names.forEach((name) => state.updating.delete(name));
+    names.forEach((name) => state.securityDetails.delete(name));
     // The response above already reported this update, so the next poll
     // must not report it again as one that finished elsewhere.
     state.activity = null;
-    await Promise.all([loadContainers(), loadHistory()]);
+    await Promise.all([loadContainers(), loadHistory(), feature("security") && loadSecurity()]);
     await loadChecks();
     render();
+    if (feature("security") && currentView().draw === securityView) {
+      renderSecurity();
+    }
   }
 
   async function containerAction(containerName, action, payload = {}) {
@@ -1966,6 +1970,16 @@
       items.push("An update is waiting, but its new image has the same findings.");
     }
 
+    const lastUpdate = report.last_update;
+    if (lastUpdate && total(lastUpdate.fixed_counts) > 0) {
+      const fixedCount = total(lastUpdate.fixed_counts);
+      items.push([
+        el("strong", null, `The most recent update fixed ${count(fixedCount, "vulnerability")}`),
+        ` (${severityList(lastUpdate.fixed_counts)})`,
+        lastUpdate.applied_at ? ` applied ${ago(new Date(lastUpdate.applied_at))}.` : ".",
+      ]);
+    }
+
     if (detail && !detail.problem) {
       const vulnerabilities = findings.filter((finding) => finding.kind === "vulnerability");
       const waitingForImage = vulnerabilities.filter((finding) => finding.fixed_version && !fixedByUpdate.has(findingKey(finding))).length;
@@ -2005,7 +2019,7 @@
     return items;
   }
 
-  function findingRow(finding, fixedByUpdate) {
+  function findingRow(finding, fixedByUpdate, wasFixed) {
     const id = /^https?:\/\//.test(finding.url || "")
       ? el("a", { class: "finding-id", href: finding.url, rel: "noreferrer", target: "_blank" }, finding.id)
       : el("span", { class: "finding-id" }, finding.id);
@@ -2037,6 +2051,7 @@
           id,
           finding.kind !== "vulnerability" && el("span", { class: "finding-kind" }, finding.kind === "secret" ? "Secret" : "Image setting"),
           fixedByUpdate && el("span", { class: "finding-kind finding-fixed" }, "Fixed by the update"),
+          wasFixed && el("span", { class: "finding-kind finding-fixed" }, "Fixed by last update"),
         ),
         finding.title && el("span", { class: "finding-title" }, finding.title),
         where && el("span", { class: "finding-where" }, where),
@@ -2148,6 +2163,12 @@
       detail && detail.problem && el("p", { class: "problem" }, `The findings didn't load. ${detail.problem}`),
       !ready && !(detail && detail.problem) && total(counts) > 0 && el("p", { class: "setting-help" }, "Loading findings."),
       ready && findingList(name, ready),
+      ready && ready.last_update && ready.last_update.fixed && ready.last_update.fixed.length > 0 && el(
+        "div",
+        { class: "changes" },
+        el("h3", { class: "detail-title" }, `Fixed by most recent update (${ready.last_update.fixed.length})`),
+        el("ul", { class: "finding-list" }, ready.last_update.fixed.map((finding) => findingRow(finding, false, true))),
+      ),
       el(
         "p",
         { class: "setting-help" },
@@ -2185,6 +2206,8 @@
       note = "Update held back";
     } else if (update && total(update.fixed_counts) > 0) {
       note = `Waiting update fixes ${total(update.fixed_counts)}`;
+    } else if (report && report.last_update && total(report.last_update.fixed_counts) > 0) {
+      note = `Last update fixed ${total(report.last_update.fixed_counts)}`;
     }
 
     return el(
@@ -2301,8 +2324,12 @@
     }
 
     const status = securityStatus(report);
+    let label = capitalise(status.label);
+    if (report.last_update && total(report.last_update.fixed_counts) > 0) {
+      label += ` (last update fixed ${total(report.last_update.fixed_counts)})`;
+    }
 
-    return el("span", null, `${capitalise(status.label)}. `, el("a", { class: "link-subtle", href: "#/security", onclick: open }, "How to fix"));
+    return el("span", null, `${label}. `, el("a", { class: "link-subtle", href: "#/security", onclick: open }, "How to fix"));
   }
 
   // Settings view

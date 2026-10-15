@@ -21,9 +21,9 @@ Each container keeps its latest report, which comes from either:
 
 - **An update scan.** With `scan` on, each update cycle scans the new and the running image of every pending update.
   The report covers the running image and includes an `update` object listing what the waiting update fixes and introduces, and whether the [scan gate](../../../configuration/image-scanning/index.md#scan-gate) holds it.
-  Once the update is applied, the report covers the new image instead.
+  Once the update is applied, the report covers the new image and records a `last_update` object with the vulnerabilities the update fixed and introduced.
 - **A scan on request.** `POST /v1/security/scan` scans the image each container runs now, against the latest vulnerability database.
-  A waiting update's comparison is kept as long as the container still runs the same image.
+  A waiting update's comparison is kept as long as the container still runs the same image, and the last update's summary is preserved across scans.
 
 Reports are saved to `security.json` in the [data directory](../../../configuration/http-api/index.md#data_directory), so they survive a restart when a volume is mounted there.
 A container's report is dropped 30 days after its last scan.
@@ -77,6 +77,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/security
 | `fixable`       | Findings with a published fixed version                                                           |
 | `error`         | Why the running image could not be scanned                                                        |
 | `update`        | How a waiting update changes the findings, when one is waiting                                    |
+| `last_update`   | What the most recent update of this container fixed and introduced                                |
 
 The overview leaves out finding lists to stay small.
 
