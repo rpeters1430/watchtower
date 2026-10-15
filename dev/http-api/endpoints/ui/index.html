@@ -2185,6 +2185,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../settings/" class="md-nav__link">
         
   
@@ -3034,6 +3062,10 @@
 <td style="text-align: left;">Changing settings</td>
 <td style="text-align: center;"><code>settings</code></td>
 </tr>
+<tr>
+<td style="text-align: left;">Security</td>
+<td style="text-align: center;"><code>security</code></td>
+</tr>
 </tbody>
 </table>
 <p>The simplest setup enables everything:</p>
@@ -3055,7 +3087,7 @@
 <p class="admonition-title">Warning</p>
 <p>Enabling the <code>update</code> endpoint stops Watchtower's scheduled updates unless <a href="../../../configuration/scheduling/#http_api_periodic_polls"><code>http-api-periodic-polls</code></a> is also set.</p>
 </div>
-<p>The <code>/data</code> volume is optional. With it, settings changed on the page, notification services added there, the scan history, and each container's latest check result survive a restart. Without it, they are kept in memory only.</p>
+<p>The <code>/data</code> volume is optional. With it, settings changed on the page, notification services added there, the scan history, each container's latest check result, and image scan results survive a restart. Without it, they are kept in memory only.</p>
 <h2 id="what_the_page_shows">What the Page Shows<a class="headerlink" href="#what_the_page_shows" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Containers</strong>: each container's state comes from the most recent check or scan, kept by the server through <a href="../check/#latest_results"><code>GET /v1/check</code></a>, so it is the same in every browser and includes what scheduled scans found. The line at the top says when Watchtower last checked and when the next scheduled scan starts. Expanding a container lists its recent updates.</li>
@@ -3144,7 +3176,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 14, 2026 15:12:12 UTC"><span class="timeago" datetime="2026-10-14T15:12:12+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 14, 2026 15:12:12 UTC">2026-10-14</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 15, 2026 00:10:38 UTC"><span class="timeago" datetime="2026-10-15T00:10:38+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 15, 2026 00:10:38 UTC">2026-10-15</span>
   </span>
 
     
