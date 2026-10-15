@@ -1,20 +1,21 @@
 # Image Scanning
 
 Watchtower can scan the new image of each pending update with [Trivy](https://trivy.dev) before it replaces a container.
-Scanning is off by default. See [Image Scanning](../../advanced-features/image-scanning/index.md) for how it works.
+Scanning is on by default; set `--scan=false` to update without it. See [Image Scanning](../../advanced-features/image-scanning/index.md) for how it works.
 
 `scan` and `scan-gate` set the starting values. Both can be changed while Watchtower runs, from the web UI's Settings page or the [settings endpoint](../../http-api/endpoints/settings/index.md).
 
 ## Scan
 
 Scans the new image of each pending update, and the image it replaces, for known vulnerabilities, secrets, and image configuration problems.
-Notifications then list the vulnerabilities each update fixed.
+Notifications then list the vulnerabilities each update fixed, the web UI shows each scan's progress on the Containers view while the update runs, and the Security view lists what the update fixed and brought in.
+Images are scanned one at a time, so an update of many containers takes longer with scanning on.
 
 ```text
             Argument: --scan
 Environment Variable: WATCHTOWER_SCAN
                 Type: Boolean
-             Default: false
+             Default: true
 ```
 
 !!! Note
@@ -47,12 +48,14 @@ Environment Variable: WATCHTOWER_SCAN_IMAGE
 ## Scan Timeout
 
 Bounds the scan of one image. The first scan also downloads Trivy's vulnerability database, so allow time for it.
+Scans run one at a time, because every scan shares the cache volume, and the timeout only starts once a scan's turn comes.
+Large images, such as ones bundling machine learning models, can take longer than the default on slow disks; raise this if a scan fails with "scan did not finish in time".
 
 ```text
             Argument: --scan-timeout
 Environment Variable: WATCHTOWER_SCAN_TIMEOUT
                 Type: Duration
-             Default: 5m
+             Default: 15m
 ```
 
 ## Scan Ignore Unfixed

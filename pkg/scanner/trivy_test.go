@@ -79,3 +79,26 @@ func TestTrivyScanErrors(t *testing.T) {
 	_, err = NewTrivy(&logger, &fakeRunner{output: []byte("oops")}, TrivyOptions{}).Scan(t.Context(), "nginx")
 	require.ErrorIs(t, err, ErrInvalidReport)
 }
+
+func TestTrivyStep(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		line string
+		want string
+	}{
+		{"2026-10-15T10:00:00Z\tINFO\t[vulndb] Need to update DB", "Downloading the vulnerability database"},
+		{"2026-10-15T10:00:00Z\tINFO\t[javadb] Downloading Java DB...", "Downloading the Java vulnerability database"},
+		{"2026-10-15T10:00:00Z\tINFO\t[secret] Secret scanning is enabled", "Reading the image's layers and checking its files for secrets"},
+		{"2026-10-15T10:00:00Z\tINFO\tDetected OS\tfamily=\"debian\" version=\"12\"", "Reading the image's operating system packages"},
+		{"2026-10-15T10:00:00Z\tINFO\t[debian] Detecting vulnerabilities...\tpkg_num=120", "Matching packages against the vulnerability database"},
+		{"2026-10-15T10:00:00Z\tWARN\tThis OS version is no longer supported", "Scanner warning: This OS version is no longer supported"},
+		{"2023-01-01T10:00:00.000Z INFO Need to update DB", "Downloading the vulnerability database"},
+		{"2026-10-15T10:00:00Z\tINFO\t[secret] Please see also https://example.com", ""},
+		{"", ""},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.want, TrivyStep(test.line), test.line)
+	}
+}

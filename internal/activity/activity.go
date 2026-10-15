@@ -12,12 +12,22 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 )
 
 // Steps a container goes through during an update.
 const (
 	// StepPulling means the container's new image is downloading.
 	StepPulling = "pulling"
+	// StepScanning means the new image is being scanned for vulnerabilities
+	// and compared with the running one.
+	StepScanning = "scanning"
+	// StepScanned means the scan finished and the container waits its turn
+	// to be restarted.
+	StepScanned = "scanned"
+	// StepHeld means the scan gate held the update back.
+	StepHeld = "held"
 	// StepStopping means the old container is being stopped and removed.
 	StepStopping = "stopping"
 	// StepStarting means the replacement container is being created and started.
@@ -87,6 +97,24 @@ type Container struct {
 	Since string `json:"since"`
 	// Pull is the download progress of the container's image while Step is pulling.
 	Pull *Pull `json:"pull,omitempty"`
+	// Scan is the security scan of the update, once one has started.
+	Scan *Scan `json:"scan,omitempty"`
+}
+
+// Scan is the security scan of one container's update.
+type Scan struct {
+	// Step says what the scanner is doing while Step is scanning.
+	Step string `json:"step,omitempty"`
+	// Done is true once the scan finished, successfully or not.
+	Done bool `json:"done"`
+	// Error says why the scan failed. The update goes ahead without a review.
+	Error string `json:"error,omitempty"`
+	// FixedCounts tallies, by severity, the findings the update fixes.
+	FixedCounts scanner.Counts `json:"fixed_counts"`
+	// IntroducedCounts tallies, by severity, the findings the update brings in.
+	IntroducedCounts scanner.Counts `json:"introduced_counts"`
+	// LatestCounts tallies the new image's findings by severity.
+	LatestCounts scanner.Counts `json:"latest_counts"`
 }
 
 // Pull is the progress of one image pull.
@@ -123,6 +151,7 @@ type containerState struct {
 	image string
 	step  string
 	since time.Time
+	scan  *Scan
 }
 
 type layerState struct {
@@ -218,6 +247,42 @@ func (t *Tracker) SetStep(name, image, step string) {
 	}
 }
 
+// SetScanStep records what the scanner is doing for a container's update.
+// It does nothing for a container the running scan has not reached.
+//
+// Parameters:
+//   - name: Container name.
+//   - step: What the scanner is doing.
+func (t *Tracker) SetScanStep(name, step string) {
+	t.updateScan(name, func(scan *Scan) { scan.Step = step })
+}
+
+// SetScanResult records how a container's update changes its findings, or
+// why the scan failed.
+//
+// Parameters:
+//   - name: Container name.
+//   - review: Comparison of the running and new image, or nil when the scan failed.
+//   - err: Why the scan failed, or nil.
+func (t *Tracker) SetScanResult(name string, review *scanner.Review, err error) {
+	t.updateScan(name, func(scan *Scan) {
+		scan.Step = ""
+		scan.Done = true
+
+		if err != nil {
+			scan.Error = err.Error()
+
+			return
+		}
+
+		if review != nil {
+			scan.FixedCounts = scanner.CountFindings(review.Diff.Fixed)
+			scan.IntroducedCounts = scanner.CountFindings(review.Diff.Introduced)
+			scan.LatestCounts = review.Latest.Counts()
+		}
+	})
+}
+
 // StartPull begins tracking a pull of image and returns the handle that
 // receives its progress messages. Outside a scan the pull is still tracked by
 // the handle, for logging, but does not appear in snapshots.
@@ -262,6 +327,25 @@ func (t *Tracker) Snapshot() Snapshot {
 	return snapshot
 }
 
+// updateScan applies change to a tracked container's scan, creating it.
+func (t *Tracker) updateScan(name string, change func(scan *Scan)) {
+	name = strings.TrimPrefix(name, "/")
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	entry, ok := t.containers[name]
+	if t.scans == 0 || !ok {
+		return
+	}
+
+	if entry.scan == nil {
+		entry.scan = &Scan{}
+	}
+
+	change(entry.scan)
+}
+
 // containersLocked lists the tracked containers in order, with pull progress
 // when withPulls is set. The caller holds t.mu.
 func (t *Tracker) containersLocked(withPulls bool) []Container {
@@ -274,6 +358,11 @@ func (t *Tracker) containersLocked(withPulls bool) []Container {
 			Image: entry.image,
 			Step:  entry.step,
 			Since: entry.since.UTC().Format(time.RFC3339),
+		}
+
+		if entry.scan != nil {
+			scan := *entry.scan
+			container.Scan = &scan
 		}
 
 		if withPulls && entry.step == StepPulling {

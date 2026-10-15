@@ -508,6 +508,14 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+.scan-diff {
+  color: var(--ink);
+}
+
+.scan-diff-worse {
+  color: var(--failed);
+}
+
 .progress {
   display: block;
   width: 100%;
@@ -555,6 +563,113 @@ input {
   to {
     background-position: 28px 0;
   }
+}
+
+/* Scan status: what an on-demand scan is doing, step by step. */
+
+.scan-status {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 48rem;
+  margin-bottom: 2rem;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--ink);
+  background: var(--deck);
+}
+
+.scan-status-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.scan-status-step {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.scan-status-clock,
+.scan-status-count {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-status-count {
+  margin: 0;
+  font-size: var(--step--1);
+}
+
+.scan-status .progress {
+  max-width: none;
+}
+
+.scan-status-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.3rem 1rem;
+  margin: 0;
+  font-size: var(--step--1);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-status-facts dt {
+  color: var(--ink-soft);
+}
+
+.scan-status-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.scan-log {
+  display: grid;
+  gap: 0.3rem;
+  max-height: 14rem;
+  margin: 0;
+  padding: 0.75rem 0 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  font-size: var(--step--1);
+  /* Keeps flags such as --scan-timeout from reading as a dash. */
+  font-variant-ligatures: none;
+}
+
+.scan-log-entry {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.scan-log-entry time {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-log-entry:first-child span {
+  font-weight: 600;
+}
+
+.scan-log-problem span {
+  color: var(--failed);
+}
+
+.scan-status-done {
+  border-left-color: var(--line-strong);
+}
+
+.scan-status-done summary {
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.scan-status-done[open] summary {
+  margin-bottom: 0.25rem;
 }
 
 .unit-detail {

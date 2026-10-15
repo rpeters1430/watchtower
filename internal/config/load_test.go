@@ -297,7 +297,7 @@ func TestLoadScan(t *testing.T) {
 
 		got, err := loadScan(vCfg)
 		require.NoError(t, err)
-		assert.False(t, got.Enabled)
+		assert.True(t, got.Enabled)
 		assert.Equal(t, scanner.GateOff, got.Gate)
 		assert.Equal(t, scanner.DefaultTrivyImage, got.Image)
 		assert.Equal(t, scanner.DefaultTimeout, got.Timeout)

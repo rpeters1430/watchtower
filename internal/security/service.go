@@ -3,20 +3,24 @@ package security
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 )
 
-// maxConcurrentScans bounds on-demand image scans running at once. Each scan
-// is a scanner container reading a whole image.
-const maxConcurrentScans = 2
+// maxActivity caps how many steps a job's activity list keeps.
+const maxActivity = 40
+
+// minRemaining is the least time an estimate leaves for a scan that has
+// already run longer than expected.
+const minRemaining = 5 * time.Second
 
 var (
 	// ErrBusy is returned when a scan is requested while one is running.
@@ -64,6 +68,39 @@ type Job struct {
 	Failed int `json:"failed"`
 	// Current names the containers being scanned right now.
 	Current []string `json:"current,omitempty"`
+	// Waiting names the containers still queued, in the order they will be
+	// scanned. Images are scanned one at a time.
+	Waiting []string `json:"waiting,omitempty"`
+	// Images is the number of distinct images the scan covers.
+	Images int `json:"images"`
+	// ImagesDone is the number of those images scanned so far.
+	ImagesDone int `json:"images_done"`
+	// CurrentStartedAt is when the image being scanned right now started.
+	CurrentStartedAt *time.Time `json:"current_started_at,omitempty"`
+	// EstimatedFinishAt is when the scan is expected to finish, based on how
+	// long earlier scans of the same images took, or on the average so far.
+	// Omitted until there is anything to base it on.
+	EstimatedFinishAt *time.Time `json:"estimated_finish_at,omitempty"`
+	// Step says what the scan is doing right now, such as downloading the
+	// vulnerability database.
+	Step string `json:"step,omitempty"`
+	// StepStartedAt is when the current step began.
+	StepStartedAt *time.Time `json:"step_started_at,omitempty"`
+	// Activity lists the scan's steps so far, oldest first, up to the most
+	// recent maxActivity.
+	Activity []Activity `json:"activity,omitempty"`
+}
+
+// Activity is one step of an on-demand scan.
+type Activity struct {
+	// At is when the step began.
+	At time.Time `json:"at"`
+	// Containers names the containers the step is about, if any.
+	Containers []string `json:"containers,omitempty"`
+	// Message says what happened, in a sentence.
+	Message string `json:"message"`
+	// Problem is true when the step is a failure.
+	Problem bool `json:"problem,omitempty"`
 }
 
 // Options configures a Service.
@@ -89,6 +126,20 @@ type Service struct {
 
 	mu  sync.Mutex
 	job Job
+	// plan holds what the running job needs to estimate its finish.
+	plan plan
+}
+
+// plan is the running job's queue and timings, for its estimate.
+type plan struct {
+	// queue holds the image IDs not started yet, in scan order.
+	queue []string
+	// current is the image ID being scanned.
+	current string
+	// previous maps an image ID to how long its last scan took.
+	previous map[string]time.Duration
+	// taken lists how long each image of this job took.
+	taken []time.Duration
 }
 
 // NewService creates a Service.
@@ -246,10 +297,7 @@ func (s *Service) Job() Job {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	job := s.job
-	job.Current = slices.Clone(s.job.Current)
-
-	return job
+	return s.snapshot()
 }
 
 // Start scans the running image of each target in the background, against
@@ -296,9 +344,27 @@ func (s *Service) Start(ctx context.Context, targets []Target) (Job, error) {
 		return Job{}, ErrBusy
 	}
 
+	previous := make(map[string]time.Duration)
+
+	for _, report := range s.store.Summaries() {
+		if report.ScanSeconds > 0 && report.Error == "" {
+			previous[report.ImageID] = time.Duration(report.ScanSeconds * float64(time.Second))
+		}
+	}
+
+	waiting := make([]string, 0, total)
+
+	for _, imageID := range order {
+		for _, target := range byImage[imageID] {
+			waiting = append(waiting, target.Name)
+		}
+	}
+
 	started := s.now().UTC()
-	s.job = Job{Running: true, StartedAt: &started, Total: total}
-	job := s.job
+	s.job = Job{Running: true, StartedAt: &started, Total: total, Images: len(order), Waiting: waiting}
+	s.plan = plan{queue: slices.Clone(order), previous: previous}
+	s.step(nil, startMessage(total, len(order)), false)
+	job := s.snapshot()
 
 	s.mu.Unlock()
 
@@ -309,73 +375,284 @@ func (s *Service) Start(ctx context.Context, targets []Target) (Job, error) {
 	return job, nil
 }
 
-// run scans each image and records a report for every container using it.
-func (s *Service) run(ctx context.Context, order []string, byImage map[string][]Target) {
-	var group errgroup.Group
+// snapshot copies the job state and adds the current estimate. Callers
+// hold s.mu.
+//
+// Returns:
+//   - Job: Copy of the job state.
+func (s *Service) snapshot() Job {
+	job := s.job
+	job.Current = slices.Clone(s.job.Current)
+	job.Waiting = slices.Clone(s.job.Waiting)
+	job.Activity = slices.Clone(s.job.Activity)
 
-	group.SetLimit(maxConcurrentScans)
-
-	for _, imageID := range order {
-		targets := byImage[imageID]
-
-		group.Go(func() error {
-			names := make([]string, 0, len(targets))
-			for _, target := range targets {
-				names = append(names, target.Name)
-			}
-
-			s.mu.Lock()
-			s.job.Current = append(s.job.Current, names...)
-			s.mu.Unlock()
-
-			result, err := s.scanner.Rescan(ctx, imageID)
-			if err != nil {
-				s.log.Warn().Err(err).Strs("containers", names).Msg("Could not scan image")
-			}
-
-			now := s.now()
-
-			for _, target := range targets {
-				report := newReport(target.Name, target.Image, imageID, result, err, now)
-
-				// A waiting update is still waiting while the container runs the same image.
-				if previous, ok := s.store.Get(target.Name); ok {
-					if previous.Update != nil && previous.ImageID == imageID {
-						report.Update = previous.Update
-					}
-					if previous.LastUpdate != nil {
-						report.LastUpdate = previous.LastUpdate
-					}
-				}
-
-				s.store.Record(report)
-			}
-
-			s.mu.Lock()
-			s.job.Current = slices.DeleteFunc(s.job.Current, func(name string) bool {
-				return slices.Contains(names, name)
-			})
-			s.job.Done += len(targets)
-
-			if err != nil {
-				s.job.Failed += len(targets)
-			}
-			s.mu.Unlock()
-
-			return nil
-		})
+	if job.Running {
+		job.EstimatedFinishAt = s.estimate()
 	}
 
-	_ = group.Wait()
+	return job
+}
+
+// estimate works out when the running job should finish: each remaining
+// image takes as long as its last scan did, or else the average of this
+// job's scans, or else the average of earlier scans. Callers hold s.mu.
+//
+// Returns:
+//   - *time.Time: Expected finish, or nil when there is nothing to go on.
+func (s *Service) estimate() *time.Time {
+	average := mean(s.plan.taken)
+	if average == 0 {
+		average = mean(slices.Collect(maps.Values(s.plan.previous)))
+	}
+
+	guess := func(imageID string) time.Duration {
+		if took, ok := s.plan.previous[imageID]; ok {
+			return took
+		}
+
+		return average
+	}
+
+	now := s.now()
+
+	var remaining time.Duration
+
+	for _, imageID := range s.plan.queue {
+		took := guess(imageID)
+		if took == 0 {
+			return nil
+		}
+
+		remaining += took
+	}
+
+	if s.plan.current != "" && s.job.CurrentStartedAt != nil {
+		took := guess(s.plan.current)
+		if took == 0 {
+			return nil
+		}
+
+		remaining += max(took-now.Sub(*s.job.CurrentStartedAt), minRemaining)
+	}
+
+	finish := now.Add(remaining).UTC().Truncate(time.Second)
+
+	return &finish
+}
+
+// mean returns the average of durations, or 0 for none.
+func mean(durations []time.Duration) time.Duration {
+	if len(durations) == 0 {
+		return 0
+	}
+
+	var sum time.Duration
+	for _, d := range durations {
+		sum += d
+	}
+
+	return sum / time.Duration(len(durations))
+}
+
+// step records what the running job is doing. A step repeating the current
+// one is dropped. Callers hold s.mu.
+//
+// Parameters:
+//   - names: Containers the step is about, or nil.
+//   - message: What is happening.
+//   - problem: True when the step is a failure.
+func (s *Service) step(names []string, message string, problem bool) {
+	if message == "" || (s.job.Step == message && !problem) {
+		return
+	}
+
+	startedAt := s.now().UTC()
+
+	if !problem {
+		s.job.Step = message
+		s.job.StepStartedAt = &startedAt
+	}
+
+	s.job.Activity = append(s.job.Activity, Activity{
+		At:         startedAt,
+		Containers: slices.Clone(names),
+		Message:    message,
+		Problem:    problem,
+	})
+
+	if extra := len(s.job.Activity) - maxActivity; extra > 0 {
+		s.job.Activity = slices.Delete(s.job.Activity, 0, extra)
+	}
+}
+
+// run scans each image in turn and records a report for every container
+// using it. Images go one at a time: the reviewer serializes scans anyway,
+// so this keeps the job's current image and estimate accurate.
+func (s *Service) run(ctx context.Context, order []string, byImage map[string][]Target) {
+	for _, imageID := range order {
+		s.scanImage(ctx, imageID, byImage[imageID])
+	}
 
 	finished := s.now().UTC()
 
 	s.mu.Lock()
 	s.job.Running = false
 	s.job.Current = nil
+	s.job.Waiting = nil
+	s.job.CurrentStartedAt = nil
+	s.job.Step = ""
+	s.job.StepStartedAt = nil
 	s.job.FinishedAt = &finished
+	s.plan = plan{}
 	job := s.job
 	s.mu.Unlock()
 
 	s.log.Info().Int("containers", job.Total).Int("failed", job.Failed).Msg("Security scan finished")
+}
+
+// scanImage scans one image and records a report for each container using it.
+//
+// Parameters:
+//   - ctx: Context for the scan.
+//   - imageID: Image to scan.
+//   - targets: Containers running the image.
+func (s *Service) scanImage(ctx context.Context, imageID string, targets []Target) {
+	names := make([]string, 0, len(targets))
+	for _, target := range targets {
+		names = append(names, target.Name)
+	}
+
+	began := s.now()
+	beganUTC := began.UTC()
+
+	s.mu.Lock()
+	s.job.Current = names
+	s.job.CurrentStartedAt = &beganUTC
+	s.job.Waiting = slices.DeleteFunc(s.job.Waiting, func(name string) bool {
+		return slices.Contains(names, name)
+	})
+	s.plan.queue = slices.DeleteFunc(s.plan.queue, func(id string) bool { return id == imageID })
+	s.plan.current = imageID
+	s.step(names, "Scanning "+strings.Join(names, ", "), false)
+	s.mu.Unlock()
+
+	progress := scanner.WithProgress(ctx, func(step string) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		s.step(names, step, false)
+	})
+
+	result, err := s.scanner.Rescan(progress, imageID)
+	if err != nil {
+		s.log.Warn().Err(err).Strs("containers", names).Msg("Could not scan image")
+	}
+
+	now := s.now()
+	took := now.Sub(began)
+
+	for _, target := range targets {
+		report := newReport(target.Name, target.Image, imageID, result, err, now)
+
+		if err == nil {
+			report.ScanSeconds = took.Seconds()
+		}
+
+		// A waiting update is still waiting while the container runs the same image.
+		if previous, ok := s.store.Get(target.Name); ok {
+			if previous.Update != nil && previous.ImageID == imageID {
+				report.Update = previous.Update
+			}
+
+			if previous.LastUpdate != nil {
+				report.LastUpdate = previous.LastUpdate
+			}
+		}
+
+		s.store.Record(report)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.job.Current = nil
+	s.job.CurrentStartedAt = nil
+	s.plan.current = ""
+	s.job.Done += len(targets)
+	s.job.ImagesDone++
+
+	if err != nil {
+		s.job.Failed += len(targets)
+		s.step(names, "Couldn't scan "+strings.Join(names, ", ")+": "+err.Error(), true)
+
+		return
+	}
+
+	// A scan cut short by an error says nothing about how long a full one takes.
+	s.plan.taken = append(s.plan.taken, took)
+	s.step(names, "Finished "+strings.Join(names, ", ")+" in "+roundDuration(took)+": "+findingsMessage(result), false)
+}
+
+// roundDuration formats d to whole seconds, such as "1m12s".
+func roundDuration(d time.Duration) string {
+	return d.Round(time.Second).String()
+}
+
+// startMessage describes a scan as it starts.
+//
+// Parameters:
+//   - containers: Number of containers covered.
+//   - images: Number of distinct images among them.
+//
+// Returns:
+//   - string: Sentence for the activity list.
+func startMessage(containers, images int) string {
+	message := "Started scanning " + plural(containers, "container")
+	if images != containers {
+		message += " (" + plural(images, "image") + ")"
+	}
+
+	return message
+}
+
+// findingsMessage summarises a scan result for the activity list.
+//
+// Parameters:
+//   - result: Scan result, possibly nil.
+//
+// Returns:
+//   - string: Number of findings, worst severities first.
+func findingsMessage(result *scanner.Result) string {
+	if result == nil || len(result.Findings) == 0 {
+		return "no findings"
+	}
+
+	counts := result.Counts()
+	parts := make([]string, 0, 5) //nolint:mnd // One per severity.
+
+	for _, level := range []struct {
+		n    int
+		name string
+	}{
+		{counts.Critical, "critical"},
+		{counts.High, "high"},
+		{counts.Medium, "medium"},
+		{counts.Low, "low"},
+		{counts.Unknown, "unknown"},
+	} {
+		if level.n > 0 {
+			parts = append(parts, strconv.Itoa(level.n)+" "+level.name)
+		}
+	}
+
+	return plural(len(result.Findings), "finding") + " (" + strings.Join(parts, ", ") + ")"
+}
+
+// plural formats n with noun, adding "s" unless n is 1.
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+
+	return strconv.Itoa(n) + " " + noun + "s"
 }

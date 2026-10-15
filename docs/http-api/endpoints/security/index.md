@@ -72,7 +72,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/security
 | `available`     | `false` when Watchtower could not set up the scanner; `reason` then says why                      |
 | `scan_updates`  | Whether pending updates are scanned before they are applied (the `scan` setting)                  |
 | `gate`          | The scan gate in force: `off`, `low`, `medium`, `high`, or `critical`                             |
-| `job`           | Progress of the latest scan on request. `current` names the containers being scanned               |
+| `job`           | Progress of the latest scan on request. `current` names the containers being scanned, `step` says what the scan is doing right now (since `step_started_at`), `activity` lists each step so far with its time (failed steps have `problem: true` and the reason), `waiting` names the containers still queued, `images` and `images_done` count distinct images, and `estimated_finish_at` is the expected finish, based on how long earlier scans of the same images took, once there is anything to base it on |
 | `counts`        | Findings in the running image by severity                                                         |
 | `fixable`       | Findings with a published fixed version                                                           |
 | `error`         | Why the running image could not be scanned                                                        |
@@ -117,7 +117,8 @@ curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/js
     -d '{"containers": ["web", "db"]}' http://localhost:8080/v1/security/scan
 ```
 
-The scan runs in the background and the request returns `202 Accepted` with the job. Poll `GET /v1/security` for progress; containers sharing an image share one scan.
+The scan runs in the background and the request returns `202 Accepted` with the job. Poll `GET /v1/security` for progress; containers sharing an image share one scan, and images are scanned one at a time.
+While it runs, `job.step` follows the scanner's own phases, such as downloading the vulnerability database or checking the image's files for secrets.
 
 | **Status** | **Meaning**                                    |
 |:----------:|:-----------------------------------------------|

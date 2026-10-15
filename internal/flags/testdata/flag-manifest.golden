@@ -889,7 +889,7 @@
 --scan
   shorthand: ""
   kind: bool
-  default: false
+  default: true
   env: WATCHTOWER_SCAN
   list-parse: none
   hidden: false
@@ -913,7 +913,7 @@
 --scan-timeout
   shorthand: ""
   kind: duration
-  default: time.Duration(5m0s)
+  default: time.Duration(15m0s)
   env: WATCHTOWER_SCAN_TIMEOUT
   list-parse: none
   hidden: false

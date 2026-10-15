@@ -47,6 +47,8 @@
     acting: new Set(),
     security: null,
     securityProblem: "",
+    securityStarting: false,
+    scanLogOpen: false,
     securityDetails: new Map(),
     securityExpanded: new Set(),
     securityShowAll: new Set(),
@@ -98,6 +100,8 @@
 
   const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
   const exact = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const clock = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
+  const clockShort = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 
   function ago(date) {
     const seconds = Math.round((date.getTime() - Date.now()) / 1000);
@@ -423,7 +427,13 @@
     await loadChecks();
 
     if (updated.length > 0) {
-      notify(`Updated ${updated.length === 1 ? updated[0] : count(updated.length, "container")}.`);
+      notify(`Updated ${updated.length === 1 ? updated[0] : count(updated.length, "container")}.${updateScanSummary(last.containers || [])}`);
+    }
+
+    // Reports now include what each update fixed.
+    if (feature("security")) {
+      await loadSecurity();
+      state.securityDetails.clear();
     }
 
     render();
@@ -452,6 +462,12 @@
         }
 
         return { key: "working", label: "Downloading" };
+      case "scanning":
+        return { key: "working", label: "Scanning" };
+      case "scanned":
+        return { key: "working", label: "Scanned" };
+      case "held":
+        return { key: "waiting", label: "Held back" };
       case "stopping":
         return { key: "working", label: "Stopping" };
       case "starting":
@@ -487,6 +503,16 @@
         }
 
         return "Asking the registry for the new image.";
+      case "scanning":
+        return `Checking the new image for known vulnerabilities and comparing it with the running one. ${
+          entry.scan && entry.scan.step ? `${entry.scan.step}.` : "Starting the scanner."
+        } Images are scanned one at a time.`;
+      case "scanned":
+        return entry.scan && entry.scan.error
+          ? "The new image couldn't be scanned, so it's updated without a review. Waiting its turn to restart."
+          : "Scanned. Waiting its turn to restart.";
+      case "held":
+        return "Held back: the new image adds findings at or above the scan gate, so the container keeps its current image.";
       case "stopping":
         return "Stopping the old container. It gets its stop timeout to shut down cleanly.";
       case "starting":
@@ -498,6 +524,77 @@
       default:
         return "";
     }
+  }
+
+  // How an update changes known vulnerabilities, once its scan is done.
+  function scanDiffText(scan) {
+    if (!scan || !scan.done || scan.error) {
+      return "";
+    }
+
+    const fixed = total(scan.fixed_counts);
+    const introduced = total(scan.introduced_counts);
+
+    if (fixed === 0 && introduced === 0) {
+      const latest = total(scan.latest_counts);
+
+      return `The update doesn't change known vulnerabilities${latest > 0 ? ` (the new image has ${count(latest, "finding")})` : ""}.`;
+    }
+
+    const parts = [];
+
+    if (fixed > 0) {
+      parts.push(`fixes ${count(fixed, "known vulnerability", "known vulnerabilities")} (${severityList(scan.fixed_counts)})`);
+    }
+
+    if (introduced > 0) {
+      parts.push(`brings in ${count(introduced, "new one")} (${severityList(scan.introduced_counts)})`);
+    }
+
+    return `The update ${parts.join(" and ")}.`;
+  }
+
+  // One sentence on what the finished update's scans found, for its notice.
+  function updateScanSummary(entries) {
+    const scanned = entries.filter((entry) => entry.step === "updated" && entry.scan && entry.scan.done && !entry.scan.error);
+
+    if (scanned.length === 0) {
+      return "";
+    }
+
+    const fixed = scanned.reduce((sum, entry) => sum + total(entry.scan.fixed_counts), 0);
+    const introduced = scanned.reduce((sum, entry) => sum + total(entry.scan.introduced_counts), 0);
+
+    if (fixed === 0 && introduced === 0) {
+      return " Known vulnerabilities are unchanged.";
+    }
+
+    return ` ${capitalise(
+      [
+        fixed > 0 && `fixed ${count(fixed, "known vulnerability", "known vulnerabilities")}`,
+        introduced > 0 && `brought in ${count(introduced, "new one")}`,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    )}.`;
+  }
+
+  function scanDiff(entry) {
+    const text = scanDiffText(entry.scan);
+
+    if (!text) {
+      return null;
+    }
+
+    // Red only for what the page calls serious elsewhere: new critical or high findings.
+    const worse = serious(entry.scan.introduced_counts);
+
+    return el(
+      "p",
+      { class: worse ? "unit-progress-text scan-diff scan-diff-worse" : "unit-progress-text scan-diff" },
+      text,
+      feature("security") && [" ", el("a", { class: "link-subtle", href: "#/security" }, "Details")],
+    );
   }
 
   // The bar shows download bytes, then unpacked layers.
@@ -881,7 +978,7 @@
     let note;
     const activity = state.activity && state.activity.running ? state.activity : null;
     const entries = activity ? activity.containers || [] : [];
-    const active = entries.filter((entry) => entry.step !== "updated" && entry.step !== "failed");
+    const active = entries.filter((entry) => !["updated", "failed", "held"].includes(entry.step));
     const done = entries.filter((entry) => entry.step === "updated").length;
 
     if (activity) {
@@ -1283,6 +1380,7 @@
           { class: "unit-progress", role: "status" },
           activityBar(entry),
           el("p", { class: "unit-progress-text" }, activityDetail(entry)),
+          scanDiff(entry),
         ),
       open && facts(container),
     );
@@ -1632,7 +1730,10 @@
 
   // A scan is polled this often while it runs. Scans take minutes, so a slow
   // poll keeps the page well inside the API's rate limit.
-  const SECURITY_POLL_MS = 5_000;
+  // A running scan is polled often enough that each step shows up while it
+  // happens, and well inside the API's per-minute request limit.
+  const SECURITY_POLL_MS = 3_000;
+  const SECURITY_FIRST_POLL_MS = 1_000;
   const FINDING_LIMIT = 25;
   const SEVERITIES = ["critical", "high", "medium", "low", "unknown"];
   const GATES = [
@@ -1644,6 +1745,7 @@
   ];
 
   let securityTimer = null;
+  let scanClockTimer = null;
 
   async function loadSecurity() {
     if (!feature("security")) {
@@ -1672,10 +1774,43 @@
     return Boolean(state.security && state.security.job && state.security.job.running);
   }
 
-  function scheduleSecurityPoll() {
+  function scheduleSecurityPoll(delay = SECURITY_POLL_MS) {
     if (!securityTimer && securityRunning()) {
-      securityTimer = setTimeout(pollSecurity, SECURITY_POLL_MS);
+      securityTimer = setTimeout(pollSecurity, delay);
     }
+
+    scheduleScanClock();
+  }
+
+  // Ticks the elapsed times on the scan status panel once a second, without
+  // asking Watchtower for anything.
+  function scheduleScanClock() {
+    const wanted = securityRunning() || state.securityStarting;
+
+    if (wanted && !scanClockTimer) {
+      scanClockTimer = setInterval(tickScanClock, 1_000);
+    } else if (!wanted && scanClockTimer) {
+      clearInterval(scanClockTimer);
+      scanClockTimer = null;
+    }
+  }
+
+  function tickScanClock() {
+    document.querySelectorAll("[data-since]").forEach((node) => {
+      node.textContent = elapsed(new Date(node.dataset.since));
+    });
+    document.querySelectorAll("[data-until]").forEach((node) => {
+      node.textContent = remaining(new Date(node.dataset.until));
+    });
+  }
+
+  function elapsed(since) {
+    const seconds = Math.max(0, Math.floor((Date.now() - since.getTime()) / 1000));
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const pad = (n) => String(n).padStart(2, "0");
+
+    return hours > 0 ? `${hours}:${pad(minutes % 60)}:${pad(seconds % 60)}` : `${minutes}:${pad(seconds % 60)}`;
   }
 
   async function pollSecurity() {
@@ -1694,10 +1829,11 @@
       const scanned = job.total - job.failed;
 
       if (job.failed > 0) {
+        state.scanLogOpen = true;
         notify(
           scanned > 0
-            ? `Scanned ${count(scanned, "container")}. ${capitalise(count(job.failed, "container"))} couldn't be scanned; Watchtower's log has the reason.`
-            : "The scan didn't finish. Watchtower's log has the reason.",
+            ? `Scanned ${count(scanned, "container")}. ${capitalise(count(job.failed, "container"))} couldn't be scanned; the scan's steps on the Security page say why.`
+            : "The scan didn't finish. The scan's steps on the Security page say why.",
           true,
         );
       } else {
@@ -1715,6 +1851,13 @@
   }
 
   async function startSecurityScan(names) {
+    // Watchtower lists the containers before it answers, which can take a
+    // while with many containers, so say so straight away.
+    state.securityStarting = { at: new Date().toISOString(), names: names || null };
+    renderSecurity();
+    renderManifest();
+    scheduleScanClock();
+
     try {
       const data = await request("POST", "/v1/security/scan", names ? { containers: names } : undefined);
 
@@ -1723,8 +1866,175 @@
       notify(`Couldn't start the scan. ${capitalise(problem.message)}.`, true);
     }
 
+    state.securityStarting = false;
     renderSecurity();
-    scheduleSecurityPoll();
+    renderManifest();
+    scheduleSecurityPoll(SECURITY_FIRST_POLL_MS);
+  }
+
+  // What the scan is doing, step by step: shown from the moment the button
+  // is pressed until the scan ends, then kept as a record of the last scan.
+  function scanStatus() {
+    const security = state.security;
+    const job = security && security.job;
+    const starting = state.securityStarting;
+
+    if (!security || !security.available || (!starting && !(job && job.started_at))) {
+      return null;
+    }
+
+    if (starting) {
+      return el(
+        "section",
+        { class: "scan-status", "aria-live": "polite", "aria-label": "Scan progress" },
+        el(
+          "div",
+          { class: "scan-status-head" },
+          el("span", { class: "end end-tiny end-working", "aria-hidden": "true" }),
+          el("p", { class: "scan-status-step" }, "Asking Watchtower to start the scan"),
+          el("span", { class: "scan-status-clock", "data-since": starting.at }, elapsed(new Date(starting.at))),
+        ),
+        el("progress", { class: "progress", "aria-label": "Scan progress" }),
+        el(
+          "p",
+          { class: "scan-status-count" },
+          starting.names ? `Looking up ${starting.names.join(", ")}.` : "Watchtower lists your containers and their images first.",
+        ),
+      );
+    }
+
+    const activity = (job.activity || []).slice().reverse();
+    const log =
+      activity.length > 0 &&
+      el(
+        "ol",
+        { class: "scan-log" },
+        activity.map((entry) =>
+          el(
+            "li",
+            { class: entry.problem ? "scan-log-entry scan-log-problem" : "scan-log-entry" },
+            el("time", { datetime: entry.at, title: exact.format(new Date(entry.at)) }, clock.format(new Date(entry.at))),
+            el("span", null, entry.message),
+          ),
+        ),
+      );
+
+    if (!job.running) {
+      if (!log) {
+        return null;
+      }
+
+      const finished = job.finished_at ? new Date(job.finished_at) : null;
+      const took = finished && job.started_at ? elapsedBetween(new Date(job.started_at), finished) : "";
+
+      return el(
+        "details",
+        {
+          class: "scan-status scan-status-done",
+          open: state.scanLogOpen,
+          ontoggle: (event) => {
+            state.scanLogOpen = event.currentTarget.open;
+          },
+        },
+        el(
+          "summary",
+          null,
+          `What the last scan did${finished ? `, ${ago(finished)}` : ""}${took ? ` (took ${took})` : ""}`,
+        ),
+        log,
+      );
+    }
+
+    const step = job.step || "Starting the scan";
+    const since = job.step_started_at || job.started_at;
+    const current = (job.current || []).join(", ");
+    const waiting = job.waiting || [];
+    const images = job.images || 0;
+    const finish = job.estimated_finish_at ? new Date(job.estimated_finish_at) : null;
+
+    return el(
+      "section",
+      { class: "scan-status", "aria-live": "polite", "aria-label": "Scan progress" },
+      el(
+        "div",
+        { class: "scan-status-head" },
+        el("span", { class: "end end-tiny end-working", "aria-hidden": "true" }),
+        el("p", { class: "scan-status-step" }, step),
+        el("span", { class: "scan-status-clock", "data-since": since, title: "Time on this step" }, elapsed(new Date(since))),
+      ),
+      el("progress", {
+        class: "progress",
+        "aria-label": "Images scanned",
+        max: String(images || job.total),
+        value: String(images ? job.images_done : job.done),
+      }),
+      el(
+        "dl",
+        { class: "scan-status-facts" },
+        el("dt", null, "Now scanning"),
+        el(
+          "dd",
+          null,
+          current || "Nothing yet",
+          images > 0 && current ? ` (image ${Math.min(job.images_done + 1, images)} of ${images})` : "",
+          job.current_started_at && [" for ", el("span", { "data-since": job.current_started_at }, elapsed(new Date(job.current_started_at)))],
+        ),
+        el("dt", null, "Done"),
+        el(
+          "dd",
+          null,
+          `${job.done} of ${count(job.total, "container")}`,
+          job.failed > 0 ? `, ${job.failed} couldn't be scanned` : "",
+          ". Running for ",
+          el("span", { "data-since": job.started_at }, elapsed(new Date(job.started_at))),
+        ),
+        el("dt", null, "Time left"),
+        el(
+          "dd",
+          null,
+          finish
+            ? [
+                "About ",
+                el("span", { "data-until": job.estimated_finish_at }, remaining(finish)),
+                `, finishing around ${clockShort.format(finish)}`,
+              ]
+            : "Worked out once the first image is done",
+        ),
+        waiting.length > 0 && el("dt", null, "Up next"),
+        waiting.length > 0 && el("dd", null, waitingList(waiting)),
+      ),
+      log,
+    );
+  }
+
+  function remaining(finish) {
+    const seconds = Math.round((finish - Date.now()) / 1000);
+
+    if (seconds < 60) {
+      return "under a minute";
+    }
+
+    const minutes = Math.round(seconds / 60);
+
+    return minutes < 60 ? count(minutes, "minute") : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+  }
+
+  function waitingList(names) {
+    const shown = names.slice(0, 5).join(", ");
+
+    return names.length > 5 ? `${shown}, and ${names.length - 5} more` : shown;
+  }
+
+  function elapsedBetween(start, end) {
+    const seconds = Math.max(0, Math.round((end - start) / 1000));
+
+    if (seconds < 60) {
+      return count(seconds, "second");
+    }
+
+    const minutes = Math.round(seconds / 60);
+
+    return minutes < 60 ? count(minutes, "minute") : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
   }
 
   function securityReport(name) {
@@ -1831,15 +2141,14 @@
     } else if (!security.available) {
       line = "The image scanner isn't available.";
       note = security.reason || "";
+    } else if (state.securityStarting) {
+      line = "Starting the scan.";
+      note = "";
     } else if (securityRunning()) {
       const current = (job.current || []).join(", ");
 
       line = current ? `Scanning ${current}.` : "Starting the scan.";
-      note = `${job.done} of ${count(job.total, "container")} scanned so far.`;
-
-      if (scanned.length === 0) {
-        note += " The first scan downloads Trivy's vulnerability database, which can take a few minutes.";
-      }
+      note = scanned.length === 0 ? "The first scan downloads Trivy's vulnerability database, which can take a few minutes." : "";
     } else if (scanned.length === 0) {
       line = "No image has been scanned yet.";
       note = "A scan looks for known vulnerabilities, leaked secrets, and risky settings in each running image. It only reads images and changes nothing.";
@@ -1879,10 +2188,10 @@
             {
               class: "button button-primary",
               type: "button",
-              disabled: securityRunning() || rows.length === 0,
+              disabled: securityRunning() || state.securityStarting || rows.length === 0,
               onclick: () => startSecurityScan(),
             },
-            securityRunning() ? "Scanning" : scanned.length > 0 ? "Scan all again" : "Scan all containers",
+            state.securityStarting ? "Starting" : securityRunning() ? "Scanning" : scanned.length > 0 ? "Scan all again" : "Scan all containers",
           ),
         ),
     );
@@ -2169,6 +2478,12 @@
         el("h3", { class: "detail-title" }, `Fixed by most recent update (${ready.last_update.fixed.length})`),
         el("ul", { class: "finding-list" }, ready.last_update.fixed.map((finding) => findingRow(finding, false, true))),
       ),
+      ready && ready.last_update && ready.last_update.introduced && ready.last_update.introduced.length > 0 && el(
+        "div",
+        { class: "changes" },
+        el("h3", { class: "detail-title" }, `Brought in by most recent update (${ready.last_update.introduced.length})`),
+        el("ul", { class: "finding-list" }, ready.last_update.introduced.map((finding) => findingRow(finding, false))),
+      ),
       el(
         "p",
         { class: "setting-help" },
@@ -2188,7 +2503,7 @@
 
     return el(
       "button",
-      { class: "link-button", type: "button", disabled: securityRunning(), onclick: () => startSecurityScan([name]) },
+      { class: "link-button", type: "button", disabled: securityRunning() || state.securityStarting, onclick: () => startSecurityScan([name]) },
       securityReport(name) ? "Scan again" : "Scan now",
     );
   }
@@ -2254,6 +2569,7 @@
 
     return [
       securityLookout(rows),
+      scanStatus(),
       securityPolicy(),
       available && rows.length > 0 && el("ul", { class: "manifest" }, rows.map(securityUnit)),
       available &&

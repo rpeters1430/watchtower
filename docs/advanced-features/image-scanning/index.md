@@ -1,7 +1,7 @@
 # Image Scanning
 
 Watchtower scans images with [Trivy](https://trivy.dev) to show which known vulnerabilities each container's image has, which ones a waiting update fixes, and what to do about the rest.
-With `--scan` turned on, it also scans each update before applying it, and can hold back updates that make things worse.
+By default (`--scan`) it also scans each update before applying it, and can hold back updates that make things worse.
 Configuration options are listed under [Image Scanning](../../configuration/image-scanning/index.md).
 
 ## Seeing and Fixing Findings

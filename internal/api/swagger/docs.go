@@ -1234,6 +1234,14 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "scan": {
+                    "description": "Scan is the security scan of the update, once one has started.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activity.Scan"
+                        }
+                    ]
+                },
                 "since": {
                     "description": "Since is when the container entered this step, in RFC 3339.",
                     "type": "string"
@@ -1286,6 +1294,47 @@ const docTemplate = `{
                 "total_bytes": {
                     "description": "TotalBytes is the download size of the layers reported so far. It can\ngrow while the pull runs, because Docker reports sizes as layers start.",
                     "type": "integer"
+                }
+            }
+        },
+        "activity.Scan": {
+            "type": "object",
+            "properties": {
+                "done": {
+                    "description": "Done is true once the scan finished, successfully or not.",
+                    "type": "boolean"
+                },
+                "error": {
+                    "description": "Error says why the scan failed. The update goes ahead without a review.",
+                    "type": "string"
+                },
+                "fixed_counts": {
+                    "description": "FixedCounts tallies, by severity, the findings the update fixes.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "introduced_counts": {
+                    "description": "IntroducedCounts tallies, by severity, the findings the update brings in.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "latest_counts": {
+                    "description": "LatestCounts tallies the new image's findings by severity.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "step": {
+                    "description": "Step says what the scanner is doing while Step is scanning.",
+                    "type": "string"
                 }
             }
         },
@@ -1584,6 +1633,30 @@ const docTemplate = `{
                 "SeverityCritical"
             ]
         },
+        "security.Activity": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "description": "At is when the step began.",
+                    "type": "string"
+                },
+                "containers": {
+                    "description": "Containers names the containers the step is about, if any.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "message": {
+                    "description": "Message says what happened, in a sentence.",
+                    "type": "string"
+                },
+                "problem": {
+                    "description": "Problem is true when the step is a failure.",
+                    "type": "boolean"
+                }
+            }
+        },
         "security.AppliedUpdate": {
             "type": "object",
             "properties": {
@@ -1630,6 +1703,13 @@ const docTemplate = `{
         "security.Job": {
             "type": "object",
             "properties": {
+                "activity": {
+                    "description": "Activity lists the scan's steps so far, oldest first, up to the most\nrecent maxActivity.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/security.Activity"
+                    }
+                },
                 "current": {
                     "description": "Current names the containers being scanned right now.",
                     "type": "array",
@@ -1637,9 +1717,17 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "current_started_at": {
+                    "description": "CurrentStartedAt is when the image being scanned right now started.",
+                    "type": "string"
+                },
                 "done": {
                     "description": "Done is the number of containers scanned so far.",
                     "type": "integer"
+                },
+                "estimated_finish_at": {
+                    "description": "EstimatedFinishAt is when the scan is expected to finish, based on how\nlong earlier scans of the same images took, or on the average so far.\nOmitted until there is anything to base it on.",
+                    "type": "string"
                 },
                 "failed": {
                     "description": "Failed is the number of containers whose image could not be scanned.",
@@ -1649,6 +1737,14 @@ const docTemplate = `{
                     "description": "FinishedAt is when the scan finished, omitted while it runs.",
                     "type": "string"
                 },
+                "images": {
+                    "description": "Images is the number of distinct images the scan covers.",
+                    "type": "integer"
+                },
+                "images_done": {
+                    "description": "ImagesDone is the number of those images scanned so far.",
+                    "type": "integer"
+                },
                 "running": {
                     "description": "Running is true while the scan is in progress.",
                     "type": "boolean"
@@ -1657,9 +1753,24 @@ const docTemplate = `{
                     "description": "StartedAt is when the scan started, omitted before the first one.",
                     "type": "string"
                 },
+                "step": {
+                    "description": "Step says what the scan is doing right now, such as downloading the\nvulnerability database.",
+                    "type": "string"
+                },
+                "step_started_at": {
+                    "description": "StepStartedAt is when the current step began.",
+                    "type": "string"
+                },
                 "total": {
                     "description": "Total is the number of containers the scan covers.",
                     "type": "integer"
+                },
+                "waiting": {
+                    "description": "Waiting names the containers still queued, in the order they will be\nscanned. Images are scanned one at a time.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -1708,6 +1819,10 @@ const docTemplate = `{
                 "name": {
                     "description": "Name is the container name without a leading slash.",
                     "type": "string"
+                },
+                "scan_seconds": {
+                    "description": "ScanSeconds is how long the scan took, when it ran on request. It\nfeeds the estimate of how long the next scan takes.",
+                    "type": "number"
                 },
                 "scanned_at": {
                     "description": "ScannedAt is when the scan finished, or failed.",

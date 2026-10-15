@@ -54,6 +54,9 @@ type RunSpec struct {
 	Args []string
 	// Volumes maps named volumes to mount points inside the container.
 	Volumes map[string]string
+	// Log, when set and the context carries a ProgressFunc, receives each
+	// line the scanner writes to standard error while it runs.
+	Log func(ctx context.Context, line string)
 }
 
 // Runner runs a scanner to completion and returns its standard output.
@@ -168,12 +171,18 @@ func (r *DockerRunner) Run(ctx context.Context, spec RunSpec) ([]byte, error) {
 
 	defer r.remove(context.WithoutCancel(ctx), created.ID)
 
+	ReportProgress(ctx, "Starting the scanner")
+
 	_, err = r.api.ContainerStart(ctx, created.ID, dockerClient.ContainerStartOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("starting scanner container: %w", err)
 	}
 
+	stopFollowing := r.follow(ctx, created.ID, spec.Log)
 	exitCode, err := r.wait(ctx, created.ID)
+
+	stopFollowing()
+
 	if err != nil {
 		return nil, err
 	}
@@ -210,6 +219,7 @@ func (r *DockerRunner) ensureImage(ctx context.Context, image string) error {
 	}
 
 	r.logger.Info().Str("image", image).Msg("Pulling scanner image")
+	ReportProgress(ctx, "Downloading the scanner image "+image)
 
 	response, err := r.api.ImagePull(ctx, image, dockerClient.ImagePullOptions{})
 	if err != nil {
@@ -251,6 +261,55 @@ func (r *DockerRunner) wait(ctx context.Context, containerID string) (int64, err
 		return 0, fmt.Errorf("waiting for scanner container: %w", err)
 	case <-ctx.Done():
 		return 0, fmt.Errorf("waiting for scanner container: %w", ctx.Err())
+	}
+}
+
+// follow passes each line the running scanner writes to standard error to
+// onLine, so a long scan can say what it is doing. It does nothing unless the
+// context carries a ProgressFunc. A failure to follow only loses progress
+// steps; the report is still read after the scanner exits.
+//
+// Parameters:
+//   - ctx: Context bounding the scan.
+//   - containerID: Scanner container ID.
+//   - onLine: Receives each line, or nil for none.
+//
+// Returns:
+//   - func(): Stops following and waits for the reader to finish.
+func (r *DockerRunner) follow(
+	ctx context.Context,
+	containerID string,
+	onLine func(ctx context.Context, line string),
+) func() {
+	if onLine == nil || !hasProgress(ctx) {
+		return func() {}
+	}
+
+	followCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		reader, err := r.api.ContainerLogs(followCtx, containerID, dockerClient.ContainerLogsOptions{
+			ShowStderr: true,
+			Follow:     true,
+		})
+		if err != nil {
+			r.logger.Debug().Err(err).Msg("Could not follow scanner output")
+
+			return
+		}
+
+		defer reader.Close()
+
+		lines := &lineWriter{fn: func(line string) { onLine(ctx, line) }}
+		_, _ = stdcopy.StdCopy(io.Discard, lines, io.LimitReader(reader, maxReportBytes))
+	}()
+
+	return func() {
+		cancel()
+		<-done
 	}
 }
 
