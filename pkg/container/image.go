@@ -716,6 +716,8 @@ func (c imageClient) shouldSkipPull(
 		return false, fmt.Errorf("digest check rate limited: %w", err)
 	case err != nil:
 		// Digest retrieval failed. Log based on warning strategy and proceed with pull.
+		// The entry stays out of notifications because the pull decides the outcome
+		// and reports its own failures.
 		headLevel := zerolog.DebugLevel
 		if warn {
 			headLevel = zerolog.WarnLevel
@@ -723,6 +725,7 @@ func (c imageClient) shouldSkipPull(
 
 		clog.WithLevel(headLevel).
 			Err(err).
+			Str("notify", "no").
 			Msg("Digest retrieval failed, falling back to full pull")
 
 		return false, nil
