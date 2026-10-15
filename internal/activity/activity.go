@@ -283,25 +283,6 @@ func (t *Tracker) SetScanResult(name string, review *scanner.Review, err error) 
 	})
 }
 
-// updateScan applies change to a tracked container's scan, creating it.
-func (t *Tracker) updateScan(name string, change func(scan *Scan)) {
-	name = strings.TrimPrefix(name, "/")
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	entry, ok := t.containers[name]
-	if t.scans == 0 || !ok {
-		return
-	}
-
-	if entry.scan == nil {
-		entry.scan = &Scan{}
-	}
-
-	change(entry.scan)
-}
-
 // StartPull begins tracking a pull of image and returns the handle that
 // receives its progress messages. Outside a scan the pull is still tracked by
 // the handle, for logging, but does not appear in snapshots.
@@ -344,6 +325,25 @@ func (t *Tracker) Snapshot() Snapshot {
 	}
 
 	return snapshot
+}
+
+// updateScan applies change to a tracked container's scan, creating it.
+func (t *Tracker) updateScan(name string, change func(scan *Scan)) {
+	name = strings.TrimPrefix(name, "/")
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	entry, ok := t.containers[name]
+	if t.scans == 0 || !ok {
+		return
+	}
+
+	if entry.scan == nil {
+		entry.scan = &Scan{}
+	}
+
+	change(entry.scan)
 }
 
 // containersLocked lists the tracked containers in order, with pull progress

@@ -300,115 +300,6 @@ func (s *Service) Job() Job {
 	return s.snapshot()
 }
 
-// snapshot copies the job state and adds the current estimate. Callers
-// hold s.mu.
-//
-// Returns:
-//   - Job: Copy of the job state.
-func (s *Service) snapshot() Job {
-	job := s.job
-	job.Current = slices.Clone(s.job.Current)
-	job.Waiting = slices.Clone(s.job.Waiting)
-	job.Activity = slices.Clone(s.job.Activity)
-
-	if job.Running {
-		job.EstimatedFinishAt = s.estimate()
-	}
-
-	return job
-}
-
-// estimate works out when the running job should finish: each remaining
-// image takes as long as its last scan did, or else the average of this
-// job's scans, or else the average of earlier scans. Callers hold s.mu.
-//
-// Returns:
-//   - *time.Time: Expected finish, or nil when there is nothing to go on.
-func (s *Service) estimate() *time.Time {
-	average := mean(s.plan.taken)
-	if average == 0 {
-		average = mean(slices.Collect(maps.Values(s.plan.previous)))
-	}
-
-	guess := func(imageID string) time.Duration {
-		if took, ok := s.plan.previous[imageID]; ok {
-			return took
-		}
-
-		return average
-	}
-
-	now := s.now()
-	var remaining time.Duration
-
-	for _, imageID := range s.plan.queue {
-		took := guess(imageID)
-		if took == 0 {
-			return nil
-		}
-
-		remaining += took
-	}
-
-	if s.plan.current != "" && s.job.CurrentStartedAt != nil {
-		took := guess(s.plan.current)
-		if took == 0 {
-			return nil
-		}
-
-		remaining += max(took-now.Sub(*s.job.CurrentStartedAt), minRemaining)
-	}
-
-	finish := now.Add(remaining).UTC().Truncate(time.Second)
-
-	return &finish
-}
-
-// mean returns the average of durations, or 0 for none.
-func mean(durations []time.Duration) time.Duration {
-	if len(durations) == 0 {
-		return 0
-	}
-
-	var sum time.Duration
-	for _, d := range durations {
-		sum += d
-	}
-
-	return sum / time.Duration(len(durations))
-}
-
-// step records what the running job is doing. A step repeating the current
-// one is dropped. Callers hold s.mu.
-//
-// Parameters:
-//   - names: Containers the step is about, or nil.
-//   - message: What is happening.
-//   - problem: True when the step is a failure.
-func (s *Service) step(names []string, message string, problem bool) {
-	if message == "" || (s.job.Step == message && !problem) {
-		return
-	}
-
-	at := s.now().UTC()
-
-	if !problem {
-		s.job.Step = message
-		s.job.StepStartedAt = &at
-	}
-
-	s.job.Activity = append(s.job.Activity, Activity{
-		At:         at,
-		Containers: slices.Clone(names),
-		Message:    message,
-		Problem:    problem,
-	})
-
-	if extra := len(s.job.Activity) - maxActivity; extra > 0 {
-		s.job.Activity = slices.Delete(s.job.Activity, 0, extra)
-	}
-}
-
 // Start scans the running image of each target in the background, against
 // the latest vulnerability database. Containers sharing an image share one
 // scan.
@@ -462,6 +353,7 @@ func (s *Service) Start(ctx context.Context, targets []Target) (Job, error) {
 	}
 
 	waiting := make([]string, 0, total)
+
 	for _, imageID := range order {
 		for _, target := range byImage[imageID] {
 			waiting = append(waiting, target.Name)
@@ -481,6 +373,116 @@ func (s *Service) Start(ctx context.Context, targets []Target) (Job, error) {
 	go s.run(ctx, order, byImage)
 
 	return job, nil
+}
+
+// snapshot copies the job state and adds the current estimate. Callers
+// hold s.mu.
+//
+// Returns:
+//   - Job: Copy of the job state.
+func (s *Service) snapshot() Job {
+	job := s.job
+	job.Current = slices.Clone(s.job.Current)
+	job.Waiting = slices.Clone(s.job.Waiting)
+	job.Activity = slices.Clone(s.job.Activity)
+
+	if job.Running {
+		job.EstimatedFinishAt = s.estimate()
+	}
+
+	return job
+}
+
+// estimate works out when the running job should finish: each remaining
+// image takes as long as its last scan did, or else the average of this
+// job's scans, or else the average of earlier scans. Callers hold s.mu.
+//
+// Returns:
+//   - *time.Time: Expected finish, or nil when there is nothing to go on.
+func (s *Service) estimate() *time.Time {
+	average := mean(s.plan.taken)
+	if average == 0 {
+		average = mean(slices.Collect(maps.Values(s.plan.previous)))
+	}
+
+	guess := func(imageID string) time.Duration {
+		if took, ok := s.plan.previous[imageID]; ok {
+			return took
+		}
+
+		return average
+	}
+
+	now := s.now()
+
+	var remaining time.Duration
+
+	for _, imageID := range s.plan.queue {
+		took := guess(imageID)
+		if took == 0 {
+			return nil
+		}
+
+		remaining += took
+	}
+
+	if s.plan.current != "" && s.job.CurrentStartedAt != nil {
+		took := guess(s.plan.current)
+		if took == 0 {
+			return nil
+		}
+
+		remaining += max(took-now.Sub(*s.job.CurrentStartedAt), minRemaining)
+	}
+
+	finish := now.Add(remaining).UTC().Truncate(time.Second)
+
+	return &finish
+}
+
+// mean returns the average of durations, or 0 for none.
+func mean(durations []time.Duration) time.Duration {
+	if len(durations) == 0 {
+		return 0
+	}
+
+	var sum time.Duration
+	for _, d := range durations {
+		sum += d
+	}
+
+	return sum / time.Duration(len(durations))
+}
+
+// step records what the running job is doing. A step repeating the current
+// one is dropped. Callers hold s.mu.
+//
+// Parameters:
+//   - names: Containers the step is about, or nil.
+//   - message: What is happening.
+//   - problem: True when the step is a failure.
+func (s *Service) step(names []string, message string, problem bool) {
+	if message == "" || (s.job.Step == message && !problem) {
+		return
+	}
+
+	startedAt := s.now().UTC()
+
+	if !problem {
+		s.job.Step = message
+		s.job.StepStartedAt = &startedAt
+	}
+
+	s.job.Activity = append(s.job.Activity, Activity{
+		At:         startedAt,
+		Containers: slices.Clone(names),
+		Message:    message,
+		Problem:    problem,
+	})
+
+	if extra := len(s.job.Activity) - maxActivity; extra > 0 {
+		s.job.Activity = slices.Delete(s.job.Activity, 0, extra)
+	}
 }
 
 // run scans each image in turn and records a report for every container

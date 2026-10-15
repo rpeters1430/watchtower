@@ -62,13 +62,13 @@ type lineWriter struct {
 // Write implements io.Writer.
 //
 // Parameters:
-//   - p: Bytes to split into lines.
+//   - written: Bytes to split into lines.
 //
 // Returns:
-//   - int: Always len(p).
+//   - int: Always len(written).
 //   - error: Always nil.
-func (w *lineWriter) Write(p []byte) (int, error) {
-	data := p
+func (w *lineWriter) Write(written []byte) (int, error) {
+	data := written
 
 	for {
 		end := bytes.IndexByte(data, '\n')
@@ -86,7 +86,7 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 		w.pending = append(w.pending, data[:min(len(data), room)]...)
 	}
 
-	return len(p), nil
+	return len(written), nil
 }
 
 // flush passes the pending line to fn and clears it.

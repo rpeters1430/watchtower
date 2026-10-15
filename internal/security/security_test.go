@@ -304,6 +304,7 @@ func TestStartRecordsActivity(t *testing.T) {
 
 		if entry.Problem {
 			problems++
+
 			assert.Equal(t, []string{"broken"}, entry.Containers)
 		}
 	}

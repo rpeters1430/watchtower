@@ -238,6 +238,7 @@ func TestReviewerQueuedScanHonoursContext(t *testing.T) {
 
 	go func() {
 		close(started)
+
 		_, _ = reviewer.Scan(t.Context(), "sha256:first")
 	}()
 
