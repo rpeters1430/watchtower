@@ -2,7 +2,6 @@ package routes
 
 import (
 	"context"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/timeout"
@@ -43,15 +42,4 @@ func registerUpdateRoute(ctx context.Context, app *fiber.App, auth fiber.Handler
 	// Progress of the running scan, whether requested here or scheduled.
 	app.Get(update.StatusPath, auth, config.TimeoutMiddleware(), update.Status(activity.Default().Snapshot))
 
-	// In blocking HTTP API mode, emit the startup message once when the update route registers.
-	if !opts.UnblockHTTPAPI && opts.WriteStartupMessage != nil {
-		startup := opts.Startup
-		startup.Sched = time.Time{}
-		startup.Filtering = opts.FilterDesc
-		startup.Scope = opts.Scope
-		startup.Client = opts.Client
-		startup.Notifier = opts.Notifier
-		startup.Version = opts.Version
-		opts.WriteStartupMessage(startup)
-	}
 }
