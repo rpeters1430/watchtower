@@ -970,6 +970,7 @@ func Update(
 	}
 
 	logSecurityFixes(log, progress, securityReviews)
+	recordSecurityReviews(progress, securityReviews, config.SecurityReviewer)
 
 	// Run post-check lifecycle hooks if enabled to finalize the update process.
 	// Passing nil lists the containers again, so the hooks run in the

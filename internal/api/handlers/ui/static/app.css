@@ -1143,6 +1143,164 @@ input {
 
 
 
+
+/* Security: severity marks, findings, and how to fix them. */
+
+.unit-head-solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sev {
+  display: inline-block;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--sev, var(--unknown));
+  border-radius: 2px;
+  color: var(--sev-text, var(--ink-soft));
+  background: color-mix(in srgb, var(--sev, var(--unknown)) 14%, transparent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sev-critical {
+  --sev: var(--failed);
+  --sev-text: var(--deck);
+  background: var(--failed);
+}
+
+.sev-high {
+  --sev: var(--failed);
+  --sev-text: var(--failed);
+}
+
+.sev-medium {
+  --sev: var(--waiting);
+  --sev-text: var(--waiting-text);
+}
+
+.sev-low,
+.sev-unknown {
+  --sev: var(--unknown);
+  --sev-text: var(--ink-soft);
+}
+
+.badge-security {
+  margin-left: 0.5rem;
+  vertical-align: 0.15em;
+}
+
+.severity-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.severity-counts .sev {
+  padding: 0.35rem 0.6rem;
+  font-size: var(--step--1);
+}
+
+.severity-counts strong {
+  font-size: var(--step-0);
+}
+
+.severity-fixable {
+  color: var(--ink-soft);
+}
+
+.advice {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 70ch;
+  padding-left: 1.1rem;
+  list-style: square;
+}
+
+.advice .button {
+  margin-left: 0.25rem;
+  vertical-align: baseline;
+}
+
+.findings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.finding-list {
+  border-top: 1px solid var(--line);
+}
+
+.changes > .button {
+  justify-self: start;
+}
+
+.finding {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.finding .sev {
+  justify-self: start;
+}
+
+.finding-body {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+}
+
+.finding-id {
+  font-family: var(--font-code);
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+a.finding-id {
+  color: var(--focus);
+}
+
+.finding-kind {
+  color: var(--ink-soft);
+  font-size: var(--step--1);
+}
+
+.finding-fixed {
+  color: var(--fresh);
+  font-weight: 600;
+}
+
+.finding-title {
+  overflow-wrap: anywhere;
+}
+
+.finding-where {
+  color: var(--ink-soft);
+  font-size: var(--step--1);
+  overflow-wrap: anywhere;
+}
+
+.link-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* Keep responsive overrides after the base component styles. */
 @media (max-width: 44rem) {
   .nav-link,
@@ -1251,5 +1409,8 @@ input {
   .facts dd {
     margin-bottom: 0.5rem;
   }
-}
 
+  .finding {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

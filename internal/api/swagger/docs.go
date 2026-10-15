@@ -576,6 +576,166 @@ const docTemplate = `{
                 ]
             }
         },
+        "/v1/security": {
+            "get": {
+                "description": "Returns the scanner setup and each container's latest vulnerability scan: counts by severity, how many findings have a fix, and how a waiting update changes them. Finding lists are",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "security"
+                ],
+                "summary": "Image security overview",
+                "responses": {
+                    "200": {
+                        "description": "Scanner state and per-container summaries",
+                        "schema": {
+                            "$ref": "#/definitions/security.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/security/scan": {
+            "post": {
+                "description": "Starts scanning the running image of the named containers, or of every watched container when none are named. The scan runs in the background; GET /v1/security reports its progress",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "security"
+                ],
+                "summary": "Scan running images",
+                "parameters": [
+                    {
+                        "description": "Containers to scan",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/security.ScanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "The scan started",
+                        "schema": {
+                            "$ref": "#/definitions/security.ScanResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "The request body is not valid",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "No named container is watched",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "A scan is already running",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "No scanner is available",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/security/{name}": {
+            "get": {
+                "description": "Returns one container's latest vulnerability scan with each finding: its ID, severity, package, installed and fixed versions, and advisory link. When an update is waiting, also lists",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "security"
+                ],
+                "summary": "Container security report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The container's latest scan",
+                        "schema": {
+                            "$ref": "#/definitions/security.ReportResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "The container has not been scanned",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/settings": {
             "get": {
                 "description": "Returns the settings that can be changed at run time, with each one's value, default, and whether it was changed.",
@@ -607,7 +767,7 @@ const docTemplate = `{
                 ]
             },
             "patch": {
-                "description": "Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped (booleans), schedule (cron) and container_overrides (map). JSON null resets one.",
+                "description": "Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium, high, or critical), schedule (cron)",
                 "consumes": [
                     "application/json"
                 ],
@@ -1318,6 +1478,429 @@ const docTemplate = `{
                 },
                 "update_available": {
                     "type": "boolean"
+                }
+            }
+        },
+        "scanner.Counts": {
+            "type": "object",
+            "properties": {
+                "critical": {
+                    "type": "integer"
+                },
+                "high": {
+                    "type": "integer"
+                },
+                "low": {
+                    "type": "integer"
+                },
+                "medium": {
+                    "type": "integer"
+                },
+                "unknown": {
+                    "type": "integer"
+                }
+            }
+        },
+        "scanner.Finding": {
+            "type": "object",
+            "properties": {
+                "fixed_version": {
+                    "description": "FixedVersion lists the package versions that fix the finding, empty\nwhen no fix is published.",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is the vulnerability or check identifier, such as CVE-2024-1234.",
+                    "type": "string"
+                },
+                "installed_version": {
+                    "description": "InstalledVersion is the package version in the image.",
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "Kind is KindVulnerability, KindMisconfiguration, or KindSecret.",
+                    "type": "string"
+                },
+                "package": {
+                    "description": "Package is the affected package, empty for non-package findings.",
+                    "type": "string"
+                },
+                "resolution": {
+                    "description": "Resolution describes how to fix a non-package finding, such as a\nDockerfile change for a misconfiguration.",
+                    "type": "string"
+                },
+                "severity": {
+                    "description": "Severity is the scanner's rating.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Severity"
+                        }
+                    ]
+                },
+                "target": {
+                    "description": "Target is the layer, file, or OS the finding was reported against.",
+                    "type": "string"
+                },
+                "title": {
+                    "description": "Title is a one-line description.",
+                    "type": "string"
+                },
+                "url": {
+                    "description": "URL links to the advisory or check documentation.",
+                    "type": "string"
+                }
+            }
+        },
+        "scanner.Gate": {
+            "type": "string",
+            "enum": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "critical"
+            ],
+            "x-enum-varnames": [
+                "GateOff",
+                "GateLow",
+                "GateMedium",
+                "GateHigh",
+                "GateCritical"
+            ]
+        },
+        "scanner.Severity": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2,
+                3,
+                4
+            ],
+            "x-enum-varnames": [
+                "SeverityUnknown",
+                "SeverityLow",
+                "SeverityMedium",
+                "SeverityHigh",
+                "SeverityCritical"
+            ]
+        },
+        "security.AppliedUpdate": {
+            "type": "object",
+            "properties": {
+                "applied_at": {
+                    "description": "AppliedAt is when the update was applied.",
+                    "type": "string"
+                },
+                "fixed": {
+                    "description": "Fixed are findings of the previous image that the new image no longer has.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scanner.Finding"
+                    }
+                },
+                "fixed_counts": {
+                    "description": "FixedCounts tallies Fixed by severity.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "introduced": {
+                    "description": "Introduced are findings the new image added.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scanner.Finding"
+                    }
+                },
+                "introduced_counts": {
+                    "description": "IntroducedCounts tallies Introduced by severity.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "previous_image_id": {
+                    "description": "PreviousImageID is the image the container ran before the update.",
+                    "type": "string"
+                }
+            }
+        },
+        "security.Job": {
+            "type": "object",
+            "properties": {
+                "current": {
+                    "description": "Current names the containers being scanned right now.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "done": {
+                    "description": "Done is the number of containers scanned so far.",
+                    "type": "integer"
+                },
+                "failed": {
+                    "description": "Failed is the number of containers whose image could not be scanned.",
+                    "type": "integer"
+                },
+                "finished_at": {
+                    "description": "FinishedAt is when the scan finished, omitted while it runs.",
+                    "type": "string"
+                },
+                "running": {
+                    "description": "Running is true while the scan is in progress.",
+                    "type": "boolean"
+                },
+                "started_at": {
+                    "description": "StartedAt is when the scan started, omitted before the first one.",
+                    "type": "string"
+                },
+                "total": {
+                    "description": "Total is the number of containers the scan covers.",
+                    "type": "integer"
+                }
+            }
+        },
+        "security.Report": {
+            "type": "object",
+            "properties": {
+                "counts": {
+                    "description": "Counts tallies the findings by severity.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "error": {
+                    "description": "Error says why the running image could not be scanned.",
+                    "type": "string"
+                },
+                "findings": {
+                    "description": "Findings are sorted worst first. Left out of summaries.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scanner.Finding"
+                    }
+                },
+                "fixable": {
+                    "description": "Fixable is the number of findings with a published fix.",
+                    "type": "integer"
+                },
+                "image": {
+                    "description": "Image is the image name the container runs.",
+                    "type": "string"
+                },
+                "image_id": {
+                    "description": "ImageID is the image ID that was scanned.",
+                    "type": "string"
+                },
+                "last_update": {
+                    "description": "LastUpdate records what the most recent update of this container fixed and introduced.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/security.AppliedUpdate"
+                        }
+                    ]
+                },
+                "name": {
+                    "description": "Name is the container name without a leading slash.",
+                    "type": "string"
+                },
+                "scanned_at": {
+                    "description": "ScannedAt is when the scan finished, or failed.",
+                    "type": "string"
+                },
+                "scanner": {
+                    "description": "Scanner is the backend name, such as \"trivy\".",
+                    "type": "string"
+                },
+                "scanner_version": {
+                    "description": "ScannerVersion is the backend version when the report includes it.",
+                    "type": "string"
+                },
+                "truncated": {
+                    "description": "Truncated is true when Findings was cut to maxFindings.",
+                    "type": "boolean"
+                },
+                "update": {
+                    "description": "Update compares the running image with a waiting update, when there is one.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/security.Update"
+                        }
+                    ]
+                }
+            }
+        },
+        "security.ReportResponse": {
+            "type": "object",
+            "properties": {
+                "api_version": {
+                    "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "container": {
+                    "description": "Container is the container's latest scan with every finding.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/security.Report"
+                        }
+                    ]
+                },
+                "timestamp": {
+                    "description": "Timestamp is when the response was produced.",
+                    "type": "string"
+                }
+            }
+        },
+        "security.Response": {
+            "type": "object",
+            "properties": {
+                "api_version": {
+                    "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "available": {
+                    "description": "Available is false when no scanner could be set up.",
+                    "type": "boolean"
+                },
+                "containers": {
+                    "description": "Containers holds each container's latest scan, without finding lists.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/security.Report"
+                    }
+                },
+                "gate": {
+                    "description": "Gate is the lowest severity of a new finding that holds an update.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Gate"
+                        }
+                    ]
+                },
+                "ignore_unfixed": {
+                    "description": "IgnoreUnfixed is true when findings without a published fix are left out.",
+                    "type": "boolean"
+                },
+                "job": {
+                    "description": "Job is the state of the latest on-demand scan.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/security.Job"
+                        }
+                    ]
+                },
+                "reason": {
+                    "description": "Reason says why scanning is unavailable.",
+                    "type": "string"
+                },
+                "saved": {
+                    "description": "Saved is true when results are kept across restarts.",
+                    "type": "boolean"
+                },
+                "scan_updates": {
+                    "description": "ScanUpdates is true when the new image of each pending update is scanned.",
+                    "type": "boolean"
+                },
+                "scanner": {
+                    "description": "Scanner is the scanner backend, such as \"trivy\".",
+                    "type": "string"
+                },
+                "scanner_image": {
+                    "description": "ScannerImage is the image the scanner runs from.",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "Timestamp is when the response was produced.",
+                    "type": "string"
+                }
+            }
+        },
+        "security.ScanRequest": {
+            "type": "object",
+            "properties": {
+                "containers": {
+                    "description": "Containers names the containers to scan. Empty scans every watched container.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "security.ScanResponse": {
+            "type": "object",
+            "properties": {
+                "api_version": {
+                    "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "job": {
+                    "description": "Job is the state of the scan that started.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/security.Job"
+                        }
+                    ]
+                },
+                "timestamp": {
+                    "description": "Timestamp is when the response was produced.",
+                    "type": "string"
+                }
+            }
+        },
+        "security.Update": {
+            "type": "object",
+            "properties": {
+                "fixed": {
+                    "description": "Fixed are findings of the running image that the new image no longer has.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scanner.Finding"
+                    }
+                },
+                "fixed_counts": {
+                    "description": "FixedCounts tallies Fixed by severity.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "gate": {
+                    "description": "Gate is the severity gate the update was checked against.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Gate"
+                        }
+                    ]
+                },
+                "held": {
+                    "description": "Held is true when the scan gate holds the update back.",
+                    "type": "boolean"
+                },
+                "introduced": {
+                    "description": "Introduced are findings the new image adds.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scanner.Finding"
+                    }
+                },
+                "introduced_counts": {
+                    "description": "IntroducedCounts tallies Introduced by severity.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/scanner.Counts"
+                        }
+                    ]
+                },
+                "latest_image_id": {
+                    "description": "LatestImageID is the image the update switches to.",
+                    "type": "string"
                 }
             }
         },

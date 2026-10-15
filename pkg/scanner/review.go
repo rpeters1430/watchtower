@@ -13,6 +13,11 @@ const DefaultTimeout = 5 * time.Minute
 // maxCachedResults caps how many image results the reviewer keeps in memory.
 const maxCachedResults = 256
 
+// cacheLifetime is how long a cached result is reused. An image's contents
+// never change, but the vulnerability database does, so an old result can
+// miss advisories published since.
+const cacheLifetime = 12 * time.Hour
+
 // Review is the security comparison of a pending update.
 type Review struct {
 	// Current is the scan of the running image.
@@ -28,16 +33,23 @@ type Review struct {
 }
 
 // Reviewer scans both images of a pending update and applies the severity
-// gate. Results are cached by image ID, since an image's contents never
-// change, so a container that stays stale across scans is not rescanned.
+// gate. Results are cached by image ID for cacheLifetime, so a container that
+// stays stale across scans is not rescanned every time.
 type Reviewer struct {
 	scanner Scanner
 	gate    Gate
 	timeout time.Duration
+	now     func() time.Time
 
 	mu    sync.Mutex
-	cache map[string]*Result
+	cache map[string]cachedResult
 	order []string
+}
+
+// cachedResult is a scan result and when the reviewer stored it.
+type cachedResult struct {
+	result   *Result
+	storedAt time.Time
 }
 
 // NewReviewer creates a Reviewer.
@@ -58,8 +70,17 @@ func NewReviewer(scanner Scanner, gate Gate, timeout time.Duration) *Reviewer {
 		scanner: scanner,
 		gate:    gate,
 		timeout: timeout,
-		cache:   make(map[string]*Result),
+		now:     time.Now,
+		cache:   make(map[string]cachedResult),
 	}
+}
+
+// Name returns the scanner backend's name.
+//
+// Returns:
+//   - string: Backend name, such as "trivy".
+func (r *Reviewer) Name() string {
+	return r.scanner.Name()
 }
 
 // ReviewUpdate scans the running and the new image and compares them. The
@@ -114,6 +135,25 @@ func (r *Reviewer) Scan(ctx context.Context, image string) (*Result, error) {
 	return r.scan(ctx, image)
 }
 
+// Rescan scans one image even when a cached result exists, and caches the
+// new result. Use it when the caller wants findings against the latest
+// vulnerability database.
+//
+// Parameters:
+//   - ctx: Context for the scan.
+//   - image: Image ID or name.
+//
+// Returns:
+//   - *Result: Scan result.
+//   - error: Non-nil when the scan fails.
+func (r *Reviewer) Rescan(ctx context.Context, image string) (*Result, error) {
+	r.mu.Lock()
+	delete(r.cache, image)
+	r.mu.Unlock()
+
+	return r.scan(ctx, image)
+}
+
 // scan returns the cached result for image, or scans it under the timeout.
 //
 // Parameters:
@@ -132,8 +172,8 @@ func (r *Reviewer) scan(ctx context.Context, image string) (*Result, error) {
 	cached, ok := r.cache[image]
 	r.mu.Unlock()
 
-	if ok {
-		return cached, nil
+	if ok && r.now().Sub(cached.storedAt) < cacheLifetime {
+		return cached.result, nil
 	}
 
 	scanCtx, cancel := context.WithTimeout(ctx, r.timeout)
@@ -151,7 +191,7 @@ func (r *Reviewer) scan(ctx context.Context, image string) (*Result, error) {
 		r.order = append(r.order, image)
 	}
 
-	r.cache[image] = result
+	r.cache[image] = cachedResult{result: result, storedAt: r.now()}
 
 	for len(r.order) > maxCachedResults {
 		delete(r.cache, r.order[0])

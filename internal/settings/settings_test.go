@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -74,6 +76,8 @@ func TestUpdateAppliesAndPersists(t *testing.T) {
 		KeyAutoRollback:       false,
 		KeyIncludeStopped:     false,
 		KeyContainerOverrides: false,
+		KeyScan:               false,
+		KeyScanGate:           false,
 	}, store.Overridden())
 	assert.Equal(t, Snapshot{
 		Effective:  want,
@@ -284,4 +288,33 @@ func TestApplyTo(t *testing.T) {
 	var none *Store
 
 	assert.Equal(t, types.UpdateParams{NoPull: true}, none.ApplyTo(types.UpdateParams{NoPull: true}))
+}
+
+type fakeReviewer struct{}
+
+func (fakeReviewer) ReviewUpdate(context.Context, string, string) (*scanner.Review, error) {
+	return &scanner.Review{}, nil
+}
+
+func TestScanSettings(t *testing.T) {
+	t.Parallel()
+
+	store := Open(nil, t.TempDir(), Values{ScanGate: scanner.GateOff}, Validators{})
+	params := types.UpdateParams{SecurityReviewer: fakeReviewer{}}
+
+	// Scanning is off by default, so the reviewer is not handed on.
+	assert.Nil(t, store.ApplyTo(params).SecurityReviewer)
+
+	require.NoError(t, store.Update(changes(t, `{"scan":true,"scan_gate":"HIGH"}`)))
+	assert.Equal(t, scanner.GateHigh, store.Effective().ScanGate)
+	assert.NotNil(t, store.ApplyTo(params).SecurityReviewer)
+	assert.True(t, store.Overridden()[KeyScanGate])
+
+	err := store.Update(changes(t, `{"scan_gate":"severe"}`))
+	require.ErrorIs(t, err, ErrInvalidValue)
+	assert.Equal(t, scanner.GateHigh, store.Effective().ScanGate)
+
+	require.NoError(t, store.Update(changes(t, `{"scan_gate":null}`)))
+	assert.Equal(t, scanner.GateOff, store.Effective().ScanGate)
+	assert.False(t, store.Overridden()[KeyScanGate])
 }

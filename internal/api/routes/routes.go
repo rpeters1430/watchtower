@@ -20,6 +20,10 @@ var (
 	// is enabled but no Docker client is configured.
 	errMissingClientForContainersAPI = errors.New("containers API is enabled but no Docker client is configured")
 
+	// errMissingClientForSecurityAPI is returned when the security API is
+	// enabled but no Docker client is configured.
+	errMissingClientForSecurityAPI = errors.New("security API is enabled but no Docker client is configured")
+
 	// errMissingClientForImagesAPI is returned when the images API is enabled
 	// but no Docker client is configured.
 	errMissingClientForImagesAPI = errors.New("images API is enabled but no Docker client is configured")
@@ -67,6 +71,10 @@ func ValidateAndRegister(
 
 	if opts.EnableImagesAPI && opts.Client == nil {
 		return errMissingClientForImagesAPI
+	}
+
+	if opts.EnableSecurityAPI && opts.Client == nil {
+		return errMissingClientForSecurityAPI
 	}
 
 	if opts.EnableEventsAPI && opts.EventBroadcaster == nil {
@@ -131,6 +139,10 @@ func Register(
 
 	if opts.EnableSettingsAPI {
 		registerSettingsRoute(app, auth, opts)
+	}
+
+	if opts.EnableSecurityAPI {
+		registerSecurityRoute(ctx, app, auth, opts)
 	}
 
 	if opts.EnableEventsAPI {

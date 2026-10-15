@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/nicholas-fedor/watchtower/internal/util"
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -34,6 +35,10 @@ const (
 	KeyIncludeStopped = "include_stopped"
 	// KeyAutoRollback is the setting that rolls back on start/healthcheck failure.
 	KeyAutoRollback = "auto_rollback"
+	// KeyScan is the setting that scans the images of pending updates.
+	KeyScan = "scan"
+	// KeyScanGate is the lowest severity of a new finding that holds an update.
+	KeyScanGate = "scan_gate"
 	// KeyContainerOverrides maps container names to policy overrides (auto, monitor_only, pinned, update).
 	KeyContainerOverrides = "container_overrides"
 )
@@ -65,6 +70,10 @@ type Values struct {
 	IncludeStopped bool
 	// ContainerOverrides maps container names to policies ("auto", "monitor_only", "pinned", "update").
 	ContainerOverrides map[string]string
+	// Scan scans the new image of each pending update before updating.
+	Scan bool
+	// ScanGate holds updates whose new image adds findings at or above it.
+	ScanGate scanner.Gate
 }
 
 // Snapshot contains a consistent view of the effective settings and their
@@ -93,6 +102,8 @@ type overrides struct {
 	AutoRollback       *bool             `json:"auto_rollback,omitempty"`
 	IncludeStopped     *bool             `json:"include_stopped,omitempty"`
 	ContainerOverrides map[string]string `json:"container_overrides,omitempty"`
+	Scan               *bool             `json:"scan,omitempty"`
+	ScanGate           *scanner.Gate     `json:"scan_gate,omitempty"`
 	// NotificationServices are notification destinations added at run time.
 	// They add to the URLs from flags rather than replacing them.
 	NotificationServices []NotificationService `json:"notification_services,omitempty"`
@@ -187,6 +198,8 @@ func (s *Store) Overridden() map[string]bool {
 		KeyAutoRollback:       s.overrides.AutoRollback != nil,
 		KeyIncludeStopped:     s.overrides.IncludeStopped != nil,
 		KeyContainerOverrides: s.overrides.ContainerOverrides != nil,
+		KeyScan:               s.overrides.Scan != nil,
+		KeyScanGate:           s.overrides.ScanGate != nil,
 	}
 }
 
@@ -206,6 +219,8 @@ func (s *Store) Snapshot() Snapshot {
 			KeyAutoRollback:       s.overrides.AutoRollback != nil,
 			KeyIncludeStopped:     s.overrides.IncludeStopped != nil,
 			KeyContainerOverrides: s.overrides.ContainerOverrides != nil,
+			KeyScan:               s.overrides.Scan != nil,
+			KeyScanGate:           s.overrides.ScanGate != nil,
 		},
 		Persistent: s.path != "",
 	}
@@ -224,6 +239,11 @@ func (s *Store) ApplyTo(params types.UpdateParams) types.UpdateParams {
 	params.RollingRestart = values.RollingRestart
 	params.AutoRollback = values.AutoRollback
 	params.ContainerOverrides = values.ContainerOverrides
+
+	// The reviewer is only handed to the update when scanning is on.
+	if !values.Scan {
+		params.SecurityReviewer = nil
+	}
 
 	return params
 }
@@ -440,6 +460,14 @@ func (o *overrides) apply(defaults Values) Values {
 		values.ContainerOverrides = maps.Clone(o.ContainerOverrides)
 	}
 
+	if o.Scan != nil {
+		values.Scan = *o.Scan
+	}
+
+	if o.ScanGate != nil {
+		values.ScanGate = *o.ScanGate
+	}
+
 	return values
 }
 
@@ -456,6 +484,26 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 		return decode(key, raw, &o.AutoRollback)
 	case KeyIncludeStopped:
 		return decode(key, raw, &o.IncludeStopped)
+	case KeyScan:
+		return decode(key, raw, &o.Scan)
+	case KeyScanGate:
+		var name *string
+
+		err := decode(key, raw, &name)
+		if err != nil || name == nil {
+			o.ScanGate = nil
+
+			return err
+		}
+
+		gate, err := scanner.ParseGate(*name)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidValue, err)
+		}
+
+		o.ScanGate = &gate
+
+		return nil
 	case KeySchedule:
 		err := decode(key, raw, &o.Schedule)
 		if err == nil && o.Schedule != nil {

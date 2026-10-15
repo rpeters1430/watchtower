@@ -216,6 +216,303 @@ definitions:
       update_available:
         type: boolean
     type: object
+  scanner.Counts:
+    properties:
+      critical:
+        type: integer
+      high:
+        type: integer
+      low:
+        type: integer
+      medium:
+        type: integer
+      unknown:
+        type: integer
+    type: object
+  scanner.Finding:
+    properties:
+      fixed_version:
+        description: |-
+          FixedVersion lists the package versions that fix the finding, empty
+          when no fix is published.
+        type: string
+      id:
+        description: ID is the vulnerability or check identifier, such as CVE-2024-1234.
+        type: string
+      installed_version:
+        description: InstalledVersion is the package version in the image.
+        type: string
+      kind:
+        description: Kind is KindVulnerability, KindMisconfiguration, or KindSecret.
+        type: string
+      package:
+        description: Package is the affected package, empty for non-package findings.
+        type: string
+      resolution:
+        description: |-
+          Resolution describes how to fix a non-package finding, such as a
+          Dockerfile change for a misconfiguration.
+        type: string
+      severity:
+        allOf:
+        - $ref: '#/definitions/scanner.Severity'
+        description: Severity is the scanner's rating.
+      target:
+        description: Target is the layer, file, or OS the finding was reported against.
+        type: string
+      title:
+        description: Title is a one-line description.
+        type: string
+      url:
+        description: URL links to the advisory or check documentation.
+        type: string
+    type: object
+  scanner.Gate:
+    enum:
+    - "off"
+    - low
+    - medium
+    - high
+    - critical
+    type: string
+    x-enum-varnames:
+    - GateOff
+    - GateLow
+    - GateMedium
+    - GateHigh
+    - GateCritical
+  scanner.Severity:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    type: integer
+    x-enum-varnames:
+    - SeverityUnknown
+    - SeverityLow
+    - SeverityMedium
+    - SeverityHigh
+    - SeverityCritical
+  security.AppliedUpdate:
+    properties:
+      applied_at:
+        description: AppliedAt is when the update was applied.
+        type: string
+      fixed:
+        description: Fixed are findings of the previous image that the new image no
+          longer has.
+        items:
+          $ref: '#/definitions/scanner.Finding'
+        type: array
+      fixed_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: FixedCounts tallies Fixed by severity.
+      introduced:
+        description: Introduced are findings the new image added.
+        items:
+          $ref: '#/definitions/scanner.Finding'
+        type: array
+      introduced_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: IntroducedCounts tallies Introduced by severity.
+      previous_image_id:
+        description: PreviousImageID is the image the container ran before the update.
+        type: string
+    type: object
+  security.Job:
+    properties:
+      current:
+        description: Current names the containers being scanned right now.
+        items:
+          type: string
+        type: array
+      done:
+        description: Done is the number of containers scanned so far.
+        type: integer
+      failed:
+        description: Failed is the number of containers whose image could not be scanned.
+        type: integer
+      finished_at:
+        description: FinishedAt is when the scan finished, omitted while it runs.
+        type: string
+      running:
+        description: Running is true while the scan is in progress.
+        type: boolean
+      started_at:
+        description: StartedAt is when the scan started, omitted before the first
+          one.
+        type: string
+      total:
+        description: Total is the number of containers the scan covers.
+        type: integer
+    type: object
+  security.Report:
+    properties:
+      counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: Counts tallies the findings by severity.
+      error:
+        description: Error says why the running image could not be scanned.
+        type: string
+      findings:
+        description: Findings are sorted worst first. Left out of summaries.
+        items:
+          $ref: '#/definitions/scanner.Finding'
+        type: array
+      fixable:
+        description: Fixable is the number of findings with a published fix.
+        type: integer
+      image:
+        description: Image is the image name the container runs.
+        type: string
+      image_id:
+        description: ImageID is the image ID that was scanned.
+        type: string
+      last_update:
+        allOf:
+        - $ref: '#/definitions/security.AppliedUpdate'
+        description: LastUpdate records what the most recent update of this container
+          fixed and introduced.
+      name:
+        description: Name is the container name without a leading slash.
+        type: string
+      scanned_at:
+        description: ScannedAt is when the scan finished, or failed.
+        type: string
+      scanner:
+        description: Scanner is the backend name, such as "trivy".
+        type: string
+      scanner_version:
+        description: ScannerVersion is the backend version when the report includes
+          it.
+        type: string
+      truncated:
+        description: Truncated is true when Findings was cut to maxFindings.
+        type: boolean
+      update:
+        allOf:
+        - $ref: '#/definitions/security.Update'
+        description: Update compares the running image with a waiting update, when
+          there is one.
+    type: object
+  security.ReportResponse:
+    properties:
+      api_version:
+        description: APIVersion is the API version of the response.
+        type: string
+      container:
+        allOf:
+        - $ref: '#/definitions/security.Report'
+        description: Container is the container's latest scan with every finding.
+      timestamp:
+        description: Timestamp is when the response was produced.
+        type: string
+    type: object
+  security.Response:
+    properties:
+      api_version:
+        description: APIVersion is the API version of the response.
+        type: string
+      available:
+        description: Available is false when no scanner could be set up.
+        type: boolean
+      containers:
+        description: Containers holds each container's latest scan, without finding
+          lists.
+        items:
+          $ref: '#/definitions/security.Report'
+        type: array
+      gate:
+        allOf:
+        - $ref: '#/definitions/scanner.Gate'
+        description: Gate is the lowest severity of a new finding that holds an update.
+      ignore_unfixed:
+        description: IgnoreUnfixed is true when findings without a published fix are
+          left out.
+        type: boolean
+      job:
+        allOf:
+        - $ref: '#/definitions/security.Job'
+        description: Job is the state of the latest on-demand scan.
+      reason:
+        description: Reason says why scanning is unavailable.
+        type: string
+      saved:
+        description: Saved is true when results are kept across restarts.
+        type: boolean
+      scan_updates:
+        description: ScanUpdates is true when the new image of each pending update
+          is scanned.
+        type: boolean
+      scanner:
+        description: Scanner is the scanner backend, such as "trivy".
+        type: string
+      scanner_image:
+        description: ScannerImage is the image the scanner runs from.
+        type: string
+      timestamp:
+        description: Timestamp is when the response was produced.
+        type: string
+    type: object
+  security.ScanRequest:
+    properties:
+      containers:
+        description: Containers names the containers to scan. Empty scans every watched
+          container.
+        items:
+          type: string
+        type: array
+    type: object
+  security.ScanResponse:
+    properties:
+      api_version:
+        description: APIVersion is the API version of the response.
+        type: string
+      job:
+        allOf:
+        - $ref: '#/definitions/security.Job'
+        description: Job is the state of the scan that started.
+      timestamp:
+        description: Timestamp is when the response was produced.
+        type: string
+    type: object
+  security.Update:
+    properties:
+      fixed:
+        description: Fixed are findings of the running image that the new image no
+          longer has.
+        items:
+          $ref: '#/definitions/scanner.Finding'
+        type: array
+      fixed_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: FixedCounts tallies Fixed by severity.
+      gate:
+        allOf:
+        - $ref: '#/definitions/scanner.Gate'
+        description: Gate is the severity gate the update was checked against.
+      held:
+        description: Held is true when the scan gate holds the update back.
+        type: boolean
+      introduced:
+        description: Introduced are findings the new image adds.
+        items:
+          $ref: '#/definitions/scanner.Finding'
+        type: array
+      introduced_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: IntroducedCounts tallies Introduced by severity.
+      latest_image_id:
+        description: LatestImageID is the image the update switches to.
+        type: string
+    type: object
   settings.AddNotificationRequest:
     properties:
       name:
@@ -700,6 +997,113 @@ paths:
       summary: Prometheus metrics
       tags:
       - metrics
+  /v1/security:
+    get:
+      description: 'Returns the scanner setup and each container''s latest vulnerability
+        scan: counts by severity, how many findings have a fix, and how a waiting
+        update changes them. Finding lists are'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Scanner state and per-container summaries
+          schema:
+            $ref: '#/definitions/security.Response'
+        "401":
+          description: Missing or invalid API token
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Image security overview
+      tags:
+      - security
+  /v1/security/{name}:
+    get:
+      description: 'Returns one container''s latest vulnerability scan with each finding:
+        its ID, severity, package, installed and fixed versions, and advisory link.
+        When an update is waiting, also lists'
+      parameters:
+      - description: Container name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The container's latest scan
+          schema:
+            $ref: '#/definitions/security.ReportResponse'
+        "401":
+          description: Missing or invalid API token
+          schema:
+            type: string
+        "404":
+          description: The container has not been scanned
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Container security report
+      tags:
+      - security
+  /v1/security/scan:
+    post:
+      consumes:
+      - application/json
+      description: Starts scanning the running image of the named containers, or of
+        every watched container when none are named. The scan runs in the background;
+        GET /v1/security reports its progress
+      parameters:
+      - description: Containers to scan
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/security.ScanRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: The scan started
+          schema:
+            $ref: '#/definitions/security.ScanResponse'
+        "400":
+          description: The request body is not valid
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Missing or invalid API token
+          schema:
+            type: string
+        "404":
+          description: No named container is watched
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: A scan is already running
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: No scanner is available
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Scan running images
+      tags:
+      - security
   /v1/settings:
     get:
       description: Returns the settings that can be changed at run time, with each
@@ -724,8 +1128,8 @@ paths:
       consumes:
       - application/json
       description: 'Changes the named settings: monitor_only, cleanup, rolling_restart,
-        auto_rollback, include_stopped (booleans), schedule (cron) and container_overrides
-        (map). JSON null resets one.'
+        auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium,
+        high, or critical), schedule (cron)'
       parameters:
       - description: Setting names mapped to new values
         in: body

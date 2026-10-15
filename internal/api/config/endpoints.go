@@ -21,6 +21,7 @@ const (
 	EndpointImages     = "images"
 	EndpointConfig     = "config"
 	EndpointSettings   = "settings"
+	EndpointSecurity   = "security"
 	EndpointEvents     = "events"
 	EndpointSwagger    = "swagger"
 	EndpointUI         = "ui"
@@ -37,6 +38,7 @@ var AllEndpointNames = []string{
 	EndpointImages,
 	EndpointConfig,
 	EndpointSettings,
+	EndpointSecurity,
 	EndpointEvents,
 	EndpointSwagger,
 	EndpointUI,
@@ -267,6 +269,7 @@ func SetEndpointConfig(endpointMap EnabledEndpointsMap, cfg *types.RunConfig) {
 	cfg.EnableImagesAPI = endpointMap.Contains(EndpointImages)
 	cfg.EnableConfigAPI = endpointMap.Contains(EndpointConfig)
 	cfg.EnableSettingsAPI = endpointMap.Contains(EndpointSettings)
+	cfg.EnableSecurityAPI = endpointMap.Contains(EndpointSecurity)
 	cfg.EnableEventsAPI = endpointMap.Contains(EndpointEvents)
 	cfg.EnableSwaggerAPI = endpointMap.Contains(EndpointSwagger)
 	cfg.EnableUIAPI = endpointMap.Contains(EndpointUI)

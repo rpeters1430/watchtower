@@ -13,6 +13,8 @@ Flags and environment variables still provide the starting values. A change made
 | `cleanup`         | Boolean  | [`cleanup`](../../../configuration/update-behavior/index.md#cleanup_old_images)                    | Remove the previous image after a container is updated                  |
 | `rolling_restart` | Boolean  | [`rolling-restart`](../../../configuration/update-behavior/index.md#rolling_restart)            | Restart containers one at a time                                        |
 | `include_stopped` | Boolean  | [`include-stopped`](../../../configuration/container-selection/index.md#include_stopped_containers) | List, check, and update created and exited containers as well as running ones |
+| `scan`            | Boolean  | [`scan`](../../../configuration/image-scanning/index.md#scan)                       | Scan the new image of each pending update before applying it            |
+| `scan_gate`       | String   | [`scan-gate`](../../../configuration/image-scanning/index.md#scan-gate)            | Hold updates whose new image adds findings at or above this severity: `off`, `low`, `medium`, `high`, or `critical` |
 | `schedule`        | String   | [`schedule`](../../../configuration/scheduling/index.md) or the poll interval      | Cron expression for scheduled updates. An empty string turns them off   |
 
 Everything else, including the API token, the listen address, the Docker connection, and registry credentials, can only be set with flags and environment variables.

@@ -16,6 +16,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/git"
 	"github.com/nicholas-fedor/watchtower/internal/logging"
 	mt "github.com/nicholas-fedor/watchtower/internal/metrics"
+	"github.com/nicholas-fedor/watchtower/internal/security"
 	"github.com/nicholas-fedor/watchtower/internal/settings"
 	"github.com/nicholas-fedor/watchtower/pkg/container"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
@@ -96,6 +97,8 @@ type Options struct {
 	EnableConfigAPI bool
 	// EnableSettingsAPI enables the runtime settings endpoint.
 	EnableSettingsAPI bool
+	// EnableSecurityAPI enables the image vulnerability scanning endpoint.
+	EnableSecurityAPI bool
 	// EnableEventsAPI enables the events SSE endpoint.
 	EnableEventsAPI bool
 	// EnableUIAPI enables the built-in web UI under /ui/.
@@ -125,6 +128,9 @@ type Options struct {
 	// Settings holds the settings that can change at run time. BuildUpdateParams
 	// layers them over BaseParams. Nil means BaseParams is used as is.
 	Settings *settings.Store
+	// Security scans images and keeps each container's latest report. Nil
+	// when no scanner could be set up; the security endpoint then says so.
+	Security *security.Service
 	// IncludeStopped is exposed on the config API (client list option).
 	IncludeStopped bool
 	// IncludeRestarting is exposed on the config API (client list option).

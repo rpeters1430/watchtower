@@ -26,6 +26,8 @@ type RunConfig struct {
 	EnableConfigAPI bool
 	// EnableSettingsAPI enables the runtime settings API endpoint.
 	EnableSettingsAPI bool
+	// EnableSecurityAPI enables the image vulnerability scanning API endpoint.
+	EnableSecurityAPI bool
 	// EnableContainersAPI enables the containers API endpoint.
 	EnableContainersAPI bool
 	// EnableEventsAPI enables the events API endpoint.

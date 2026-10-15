@@ -618,8 +618,6 @@ func (p *process) runMain(cfg types.RunConfig) int {
 		InsecureSkipTLS: appCfg.Git.InsecureSkipTLS,
 	})
 
-	securityReviewer := newSecurityReviewer(p.log, appCfg.Scan)
-
 	ctx, stop := createSignalContext(
 		context.Background(),
 		os.Interrupt,
@@ -641,8 +639,11 @@ func (p *process) runMain(cfg types.RunConfig) int {
 			MonitorOnly:    appCfg.Update.MonitorOnly,
 			Cleanup:        appCfg.Update.Cleanup,
 			RollingRestart: appCfg.Update.RollingRestart,
+			AutoRollback:   appCfg.Update.AutoRollback,
 			Schedule:       appCfg.Schedule.Spec,
 			IncludeStopped: appCfg.Client.IncludeStopped,
+			Scan:           appCfg.Scan.Enabled,
+			ScanGate:       appCfg.Scan.Gate,
 		},
 		settings.Validators{
 			Schedule: scheduling.ValidateSpec,
@@ -662,6 +663,8 @@ func (p *process) runMain(cfg types.RunConfig) int {
 
 	applySavedNotifications(p.log, notifier, runtimeSettings)
 
+	securityService := newSecurityService(p.log, appCfg.Scan, dataDir, runtimeSettings)
+
 	if dataDir != "" {
 		metrics.Default().PersistHistory(p.log, filepath.Join(dataDir, historyFileName))
 		metrics.Default().PersistStatuses(p.log, filepath.Join(dataDir, statusFileName))
@@ -670,7 +673,10 @@ func (p *process) runMain(cfg types.RunConfig) int {
 	}
 
 	runUpdatesWithNotifications = func(ctx context.Context, filter types.Filter, params types.UpdateParams) *metrics.Metric {
-		// Every update path funnels through here, so this is where run-time settings take effect.
+		// Every update path funnels through here, so this is where run-time
+		// settings take effect. ApplyTo drops the reviewer when scanning is off.
+		params.SecurityReviewer = securityReviewer(securityService)
+
 		update := runtimeSettings.ApplyTo(params)
 		if filter != nil {
 			update.Filter = filter
@@ -679,8 +685,6 @@ func (p *process) runMain(cfg types.RunConfig) int {
 		if update.CurrentContainerID == "" {
 			update.CurrentContainerID = currentWatchtowerContainerID
 		}
-
-		update.SecurityReviewer = securityReviewer
 
 		return actions.RunUpdatesWithNotifications(ctx, actions.RunUpdatesWithNotificationsParams{
 			Logger:                       p.log,
@@ -868,6 +872,7 @@ func (p *process) runMain(cfg types.RunConfig) int {
 			EnableCheckAPI:               cfg.EnableCheckAPI,
 			EnableConfigAPI:              cfg.EnableConfigAPI,
 			EnableSettingsAPI:            cfg.EnableSettingsAPI,
+			EnableSecurityAPI:            cfg.EnableSecurityAPI,
 			EnableContainersAPI:          cfg.EnableContainersAPI,
 			EnableEventsAPI:              cfg.EnableEventsAPI,
 			EnableHealthAPI:              cfg.EnableHealthAPI,
@@ -891,6 +896,7 @@ func (p *process) runMain(cfg types.RunConfig) int {
 			UpdateLock:                   updateLock,
 			BaseParams:                   sharedBase,
 			Settings:                     runtimeSettings,
+			Security:                     securityService,
 			IncludeStopped:               appCfg.Client.IncludeStopped,
 			IncludeRestarting:            appCfg.Client.IncludeRestarting,
 			LabelEnable:                  appCfg.Filter.LabelEnable,
