@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Scan updates by default, show ETA and queue, and show each update's CVE diff live by @claude
+- Show what an on-demand scan is doing, step by step by @claude
 - Show image scan results and how to fix them by @claude
 - Scan pending updates and hold them on an opt-in severity gate by @claude
 - Add image scanner package with a Trivy backend by @claude
@@ -209,6 +211,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Run image scans one at a time and allow longer scans by @claude
 - Track fixed vulnerabilities after update and fix ui refresh by @rpeters1430
 - Resolve existing golangci-lint findings by @claude
 - Address review findings on check results and notifications by @claude
@@ -574,6 +577,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Satisfy golangci-lint on the scan progress changes by @claude
 - Refactor Renovate configuration settings by @rpeters1430
 - Replace SetNoRestartPolicy with SetRestartPolicy by @nicholas-fedor
 - Replace untyped maps with concrete types by @nicholas-fedor
@@ -2967,9 +2971,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#28](https://github.com/rpeters1430/watchtower/pull/28)
+- @rpeters1430 made their first contribution in [#30](https://github.com/rpeters1430/watchtower/pull/30)
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#27](https://github.com/rpeters1430/watchtower/pull/27)
+- @github-actions[bot] made their first contribution in [#29](https://github.com/rpeters1430/watchtower/pull/29)
 - @renovate[bot] made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
