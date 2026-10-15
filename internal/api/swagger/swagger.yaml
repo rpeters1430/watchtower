@@ -40,6 +40,10 @@ definitions:
         - $ref: '#/definitions/activity.Pull'
         description: Pull is the download progress of the container's image while
           Step is pulling.
+      scan:
+        allOf:
+        - $ref: '#/definitions/activity.Scan'
+        description: Scan is the security scan of the update, once one has started.
       since:
         description: Since is when the container entered this step, in RFC 3339.
         type: string
@@ -82,6 +86,32 @@ definitions:
           TotalBytes is the download size of the layers reported so far. It can
           grow while the pull runs, because Docker reports sizes as layers start.
         type: integer
+    type: object
+  activity.Scan:
+    properties:
+      done:
+        description: Done is true once the scan finished, successfully or not.
+        type: boolean
+      error:
+        description: Error says why the scan failed. The update goes ahead without
+          a review.
+        type: string
+      fixed_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: FixedCounts tallies, by severity, the findings the update fixes.
+      introduced_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: IntroducedCounts tallies, by severity, the findings the update
+          brings in.
+      latest_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: LatestCounts tallies the new image's findings by severity.
+      step:
+        description: Step says what the scanner is doing while Step is scanning.
+        type: string
     type: object
   check.CheckResponse:
     properties:
@@ -354,15 +384,30 @@ definitions:
         items:
           type: string
         type: array
+      current_started_at:
+        description: CurrentStartedAt is when the image being scanned right now started.
+        type: string
       done:
         description: Done is the number of containers scanned so far.
         type: integer
+      estimated_finish_at:
+        description: |-
+          EstimatedFinishAt is when the scan is expected to finish, based on how
+          long earlier scans of the same images took, or on the average so far.
+          Omitted until there is anything to base it on.
+        type: string
       failed:
         description: Failed is the number of containers whose image could not be scanned.
         type: integer
       finished_at:
         description: FinishedAt is when the scan finished, omitted while it runs.
         type: string
+      images:
+        description: Images is the number of distinct images the scan covers.
+        type: integer
+      images_done:
+        description: ImagesDone is the number of those images scanned so far.
+        type: integer
       running:
         description: Running is true while the scan is in progress.
         type: boolean
@@ -381,6 +426,13 @@ definitions:
       total:
         description: Total is the number of containers the scan covers.
         type: integer
+      waiting:
+        description: |-
+          Waiting names the containers still queued, in the order they will be
+          scanned. Images are scanned one at a time.
+        items:
+          type: string
+        type: array
     type: object
   security.Report:
     properties:
@@ -413,6 +465,11 @@ definitions:
       name:
         description: Name is the container name without a leading slash.
         type: string
+      scan_seconds:
+        description: |-
+          ScanSeconds is how long the scan took, when it ran on request. It
+          feeds the estimate of how long the next scan takes.
+        type: number
       scanned_at:
         description: ScannedAt is when the scan finished, or failed.
         type: string

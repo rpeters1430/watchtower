@@ -270,7 +270,8 @@ curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/update/status
 ```
 
 - `running` is `false` and `containers` is empty when no update is running. `last_scan` then holds `finished_at` and the final `step` of each container the most recent update worked on, so a client that polls still learns the outcome of steps that finished between two polls.
-- `containers` lists the containers the update has started working on, in order. A container appears once its new image starts downloading, or when it is stopped for a linked restart. `step` is `pulling`, `stopping`, `starting`, `updated`, or `failed`.
+- `containers` lists the containers the update has started working on, in order. A container appears once its new image starts downloading, or when it is stopped for a linked restart. `step` is `pulling`, `scanning`, `scanned`, `held`, `stopping`, `starting`, `updated`, or `failed`.
+- With image scanning on, `scan` describes the update's security scan: `step` says what the scanner is doing while it runs, and once `done` is true, `fixed_counts`, `introduced_counts`, and `latest_counts` tally by severity what the update fixes, what it brings in, and what the new image has. `error` says why a scan failed; the update then goes ahead without a review.
 - `pull` is present while `step` is `pulling`. `phase` is `starting`, `downloading`, `extracting`, `finishing`, `done`, or `failed`. `total_bytes` counts the layers Docker has reported so far, so it can grow during the download. Docker reports unpacking by layer, not by byte.
 
 Successful requests to this route are left out of the access log so that polling does not bury the update's own log lines. Watchtower also logs a `Pulling image` line with the same progress every 15 seconds while an image downloads.

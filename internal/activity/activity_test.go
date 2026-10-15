@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 )
 
 func TestIdleTrackerReportsNothing(t *testing.T) {
@@ -147,4 +149,50 @@ func pullOf(t *testing.T, tracker *Tracker) Pull {
 	require.NotNil(t, snapshot.Containers[0].Pull)
 
 	return *snapshot.Containers[0].Pull
+}
+
+func TestScanStepsAndResult(t *testing.T) {
+	t.Parallel()
+
+	tracker := New()
+	tracker.BeginScan()
+
+	// A container the scan has not reached is ignored.
+	tracker.SetScanStep("ghost", "Downloading the vulnerability database")
+
+	tracker.SetStep("/web", "nginx:latest", StepScanning)
+	tracker.SetScanStep("/web", "Downloading the vulnerability database")
+
+	snapshot := tracker.Snapshot()
+	require.Len(t, snapshot.Containers, 1)
+	require.NotNil(t, snapshot.Containers[0].Scan)
+	assert.Equal(t, "Downloading the vulnerability database", snapshot.Containers[0].Scan.Step)
+	assert.False(t, snapshot.Containers[0].Scan.Done)
+
+	critical := scanner.Finding{ID: "CVE-1", Severity: scanner.SeverityCritical}
+	high := scanner.Finding{ID: "CVE-2", Severity: scanner.SeverityHigh}
+	review := &scanner.Review{
+		Latest: &scanner.Result{Findings: []scanner.Finding{high}},
+		Diff:   scanner.Diff{Fixed: []scanner.Finding{critical}, Introduced: []scanner.Finding{high}},
+	}
+
+	tracker.SetScanResult("web", review, nil)
+	tracker.SetStep("web", "", StepScanned)
+
+	scan := tracker.Snapshot().Containers[0].Scan
+	assert.True(t, scan.Done)
+	assert.Empty(t, scan.Step)
+	assert.Equal(t, 1, scan.FixedCounts.Critical)
+	assert.Equal(t, 1, scan.IntroducedCounts.High)
+	assert.Equal(t, 1, scan.LatestCounts.High)
+
+	tracker.SetStep("db", "postgres:17", StepScanning)
+	tracker.SetScanResult("db", nil, errors.New("timed out"))
+	tracker.EndScan()
+
+	// The finished scan keeps each container's result for late pollers.
+	last := tracker.Snapshot().LastScan
+	require.NotNil(t, last)
+	assert.Equal(t, 1, last.Containers[0].Scan.FixedCounts.Critical)
+	assert.Equal(t, "timed out", last.Containers[1].Scan.Error)
 }

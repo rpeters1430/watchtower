@@ -79,6 +79,9 @@ type Report struct {
 	ScannerVersion string `json:"scanner_version,omitempty"`
 	// ScannedAt is when the scan finished, or failed.
 	ScannedAt time.Time `json:"scanned_at"`
+	// ScanSeconds is how long the scan took, when it ran on request. It
+	// feeds the estimate of how long the next scan takes.
+	ScanSeconds float64 `json:"scan_seconds,omitempty"`
 	// Counts tallies the findings by severity.
 	Counts scanner.Counts `json:"counts"`
 	// Fixable is the number of findings with a published fix.

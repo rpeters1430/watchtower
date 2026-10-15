@@ -508,6 +508,14 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+.scan-diff {
+  color: var(--ink);
+}
+
+.scan-diff-worse {
+  color: var(--failed);
+}
+
 .progress {
   display: block;
   width: 100%;
@@ -597,6 +605,24 @@ input {
 
 .scan-status .progress {
   max-width: none;
+}
+
+.scan-status-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.3rem 1rem;
+  margin: 0;
+  font-size: var(--step--1);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-status-facts dt {
+  color: var(--ink-soft);
+}
+
+.scan-status-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .scan-log {

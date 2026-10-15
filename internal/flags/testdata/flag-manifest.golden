@@ -889,7 +889,7 @@
 --scan
   shorthand: ""
   kind: bool
-  default: false
+  default: true
   env: WATCHTOWER_SCAN
   list-parse: none
   hidden: false

@@ -101,6 +101,7 @@
   const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
   const exact = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
   const clock = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
+  const clockShort = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 
   function ago(date) {
     const seconds = Math.round((date.getTime() - Date.now()) / 1000);
@@ -426,7 +427,13 @@
     await loadChecks();
 
     if (updated.length > 0) {
-      notify(`Updated ${updated.length === 1 ? updated[0] : count(updated.length, "container")}.`);
+      notify(`Updated ${updated.length === 1 ? updated[0] : count(updated.length, "container")}.${updateScanSummary(last.containers || [])}`);
+    }
+
+    // Reports now include what each update fixed.
+    if (feature("security")) {
+      await loadSecurity();
+      state.securityDetails.clear();
     }
 
     render();
@@ -455,6 +462,12 @@
         }
 
         return { key: "working", label: "Downloading" };
+      case "scanning":
+        return { key: "working", label: "Scanning" };
+      case "scanned":
+        return { key: "working", label: "Scanned" };
+      case "held":
+        return { key: "waiting", label: "Held back" };
       case "stopping":
         return { key: "working", label: "Stopping" };
       case "starting":
@@ -490,6 +503,16 @@
         }
 
         return "Asking the registry for the new image.";
+      case "scanning":
+        return `Checking the new image for known vulnerabilities and comparing it with the running one. ${
+          entry.scan && entry.scan.step ? `${entry.scan.step}.` : "Starting the scanner."
+        } Images are scanned one at a time.`;
+      case "scanned":
+        return entry.scan && entry.scan.error
+          ? "The new image couldn't be scanned, so it's updated without a review. Waiting its turn to restart."
+          : "Scanned. Waiting its turn to restart.";
+      case "held":
+        return "Held back: the new image adds findings at or above the scan gate, so the container keeps its current image.";
       case "stopping":
         return "Stopping the old container. It gets its stop timeout to shut down cleanly.";
       case "starting":
@@ -501,6 +524,77 @@
       default:
         return "";
     }
+  }
+
+  // How an update changes known vulnerabilities, once its scan is done.
+  function scanDiffText(scan) {
+    if (!scan || !scan.done || scan.error) {
+      return "";
+    }
+
+    const fixed = total(scan.fixed_counts);
+    const introduced = total(scan.introduced_counts);
+
+    if (fixed === 0 && introduced === 0) {
+      const latest = total(scan.latest_counts);
+
+      return `The update doesn't change known vulnerabilities${latest > 0 ? ` (the new image has ${count(latest, "finding")})` : ""}.`;
+    }
+
+    const parts = [];
+
+    if (fixed > 0) {
+      parts.push(`fixes ${count(fixed, "known vulnerability", "known vulnerabilities")} (${severityList(scan.fixed_counts)})`);
+    }
+
+    if (introduced > 0) {
+      parts.push(`brings in ${count(introduced, "new one")} (${severityList(scan.introduced_counts)})`);
+    }
+
+    return `The update ${parts.join(" and ")}.`;
+  }
+
+  // One sentence on what the finished update's scans found, for its notice.
+  function updateScanSummary(entries) {
+    const scanned = entries.filter((entry) => entry.step === "updated" && entry.scan && entry.scan.done && !entry.scan.error);
+
+    if (scanned.length === 0) {
+      return "";
+    }
+
+    const fixed = scanned.reduce((sum, entry) => sum + total(entry.scan.fixed_counts), 0);
+    const introduced = scanned.reduce((sum, entry) => sum + total(entry.scan.introduced_counts), 0);
+
+    if (fixed === 0 && introduced === 0) {
+      return " Known vulnerabilities are unchanged.";
+    }
+
+    return ` ${capitalise(
+      [
+        fixed > 0 && `fixed ${count(fixed, "known vulnerability", "known vulnerabilities")}`,
+        introduced > 0 && `brought in ${count(introduced, "new one")}`,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    )}.`;
+  }
+
+  function scanDiff(entry) {
+    const text = scanDiffText(entry.scan);
+
+    if (!text) {
+      return null;
+    }
+
+    // Red only for what the page calls serious elsewhere: new critical or high findings.
+    const worse = serious(entry.scan.introduced_counts);
+
+    return el(
+      "p",
+      { class: worse ? "unit-progress-text scan-diff scan-diff-worse" : "unit-progress-text scan-diff" },
+      text,
+      feature("security") && [" ", el("a", { class: "link-subtle", href: "#/security" }, "Details")],
+    );
   }
 
   // The bar shows download bytes, then unpacked layers.
@@ -884,7 +978,7 @@
     let note;
     const activity = state.activity && state.activity.running ? state.activity : null;
     const entries = activity ? activity.containers || [] : [];
-    const active = entries.filter((entry) => entry.step !== "updated" && entry.step !== "failed");
+    const active = entries.filter((entry) => !["updated", "failed", "held"].includes(entry.step));
     const done = entries.filter((entry) => entry.step === "updated").length;
 
     if (activity) {
@@ -1286,6 +1380,7 @@
           { class: "unit-progress", role: "status" },
           activityBar(entry),
           el("p", { class: "unit-progress-text" }, activityDetail(entry)),
+          scanDiff(entry),
         ),
       open && facts(container),
     );
@@ -1704,6 +1799,9 @@
     document.querySelectorAll("[data-since]").forEach((node) => {
       node.textContent = elapsed(new Date(node.dataset.since));
     });
+    document.querySelectorAll("[data-until]").forEach((node) => {
+      node.textContent = remaining(new Date(node.dataset.until));
+    });
   }
 
   function elapsed(since) {
@@ -1850,6 +1948,9 @@
     const step = job.step || "Starting the scan";
     const since = job.step_started_at || job.started_at;
     const current = (job.current || []).join(", ");
+    const waiting = job.waiting || [];
+    const images = job.images || 0;
+    const finish = job.estimated_finish_at ? new Date(job.estimated_finish_at) : null;
 
     return el(
       "section",
@@ -1861,19 +1962,67 @@
         el("p", { class: "scan-status-step" }, step),
         el("span", { class: "scan-status-clock", "data-since": since, title: "Time on this step" }, elapsed(new Date(since))),
       ),
-      el("progress", { class: "progress", "aria-label": "Containers scanned", max: String(job.total), value: String(job.done) }),
+      el("progress", {
+        class: "progress",
+        "aria-label": "Images scanned",
+        max: String(images || job.total),
+        value: String(images ? job.images_done : job.done),
+      }),
       el(
-        "p",
-        { class: "scan-status-count" },
-        `${job.done} of ${count(job.total, "container")} scanned`,
-        job.failed > 0 ? `, ${job.failed} couldn't be` : "",
-        current ? `. Now on ${current}.` : ".",
-        " Running for ",
-        el("span", { "data-since": job.started_at }, elapsed(new Date(job.started_at))),
-        ".",
+        "dl",
+        { class: "scan-status-facts" },
+        el("dt", null, "Now scanning"),
+        el(
+          "dd",
+          null,
+          current || "Nothing yet",
+          images > 0 && current ? ` (image ${Math.min(job.images_done + 1, images)} of ${images})` : "",
+          job.current_started_at && [" for ", el("span", { "data-since": job.current_started_at }, elapsed(new Date(job.current_started_at)))],
+        ),
+        el("dt", null, "Done"),
+        el(
+          "dd",
+          null,
+          `${job.done} of ${count(job.total, "container")}`,
+          job.failed > 0 ? `, ${job.failed} couldn't be scanned` : "",
+          ". Running for ",
+          el("span", { "data-since": job.started_at }, elapsed(new Date(job.started_at))),
+        ),
+        el("dt", null, "Time left"),
+        el(
+          "dd",
+          null,
+          finish
+            ? [
+                "About ",
+                el("span", { "data-until": job.estimated_finish_at }, remaining(finish)),
+                `, finishing around ${clockShort.format(finish)}`,
+              ]
+            : "Worked out once the first image is done",
+        ),
+        waiting.length > 0 && el("dt", null, "Up next"),
+        waiting.length > 0 && el("dd", null, waitingList(waiting)),
       ),
       log,
     );
+  }
+
+  function remaining(finish) {
+    const seconds = Math.round((finish - Date.now()) / 1000);
+
+    if (seconds < 60) {
+      return "under a minute";
+    }
+
+    const minutes = Math.round(seconds / 60);
+
+    return minutes < 60 ? count(minutes, "minute") : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+  }
+
+  function waitingList(names) {
+    const shown = names.slice(0, 5).join(", ");
+
+    return names.length > 5 ? `${shown}, and ${names.length - 5} more` : shown;
   }
 
   function elapsedBetween(start, end) {
@@ -2328,6 +2477,12 @@
         { class: "changes" },
         el("h3", { class: "detail-title" }, `Fixed by most recent update (${ready.last_update.fixed.length})`),
         el("ul", { class: "finding-list" }, ready.last_update.fixed.map((finding) => findingRow(finding, false, true))),
+      ),
+      ready && ready.last_update && ready.last_update.introduced && ready.last_update.introduced.length > 0 && el(
+        "div",
+        { class: "changes" },
+        el("h3", { class: "detail-title" }, `Brought in by most recent update (${ready.last_update.introduced.length})`),
+        el("ul", { class: "finding-list" }, ready.last_update.introduced.map((finding) => findingRow(finding, false))),
       ),
       el(
         "p",

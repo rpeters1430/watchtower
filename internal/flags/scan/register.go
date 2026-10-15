@@ -17,7 +17,7 @@ func Specs() []spec.FlagSpec {
 		{
 			Name:    "scan",
 			Kind:    spec.KindBool,
-			Default: false,
+			Default: true,
 			EnvKeys: []string{"WATCHTOWER_SCAN"},
 			Help:    "Scan the new image of each pending update for known vulnerabilities with Trivy before updating",
 		},

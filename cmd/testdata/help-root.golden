@@ -114,7 +114,7 @@ Flags:
       --revive-stopped                              Will also start stopped containers that were updated, if include-stopped is active
       --rolling-restart                             Restart containers one at a time
   -R, --run-once                                    Run once now and exit
-      --scan                                        Scan the new image of each pending update for known vulnerabilities with Trivy before updating
+      --scan                                        Scan the new image of each pending update for known vulnerabilities with Trivy before updating (default true)
       --scan-cache-volume string                    Docker volume that keeps the vulnerability database between scans (default "watchtower-trivy-cache")
       --scan-docker-socket string                   Host path of the Docker socket mounted into the scanner container (default "/var/run/docker.sock")
       --scan-gate string                            Hold an update when its new image adds findings at or above this severity (off, low, medium, high, critical) (default "off")

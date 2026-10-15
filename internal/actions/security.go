@@ -5,20 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/rs/zerolog"
-	"golang.org/x/sync/errgroup"
+
+	"github.com/nicholas-fedor/watchtower/internal/activity"
 
 	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 	"github.com/nicholas-fedor/watchtower/pkg/session"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
-
-// maxConcurrentScans bounds image scans running at once. Each scan is a
-// scanner container that reads a whole image, so a small limit keeps a large
-// update from saturating the host.
-const maxConcurrentScans = 2
 
 // maxListedFindings caps how many finding IDs one log line names.
 const maxListedFindings = 10
@@ -52,14 +47,11 @@ func reviewSecurity(
 		return nil
 	}
 
-	var (
-		group     errgroup.Group
-		reviewsMu sync.Mutex
-		reviews   = make(map[types.ContainerID]*scanner.Review)
-	)
+	reviews := make(map[types.ContainerID]*scanner.Review)
+	tracker := activity.Default()
 
-	group.SetLimit(maxConcurrentScans)
-
+	// Images are scanned one at a time: every scan shares the scanner's
+	// database, and the reviewer runs one scan at a time anyway.
 	for _, c := range containers {
 		if !c.IsStale() {
 			continue
@@ -78,38 +70,45 @@ func reviewSecurity(
 			continue
 		}
 
-		group.Go(func() error {
-			clog := log.With().
-				Str("container", c.Name()).
-				Str("image", c.ImageName()).
-				Logger()
+		clog := log.With().
+			Str("container", c.Name()).
+			Str("image", c.ImageName()).
+			Logger()
 
-			review, err := reviewer.ReviewUpdate(ctx, current, latest)
-			if err != nil {
-				clog.Warn().
-					Err(err).
-					Msg("Could not scan the new image. Updating without a security review")
+		tracker.SetStep(c.Name(), c.ImageName(), activity.StepScanning)
 
-				return nil
-			}
-
-			reviewsMu.Lock()
-			reviews[c.ID()] = review
-			reviewsMu.Unlock()
-
-			counts := review.Latest.Counts()
-			clog.Info().
-				Int("fixed", len(review.Diff.Fixed)).
-				Int("introduced", len(review.Diff.Introduced)).
-				Int("critical", counts.Critical).
-				Int("high", counts.High).
-				Msg("Scanned new image")
-
-			return nil
+		scanCtx := scanner.WithProgress(ctx, func(step string) {
+			tracker.SetScanStep(c.Name(), step)
 		})
-	}
 
-	_ = group.Wait()
+		review, err := reviewer.ReviewUpdate(scanCtx, current, latest)
+		tracker.SetScanResult(c.Name(), review, err)
+
+		if err != nil {
+			tracker.SetStep(c.Name(), "", activity.StepScanned)
+			clog.Warn().
+				Err(err).
+				Msg("Could not scan the new image. Updating without a security review")
+
+			continue
+		}
+
+		reviews[c.ID()] = review
+
+		if review.Hold {
+			tracker.SetStep(c.Name(), "", activity.StepHeld)
+		} else {
+			tracker.SetStep(c.Name(), "", activity.StepScanned)
+		}
+
+		counts := review.Latest.Counts()
+		clog.Info().
+			Int("fixed", len(review.Diff.Fixed)).
+			Int("introduced", len(review.Diff.Introduced)).
+			Int("critical", counts.Critical).
+			Int("high", counts.High).
+			Msg("Scanned new image")
+	}
 
 	held := make(map[types.ContainerID]error)
 

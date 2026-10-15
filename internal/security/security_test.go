@@ -311,7 +311,7 @@ func TestStartRecordsActivity(t *testing.T) {
 	assert.Equal(t, "Started scanning 2 containers", messages[0])
 	assert.Contains(t, messages, "Scanning web")
 	assert.Contains(t, messages, "Reading sha256:old", "steps the scanner reports are kept")
-	assert.Contains(t, messages, "Finished web: 2 findings (1 critical, 1 high)")
+	assert.Contains(t, messages, "Finished web in 0s: 2 findings (1 critical, 1 high)")
 	assert.Equal(t, 1, problems)
 }
 
@@ -333,4 +333,43 @@ func TestStepDropsRepeatsAndCaps(t *testing.T) {
 	job := service.Job()
 	assert.Len(t, job.Activity, maxActivity)
 	assert.Equal(t, strconv.Itoa(maxActivity+4), job.Step)
+}
+
+func TestEstimateUsesPreviousAndAverageDurations(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	service := NewService(nil, newStub(), OpenStore(nil, ""), Options{})
+	service.now = func() time.Time { return now }
+
+	started := now.Add(-30 * time.Second)
+
+	service.mu.Lock()
+	defer service.mu.Unlock()
+
+	service.job = Job{Running: true, CurrentStartedAt: &started}
+	service.plan = plan{
+		current:  "sha256:a",
+		queue:    []string{"sha256:b", "sha256:c"},
+		previous: map[string]time.Duration{"sha256:a": time.Minute, "sha256:b": 2 * time.Minute},
+	}
+
+	// a: 1m - 30s elapsed, b: 2m from its last scan, c: average of earlier scans (1m30s).
+	finish := service.estimate()
+	require.NotNil(t, finish)
+	assert.Equal(t, now.Add(30*time.Second+2*time.Minute+90*time.Second), *finish)
+
+	// This job's own scans win over earlier ones for unknown images.
+	service.plan.taken = []time.Duration{10 * time.Second}
+	assert.Equal(t, now.Add(30*time.Second+2*time.Minute+10*time.Second), *service.estimate())
+
+	// An overrunning scan still leaves a little time.
+	late := now.Add(-5 * time.Minute)
+	service.job.CurrentStartedAt = &late
+	assert.Equal(t, now.Add(minRemaining+2*time.Minute+10*time.Second), *service.estimate())
+
+	// Nothing to go on: no estimate.
+	service.plan = plan{queue: []string{"sha256:z"}}
+	service.job.CurrentStartedAt = nil
+	assert.Nil(t, service.estimate())
 }
