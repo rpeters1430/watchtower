@@ -1582,6 +1582,30 @@
                 "SeverityCritical"
             ]
         },
+        "security.Activity": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "description": "At is when the step began.",
+                    "type": "string"
+                },
+                "containers": {
+                    "description": "Containers names the containers the step is about, if any.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "message": {
+                    "description": "Message says what happened, in a sentence.",
+                    "type": "string"
+                },
+                "problem": {
+                    "description": "Problem is true when the step is a failure.",
+                    "type": "boolean"
+                }
+            }
+        },
         "security.AppliedUpdate": {
             "type": "object",
             "properties": {
@@ -1628,6 +1652,13 @@
         "security.Job": {
             "type": "object",
             "properties": {
+                "activity": {
+                    "description": "Activity lists the scan's steps so far, oldest first, up to the most\nrecent maxActivity.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/security.Activity"
+                    }
+                },
                 "current": {
                     "description": "Current names the containers being scanned right now.",
                     "type": "array",
@@ -1653,6 +1684,14 @@
                 },
                 "started_at": {
                     "description": "StartedAt is when the scan started, omitted before the first one.",
+                    "type": "string"
+                },
+                "step": {
+                    "description": "Step says what the scan is doing right now, such as downloading the\nvulnerability database.",
+                    "type": "string"
+                },
+                "step_started_at": {
+                    "description": "StepStartedAt is when the current step began.",
                     "type": "string"
                 },
                 "total": {

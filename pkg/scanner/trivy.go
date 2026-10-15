@@ -98,6 +98,9 @@ func (t *Trivy) Scan(ctx context.Context, ref string) (*Result, error) {
 		Image:   t.options.Image,
 		Args:    t.args(ref),
 		Volumes: map[string]string{t.options.CacheVolume: trivyCacheDir},
+		Log: func(ctx context.Context, line string) {
+			ReportProgress(ctx, TrivyStep(line))
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %w", ErrScanFailed, ref, err)
@@ -127,7 +130,9 @@ func (t *Trivy) Scan(ctx context.Context, ref string) (*Result, error) {
 func (t *Trivy) args(ref string) []string {
 	args := []string{
 		"image",
-		"--quiet",
+		// Log lines on standard error say what the scan is doing; the
+		// progress bars are only noise when nobody watches a terminal.
+		"--no-progress",
 		"--format", "json",
 		"--cache-dir", trivyCacheDir,
 		"--scanners", "vuln,secret",
@@ -139,6 +144,90 @@ func (t *Trivy) args(ref string) []string {
 	}
 
 	return append(args, ref)
+}
+
+// trivySteps maps a fragment of a Trivy log message to the step it starts.
+// Trivy logs each phase of a scan once, so these lines mark progress.
+var trivySteps = []struct {
+	fragment string
+	step     string
+}{
+	{"need to update db", "Downloading the vulnerability database"},
+	{"downloading vulnerability db", "Downloading the vulnerability database"},
+	{"downloading java db", "Downloading the Java vulnerability database"},
+	{"secret scanning is enabled", "Reading the image's layers and checking its files for secrets"},
+	{"detected os", "Reading the image's operating system packages"},
+	{"number of language-specific files", "Reading the image's application dependencies"},
+	{"detecting vulnerabilities", "Matching packages against the vulnerability database"},
+}
+
+// TrivyStep turns one line of Trivy's log output into a progress step.
+//
+// Parameters:
+//   - line: One line Trivy wrote to standard error, such as
+//     "2026-10-15T10:00:00Z\tINFO\t[vulndb] Need to update DB".
+//
+// Returns:
+//   - string: The step the line marks, a warning, or "" for a line that
+//     says nothing new.
+func TrivyStep(line string) string {
+	level, message := splitTrivyLine(line)
+	lower := strings.ToLower(message)
+
+	for _, known := range trivySteps {
+		if strings.Contains(lower, known.fragment) {
+			return known.step
+		}
+	}
+
+	switch level {
+	case "WARN", "ERROR", "FATAL":
+		return "Scanner warning: " + message
+	default:
+		return ""
+	}
+}
+
+// splitTrivyLine separates a Trivy log line into its level and message,
+// dropping the timestamp, the "[component]" prefix, and trailing fields.
+//
+// Parameters:
+//   - line: One line of Trivy log output.
+//
+// Returns:
+//   - string: Level such as "INFO", or "" when the line has none.
+//   - string: Message.
+func splitTrivyLine(line string) (string, string) {
+	const minTabFields = 3
+
+	var level, message string
+
+	if fields := strings.Split(line, "\t"); len(fields) >= minTabFields {
+		level, message = fields[1], fields[2]
+	} else if fields := strings.Fields(line); len(fields) >= minTabFields && isTrivyLevel(fields[1]) {
+		level, message = fields[1], strings.Join(fields[2:], " ")
+	} else {
+		message = line
+	}
+
+	message = strings.TrimSpace(message)
+	if strings.HasPrefix(message, "[") {
+		if end := strings.Index(message, "] "); end > 0 {
+			message = message[end+2:]
+		}
+	}
+
+	return strings.TrimSpace(level), message
+}
+
+// isTrivyLevel reports whether s is a Trivy log level.
+func isTrivyLevel(s string) bool {
+	switch s {
+	case "DEBUG", "INFO", "WARN", "ERROR", "FATAL":
+		return true
+	default:
+		return false
+	}
 }
 
 // trivyReport is the subset of Trivy's JSON report (schema version 2) that

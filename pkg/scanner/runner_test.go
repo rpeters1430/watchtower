@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"iter"
+	"sync"
 	"testing"
 	"time"
 
@@ -237,4 +238,50 @@ func TestTail(t *testing.T) {
 
 	assert.Equal(t, "abc", tail("abc", 5))
 	assert.Equal(t, "cde", tail("abcde", 3))
+}
+
+func TestDockerRunnerReportsProgress(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeDocker{logs: append(frame(stdcopy.Stdout, "{}"), frame(stdcopy.Stderr, "first\nsecond\n")...)}
+
+	var (
+		mu    sync.Mutex
+		steps []string
+		lines []string
+	)
+
+	ctx := WithProgress(t.Context(), func(step string) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		steps = append(steps, step)
+	})
+
+	_, err := newTestRunner(api).Run(ctx, RunSpec{
+		Image: "scanner",
+		Log: func(_ context.Context, line string) {
+			mu.Lock()
+			defer mu.Unlock()
+
+			lines = append(lines, line)
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"Downloading the scanner image scanner", "Starting the scanner"}, steps)
+	assert.Equal(t, []string{"first", "second"}, lines)
+}
+
+func TestLineWriter(t *testing.T) {
+	t.Parallel()
+
+	var lines []string
+
+	writer := &lineWriter{fn: func(line string) { lines = append(lines, line) }}
+
+	_, _ = writer.Write([]byte("one\r\ntw"))
+	_, _ = writer.Write([]byte("o\n\nthree"))
+
+	assert.Equal(t, []string{"one", "two"}, lines)
 }

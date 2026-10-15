@@ -191,8 +191,14 @@ func (r *Reviewer) scan(ctx context.Context, image string) (*Result, error) {
 
 	select {
 	case r.slot <- struct{}{}:
-	case <-ctx.Done():
-		return nil, fmt.Errorf("scanning %s with %s: %w", image, r.scanner.Name(), ctx.Err())
+	default:
+		ReportProgress(ctx, "Waiting for another scan to finish")
+
+		select {
+		case r.slot <- struct{}{}:
+		case <-ctx.Done():
+			return nil, fmt.Errorf("scanning %s with %s: %w", image, r.scanner.Name(), ctx.Err())
+		}
 	}
 
 	defer func() { <-r.slot }()

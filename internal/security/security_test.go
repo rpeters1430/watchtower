@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -36,7 +37,9 @@ func (s *stubScanner) ReviewUpdate(_ context.Context, current, latest string) (*
 	}, nil
 }
 
-func (s *stubScanner) Rescan(_ context.Context, image string) (*scanner.Result, error) {
+func (s *stubScanner) Rescan(ctx context.Context, image string) (*scanner.Result, error) {
+	scanner.ReportProgress(ctx, "Reading "+image)
+
 	if s.release != nil {
 		<-s.release
 	}
@@ -277,4 +280,57 @@ func TestNewReportCapsFindings(t *testing.T) {
 	assert.Len(t, report.Findings, maxFindings)
 	assert.True(t, report.Truncated)
 	assert.Equal(t, maxFindings+5, report.Counts.Total())
+}
+
+func TestStartRecordsActivity(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(nil, newStub(), OpenStore(nil, ""), Options{})
+
+	_, err := service.Start(t.Context(), []Target{
+		{Name: "web", Image: "nginx", ImageID: "sha256:old"},
+		{Name: "broken", Image: "gone", ImageID: "sha256:missing"},
+	})
+	require.NoError(t, err)
+
+	job := waitForJob(t, service)
+	assert.Empty(t, job.Step, "a finished job has no current step")
+
+	messages := make([]string, 0, len(job.Activity))
+	problems := 0
+
+	for _, entry := range job.Activity {
+		messages = append(messages, entry.Message)
+
+		if entry.Problem {
+			problems++
+			assert.Equal(t, []string{"broken"}, entry.Containers)
+		}
+	}
+
+	assert.Equal(t, "Started scanning 2 containers", messages[0])
+	assert.Contains(t, messages, "Scanning web")
+	assert.Contains(t, messages, "Reading sha256:old", "steps the scanner reports are kept")
+	assert.Contains(t, messages, "Finished web: 2 findings (1 critical, 1 high)")
+	assert.Equal(t, 1, problems)
+}
+
+func TestStepDropsRepeatsAndCaps(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(nil, newStub(), OpenStore(nil, ""), Options{})
+
+	service.mu.Lock()
+	service.step(nil, "Downloading", false)
+	service.step(nil, "Downloading", false)
+	assert.Len(t, service.job.Activity, 1)
+
+	for i := range maxActivity + 5 {
+		service.step(nil, strconv.Itoa(i), false)
+	}
+	service.mu.Unlock()
+
+	job := service.Job()
+	assert.Len(t, job.Activity, maxActivity)
+	assert.Equal(t, strconv.Itoa(maxActivity+4), job.Step)
 }
