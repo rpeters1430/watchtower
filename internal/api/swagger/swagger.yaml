@@ -295,6 +295,34 @@ definitions:
     - SeverityMedium
     - SeverityHigh
     - SeverityCritical
+  security.AppliedUpdate:
+    properties:
+      applied_at:
+        description: AppliedAt is when the update was applied.
+        type: string
+      fixed:
+        description: Fixed are findings of the previous image that the new image no
+          longer has.
+        items:
+          $ref: '#/definitions/scanner.Finding'
+        type: array
+      fixed_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: FixedCounts tallies Fixed by severity.
+      introduced:
+        description: Introduced are findings the new image added.
+        items:
+          $ref: '#/definitions/scanner.Finding'
+        type: array
+      introduced_counts:
+        allOf:
+        - $ref: '#/definitions/scanner.Counts'
+        description: IntroducedCounts tallies Introduced by severity.
+      previous_image_id:
+        description: PreviousImageID is the image the container ran before the update.
+        type: string
+    type: object
   security.Job:
     properties:
       current:
@@ -345,6 +373,11 @@ definitions:
       image_id:
         description: ImageID is the image ID that was scanned.
         type: string
+      last_update:
+        allOf:
+        - $ref: '#/definitions/security.AppliedUpdate'
+        description: LastUpdate records what the most recent update of this container
+          fixed and introduced.
       name:
         description: Name is the container name without a leading slash.
         type: string
@@ -361,43 +394,11 @@ definitions:
       truncated:
         description: Truncated is true when Findings was cut to maxFindings.
         type: boolean
-      last_update:
-        allOf:
-        - $ref: '#/definitions/security.AppliedUpdate'
-        description: LastUpdate records what the most recent update of this container fixed and introduced.
       update:
         allOf:
         - $ref: '#/definitions/security.Update'
         description: Update compares the running image with a waiting update, when
           there is one.
-    type: object
-  security.AppliedUpdate:
-    properties:
-      applied_at:
-        description: AppliedAt is when the update was applied.
-        type: string
-      fixed:
-        description: Fixed are findings of the previous image that the new image no
-          longer has.
-        items:
-          $ref: '#/definitions/scanner.Finding'
-        type: array
-      fixed_counts:
-        allOf:
-        - $ref: '#/definitions/scanner.Counts'
-        description: FixedCounts tallies Fixed by severity.
-      introduced:
-        description: Introduced are findings the new image added.
-        items:
-          $ref: '#/definitions/scanner.Finding'
-        type: array
-      introduced_counts:
-        allOf:
-        - $ref: '#/definitions/scanner.Counts'
-        description: IntroducedCounts tallies Introduced by severity.
-      previous_image_id:
-        description: PreviousImageID is the image the container ran before the update.
-        type: string
     type: object
   security.ReportResponse:
     properties:
