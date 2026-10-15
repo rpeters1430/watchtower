@@ -101,6 +101,7 @@ func TestRunUpdatesWithNotifications_UpdateErrorKeepsPartialResults(t *testing.T
 	assert.Equal(t, 1, metric.Updated)
 	assert.Equal(t, 1, metric.Skipped)
 	assert.Zero(t, metric.Failed)
+	assert.True(t, metric.ScanFailed, "the scan ended in an error")
 	require.Len(t, metric.Containers, 1, "the metric names the replaced container")
 	assert.Equal(t, metrics.HistoryOutcomeUpdated, metric.Containers[0].Outcome)
 	assert.Equal(t, "sha256:new", metric.Containers[0].ToImageID)

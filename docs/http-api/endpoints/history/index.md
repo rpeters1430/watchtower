@@ -87,6 +87,9 @@ Each entry has a `kind`:
 - `scan`: an update scan, whether scheduled or started through [`/v1/update`](../update/index.md).
 - `check`: an update availability check started through [`/v1/check`](../check/index.md). No containers are changed, so `updated` and `restarted` are `0`. `scanned` is the number of containers checked, `failed` is the number that could not be checked, and `updates_available` is the number with a newer image.
 
+An entry for a scan that ended in an error also has `"scan_failed": true`, and its counts are those the scan reached.
+The field is omitted for other scans.
+
 ### Containers
 
 `containers` names the containers an entry is about. It lists only containers with something to report, so a scan that changed nothing has no `containers` field. Entries recorded before this field existed don't have it either.
