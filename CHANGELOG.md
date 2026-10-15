@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Show image scan results and how to fix them by @claude
 - Scan pending updates and hold them on an opt-in severity gate by @claude
 - Add image scanner package with a Trivy backend by @claude
 - Add initial Renovate configuration file by @rpeters1430
@@ -208,6 +209,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Track fixed vulnerabilities after update and fix ui refresh by @rpeters1430
 - Resolve existing golangci-lint findings by @claude
 - Address review findings on check results and notifications by @claude
 - Log image pulls and queued update requests by @claude
@@ -1360,6 +1362,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Regenerate swagger documents by @rpeters1430
 - Update minor dependency updates by @renovate[bot]
 - Pin dependencies by @renovate[bot]
 - Update github.com/azure/go-ansiterm digest to 51075c6 by @renovate[bot]
@@ -2964,9 +2967,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#26](https://github.com/rpeters1430/watchtower/pull/26)
+- @rpeters1430 made their first contribution in [#28](https://github.com/rpeters1430/watchtower/pull/28)
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#25](https://github.com/rpeters1430/watchtower/pull/25)
+- @github-actions[bot] made their first contribution in [#27](https://github.com/rpeters1430/watchtower/pull/27)
 - @renovate[bot] made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
