@@ -2,13 +2,19 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 )
 
-// DefaultTimeout bounds one image scan, including a first-run database download.
-const DefaultTimeout = 5 * time.Minute
+// DefaultTimeout bounds one image scan, including a first-run database
+// download. Large images, where Trivy exports and reads every layer and
+// checks every file for secrets, can take several minutes on a NAS.
+const DefaultTimeout = 15 * time.Minute
+
+// ErrScanTimeout indicates a scan did not finish within the reviewer's timeout.
+var ErrScanTimeout = errors.New("scan did not finish in time")
 
 // maxCachedResults caps how many image results the reviewer keeps in memory.
 const maxCachedResults = 256
@@ -35,11 +41,17 @@ type Review struct {
 // Reviewer scans both images of a pending update and applies the severity
 // gate. Results are cached by image ID for cacheLifetime, so a container that
 // stays stale across scans is not rescanned every time.
+//
+// Scans run one at a time. Every Trivy run shares one cache volume whose
+// databases are locked by the process using them, so parallel scanners only
+// queue on the lock while their timeouts run down.
 type Reviewer struct {
 	scanner Scanner
 	gate    Gate
 	timeout time.Duration
 	now     func() time.Time
+	// slot holds a token while a scan runs; the timeout starts once it is held.
+	slot chan struct{}
 
 	mu    sync.Mutex
 	cache map[string]cachedResult
@@ -71,6 +83,7 @@ func NewReviewer(scanner Scanner, gate Gate, timeout time.Duration) *Reviewer {
 		gate:    gate,
 		timeout: timeout,
 		now:     time.Now,
+		slot:    make(chan struct{}, 1),
 		cache:   make(map[string]cachedResult),
 	}
 }
@@ -176,11 +189,38 @@ func (r *Reviewer) scan(ctx context.Context, image string) (*Result, error) {
 		return cached.result, nil
 	}
 
+	select {
+	case r.slot <- struct{}{}:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("scanning %s with %s: %w", image, r.scanner.Name(), ctx.Err())
+	}
+
+	defer func() { <-r.slot }()
+
+	// Another caller may have scanned the image while this one waited.
+	r.mu.Lock()
+	cached, ok = r.cache[image]
+	r.mu.Unlock()
+
+	if ok && r.now().Sub(cached.storedAt) < cacheLifetime {
+		return cached.result, nil
+	}
+
 	scanCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
 	result, err := r.scanner.Scan(scanCtx, image)
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(scanCtx.Err(), context.DeadlineExceeded) {
+			return nil, fmt.Errorf(
+				"scanning %s with %s: %w after %s; large images may need a longer --scan-timeout",
+				image,
+				r.scanner.Name(),
+				ErrScanTimeout,
+				r.timeout,
+			)
+		}
+
 		return nil, fmt.Errorf("scanning %s with %s: %w", image, r.scanner.Name(), err)
 	}
 

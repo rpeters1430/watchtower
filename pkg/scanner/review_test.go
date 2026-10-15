@@ -164,3 +164,97 @@ func TestReviewerRescan(t *testing.T) {
 	assert.Equal(t, 2, stub.calls["sha256:old"])
 	assert.Equal(t, "stub", reviewer.Name())
 }
+
+// slowScanner blocks until its context ends, and records how many scans ran at once.
+type slowScanner struct {
+	mu      sync.Mutex
+	running int
+	peak    int
+	release chan struct{}
+}
+
+func (s *slowScanner) Name() string { return "slow" }
+
+func (s *slowScanner) Scan(ctx context.Context, _ string) (*Result, error) {
+	s.mu.Lock()
+	s.running++
+	s.peak = max(s.peak, s.running)
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		s.running--
+		s.mu.Unlock()
+	}()
+
+	select {
+	case <-s.release:
+		return &Result{}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func TestReviewerTimeoutError(t *testing.T) {
+	t.Parallel()
+
+	reviewer := NewReviewer(&slowScanner{release: make(chan struct{})}, GateOff, 10*time.Millisecond)
+
+	_, err := reviewer.Scan(t.Context(), "sha256:big")
+	require.ErrorIs(t, err, ErrScanTimeout)
+	assert.Contains(t, err.Error(), "--scan-timeout")
+}
+
+func TestReviewerRunsOneScanAtATime(t *testing.T) {
+	t.Parallel()
+
+	slow := &slowScanner{release: make(chan struct{})}
+	reviewer := NewReviewer(slow, GateOff, time.Minute)
+
+	var wg sync.WaitGroup
+
+	for _, image := range []string{"sha256:a", "sha256:b", "sha256:c"} {
+		wg.Go(func() {
+			_, err := reviewer.Scan(t.Context(), image)
+			assert.NoError(t, err)
+		})
+	}
+
+	for range 3 {
+		slow.release <- struct{}{}
+	}
+
+	wg.Wait()
+	assert.Equal(t, 1, slow.peak)
+}
+
+func TestReviewerQueuedScanHonoursContext(t *testing.T) {
+	t.Parallel()
+
+	slow := &slowScanner{release: make(chan struct{})}
+	reviewer := NewReviewer(slow, GateOff, time.Minute)
+
+	started := make(chan struct{})
+
+	go func() {
+		close(started)
+		_, _ = reviewer.Scan(t.Context(), "sha256:first")
+	}()
+
+	<-started
+	require.Eventually(t, func() bool {
+		slow.mu.Lock()
+		defer slow.mu.Unlock()
+
+		return slow.running == 1
+	}, time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := reviewer.Scan(ctx, "sha256:second")
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, ErrScanTimeout)
+
+	slow.release <- struct{}{}
+}

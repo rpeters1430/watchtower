@@ -47,12 +47,14 @@ Environment Variable: WATCHTOWER_SCAN_IMAGE
 ## Scan Timeout
 
 Bounds the scan of one image. The first scan also downloads Trivy's vulnerability database, so allow time for it.
+Scans run one at a time, because every scan shares the cache volume, and the timeout only starts once a scan's turn comes.
+Large images, such as ones bundling machine learning models, can take longer than the default on slow disks; raise this if a scan fails with "scan did not finish in time".
 
 ```text
             Argument: --scan-timeout
 Environment Variable: WATCHTOWER_SCAN_TIMEOUT
                 Type: Duration
-             Default: 5m
+             Default: 15m
 ```
 
 ## Scan Ignore Unfixed

@@ -14,9 +14,10 @@ import (
 	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 )
 
-// maxConcurrentScans bounds on-demand image scans running at once. Each scan
-// is a scanner container reading a whole image.
-const maxConcurrentScans = 2
+// maxConcurrentScans bounds on-demand image scans running at once. The
+// reviewer runs one scan at a time anyway, so taking images one by one keeps
+// the job's list of images being scanned accurate.
+const maxConcurrentScans = 1
 
 var (
 	// ErrBusy is returned when a scan is requested while one is running.
