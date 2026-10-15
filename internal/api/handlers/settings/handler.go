@@ -12,6 +12,7 @@ import (
 
 	runtime "github.com/nicholas-fedor/watchtower/internal/settings"
 	"github.com/nicholas-fedor/watchtower/pkg/notifications"
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -120,7 +121,10 @@ func (h *Handler) Get(c fiber.Ctx) error {
 // Patch changes one or more runtime settings.
 //
 //	@Summary		Change runtime settings
-//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped (booleans), schedule (cron) and container_overrides (map). JSON null resets one.
+//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium, high, or critical), schedule (cron)
+//
+// and container_overrides (map). JSON null resets one.
+//
 //	@Tags			settings
 //	@Accept			json
 //	@Produce		json
@@ -177,7 +181,7 @@ func (h *Handler) Patch(c fiber.Ctx) error {
 //	@Tags			settings
 //	@Accept			json
 //	@Produce		json
-//	@Param			request	body	TestNotificationRequest	false	"Notification parameters"
+//	@Param			request	body		TestNotificationRequest	false	"Notification parameters"
 //	@Success		200		{object}	map[string]interface{}	"Notification test result"
 //	@Failure		400		{object}	map[string]interface{}	"No URLs configured or invalid request"
 //	@Failure		502		{object}	map[string]interface{}	"Delivery failed"
@@ -267,6 +271,16 @@ func (h *Handler) send(c fiber.Ctx) error {
 				Default: defaults.ContainerOverrides,
 				Changed: changed[runtime.KeyContainerOverrides],
 			},
+			runtime.KeyScan: {
+				Value:   values.Scan,
+				Default: defaults.Scan,
+				Changed: changed[runtime.KeyScan],
+			},
+			runtime.KeyScanGate: {
+				Value:   gateName(values.ScanGate),
+				Default: gateName(defaults.ScanGate),
+				Changed: changed[runtime.KeyScanGate],
+			},
 		},
 		Saved:          snapshot.Persistent,
 		ScheduleActive: h.scheduleActive,
@@ -279,6 +293,15 @@ func (h *Handler) send(c fiber.Ctx) error {
 	}
 
 	return nil
+}
+
+// gateName returns the gate's name, "off" when none is set.
+func gateName(gate scanner.Gate) string {
+	if gate == "" {
+		return string(scanner.GateOff)
+	}
+
+	return string(gate)
 }
 
 // nextRun returns the next scheduled scan time, or nil when none is scheduled.

@@ -3,6 +3,8 @@
 Watchtower can scan the new image of each pending update with [Trivy](https://trivy.dev) before it replaces a container.
 Scanning is off by default. See [Image Scanning](../../advanced-features/image-scanning/index.md) for how it works.
 
+`scan` and `scan-gate` set the starting values. Both can be changed while Watchtower runs, from the web UI's Settings page or the [settings endpoint](../../http-api/endpoints/settings/index.md).
+
 ## Scan
 
 Scans the new image of each pending update, and the image it replaces, for known vulnerabilities, secrets, and image configuration problems.

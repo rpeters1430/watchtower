@@ -127,3 +127,40 @@ func TestReviewerCacheLimit(t *testing.T) {
 	assert.Len(t, reviewer.cache, maxCachedResults)
 	assert.Len(t, reviewer.order, maxCachedResults)
 }
+
+func TestReviewerCacheExpires(t *testing.T) {
+	t.Parallel()
+
+	stub := newStub(t)
+	reviewer := NewReviewer(stub, GateOff, time.Minute)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	reviewer.now = func() time.Time { return now }
+
+	_, err := reviewer.Scan(t.Context(), "sha256:old")
+	require.NoError(t, err)
+
+	now = now.Add(cacheLifetime - time.Minute)
+	_, err = reviewer.Scan(t.Context(), "sha256:old")
+	require.NoError(t, err)
+	assert.Equal(t, 1, stub.calls["sha256:old"], "a fresh result is reused")
+
+	now = now.Add(2 * time.Minute)
+	_, err = reviewer.Scan(t.Context(), "sha256:old")
+	require.NoError(t, err)
+	assert.Equal(t, 2, stub.calls["sha256:old"], "an old result is scanned again")
+}
+
+func TestReviewerRescan(t *testing.T) {
+	t.Parallel()
+
+	stub := newStub(t)
+	reviewer := NewReviewer(stub, GateOff, time.Minute)
+
+	_, err := reviewer.Scan(t.Context(), "sha256:old")
+	require.NoError(t, err)
+
+	_, err = reviewer.Rescan(t.Context(), "sha256:old")
+	require.NoError(t, err)
+	assert.Equal(t, 2, stub.calls["sha256:old"])
+	assert.Equal(t, "stub", reviewer.Name())
+}

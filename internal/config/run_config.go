@@ -149,6 +149,7 @@ func HTTPAPIEndpointsEnabled(cfg types.RunConfig) bool {
 		cfg.EnableImagesAPI ||
 		cfg.EnableConfigAPI ||
 		cfg.EnableSettingsAPI ||
+		cfg.EnableSecurityAPI ||
 		cfg.EnableEventsAPI ||
 		cfg.EnableUIAPI
 }

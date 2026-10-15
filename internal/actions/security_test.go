@@ -168,6 +168,43 @@ func TestLogSecurityFixes(t *testing.T) {
 	assert.NotContains(t, out, "CVE-2024-0004")
 }
 
+type recordingReviewer struct {
+	recorded map[string]bool
+	images   map[string]string
+}
+
+func (r *recordingReviewer) ReviewUpdate(context.Context, string, string) (*scanner.Review, error) {
+	return nil, nil //nolint:nilnil // Not called by recordSecurityReviews.
+}
+
+func (r *recordingReviewer) RecordReview(name, _, currentImageID, latestImageID string, _ *scanner.Review, updated bool) {
+	r.recorded[name] = updated
+	r.images[name] = currentImageID + "->" + latestImageID
+}
+
+func TestRecordSecurityReviews(t *testing.T) {
+	t.Parallel()
+
+	clean, held := securityFixture()
+
+	progress := &session.Progress{}
+	web := staleContainer(t, progress, "web-id", "/web", "sha256:web-old", "sha256:web-new")
+	db := staleContainer(t, progress, "db-id", "/db", "sha256:db-old", "sha256:db-new")
+	progress.MarkForUpdate(logging.NopLogger(), web.ID())
+
+	recorder := &recordingReviewer{recorded: map[string]bool{}, images: map[string]string{}}
+	recordSecurityReviews(progress, map[types.ContainerID]*scanner.Review{
+		web.ID(): clean,
+		db.ID():  held,
+	}, recorder)
+
+	assert.Equal(t, map[string]bool{"web": true, "db": false}, recorder.recorded)
+	assert.Equal(t, "sha256:db-old->sha256:db-new", recorder.images["db"])
+
+	// A reviewer that does not record is left alone.
+	recordSecurityReviews(progress, map[types.ContainerID]*scanner.Review{web.ID(): clean}, nil)
+}
+
 func TestFindingList(t *testing.T) {
 	t.Parallel()
 

@@ -62,6 +62,8 @@ type Features struct {
 	Config bool `json:"config"`
 	// Settings is true when the runtime settings endpoint is enabled.
 	Settings bool `json:"settings"`
+	// Security is true when the image vulnerability scanning endpoint is enabled.
+	Security bool `json:"security"`
 	// Images is true when the images endpoint is enabled.
 	Images bool `json:"images"`
 	// Metrics is true when the metrics and status endpoints are enabled.

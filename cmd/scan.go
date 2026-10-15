@@ -4,25 +4,32 @@ import (
 	"github.com/rs/zerolog"
 
 	scanConfig "github.com/nicholas-fedor/watchtower/internal/config/scan"
+	"github.com/nicholas-fedor/watchtower/internal/security"
+	"github.com/nicholas-fedor/watchtower/internal/settings"
 	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
-// newSecurityReviewer builds the image scanner for pending updates.
+// newSecurityService builds the image scanner. It is built whether or not
+// update scanning is on, so the setting can be switched at run time and the
+// HTTP API can scan running images on request.
 //
 // Parameters:
 //   - log: Process logger.
-//   - cfg: Scan settings.
+//   - cfg: Scan settings from flags.
+//   - dataDir: Directory for saved scan results, or empty for none.
+//   - runtimeSettings: Run-time settings holding the scan switch and gate.
 //
 // Returns:
-//   - types.SecurityReviewer: Reviewer, or nil when scanning is off or the
-//     Docker client for the scanner cannot be created. A nil reviewer means
-//     updates run without scanning; it never stops Watchtower.
-func newSecurityReviewer(log *zerolog.Logger, cfg scanConfig.Scan) types.SecurityReviewer {
-	if !cfg.Enabled {
-		return nil
-	}
-
+//   - *security.Service: Service, or nil when the Docker client for the
+//     scanner cannot be created. A nil service means updates run without
+//     scanning; it never stops Watchtower.
+func newSecurityService(
+	log *zerolog.Logger,
+	cfg scanConfig.Scan,
+	dataDir string,
+	runtimeSettings *settings.Store,
+) *security.Service {
 	api, err := scanner.NewDockerAPI()
 	if err != nil {
 		log.Warn().
@@ -39,11 +46,40 @@ func newSecurityReviewer(log *zerolog.Logger, cfg scanConfig.Scan) types.Securit
 		IgnoreUnfixed: cfg.IgnoreUnfixed,
 	})
 
-	log.Info().
-		Str("scanner", trivy.Name()).
-		Str("image", cfg.Image).
-		Str("gate", string(cfg.Gate)).
-		Msg("Image scanning enabled")
+	values := runtimeSettings.Effective()
+	if values.Scan {
+		log.Info().
+			Str("scanner", trivy.Name()).
+			Str("image", cfg.Image).
+			Str("gate", string(values.ScanGate)).
+			Msg("Image scanning enabled")
+	}
 
-	return scanner.NewReviewer(trivy, cfg.Gate, cfg.Timeout)
+	return security.NewService(
+		log,
+		scanner.NewReviewer(trivy, cfg.Gate, cfg.Timeout),
+		security.OpenStore(log, dataDir),
+		security.Options{
+			ScannerImage:  cfg.Image,
+			IgnoreUnfixed: cfg.IgnoreUnfixed,
+			Enabled:       func() bool { return runtimeSettings.Effective().Scan },
+			Gate:          func() scanner.Gate { return runtimeSettings.Effective().ScanGate },
+		},
+	)
+}
+
+// securityReviewer returns the service as a reviewer, or nil when there is
+// none, so a nil service never becomes a non-nil interface.
+//
+// Parameters:
+//   - service: Scanner service, possibly nil.
+//
+// Returns:
+//   - types.SecurityReviewer: Reviewer, or nil.
+func securityReviewer(service *security.Service) types.SecurityReviewer {
+	if service == nil {
+		return nil
+	}
+
+	return service
 }

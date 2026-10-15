@@ -11,3 +11,12 @@ import (
 type SecurityReviewer interface {
 	ReviewUpdate(ctx context.Context, currentImage, latestImage string) (*scanner.Review, error)
 }
+
+// SecurityRecorder is implemented by reviewers that keep what each update
+// scan learned, so the HTTP API can show it. Reviewers without it are only
+// used to hold updates and annotate notifications.
+type SecurityRecorder interface {
+	// RecordReview keeps a container's review. updated is true when the
+	// update was applied, so the container now runs latestImageID.
+	RecordReview(name, image, currentImageID, latestImageID string, review *scanner.Review, updated bool)
+}

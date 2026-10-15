@@ -675,4 +675,3 @@ func (client MockClient) PullImageByName(ctx context.Context, _ string) error {
 
 	return client.checkContextCancellation(ctx)
 }
-

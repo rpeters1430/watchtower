@@ -178,6 +178,41 @@ func logSecurityFixes(
 	}
 }
 
+// recordSecurityReviews hands each review to the reviewer when it keeps
+// them, with whether the update was applied, so the HTTP API can show what
+// each container's running image contains.
+//
+// Parameters:
+//   - progress: Session progress after restarts.
+//   - reviews: Reviews from reviewSecurity.
+//   - reviewer: Reviewer that produced them.
+func recordSecurityReviews(
+	progress *session.Progress,
+	reviews map[types.ContainerID]*scanner.Review,
+	reviewer types.SecurityReviewer,
+) {
+	recorder, ok := reviewer.(types.SecurityRecorder)
+	if !ok {
+		return
+	}
+
+	for id, review := range reviews {
+		status, ok := (*progress)[id]
+		if !ok {
+			continue
+		}
+
+		recorder.RecordReview(
+			strings.TrimPrefix(status.Name(), "/"),
+			status.ImageName(),
+			string(status.CurrentImageID()),
+			string(status.LatestImageID()),
+			review,
+			status.State() == session.UpdatedStateString,
+		)
+	}
+}
+
 // holdReason describes why the gate held an update.
 //
 // Parameters:

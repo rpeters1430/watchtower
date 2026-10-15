@@ -18,6 +18,7 @@ The UI has no data of its own. It reads the other HTTP API endpoints, so each pa
 | Update history         |      `history`      |
 | Settings               |      `config`       |
 | Changing settings      |     `settings`      |
+| Security               |     `security`      |
 
 The simplest setup enables everything:
 
@@ -40,7 +41,7 @@ services:
 !!! Warning
     Enabling the `update` endpoint stops Watchtower's scheduled updates unless [`http-api-periodic-polls`](../../../configuration/scheduling/index.md#http_api_periodic_polls) is also set.
 
-The `/data` volume is optional. With it, settings changed on the page, notification services added there, the scan history, and each container's latest check result survive a restart. Without it, they are kept in memory only.
+The `/data` volume is optional. With it, settings changed on the page, notification services added there, the scan history, each container's latest check result, and image scan results survive a restart. Without it, they are kept in memory only.
 
 ## What the Page Shows
 

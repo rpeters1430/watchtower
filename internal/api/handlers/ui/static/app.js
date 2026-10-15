@@ -45,6 +45,12 @@
     customScheduleDraft: null,
     editingTag: new Map(),
     acting: new Set(),
+    security: null,
+    securityProblem: "",
+    securityDetails: new Map(),
+    securityExpanded: new Set(),
+    securityShowAll: new Set(),
+    securityFixableOnly: false,
   };
 
   const app = document.getElementById("app");
@@ -73,7 +79,7 @@
       }
     }
 
-    for (const child of children.flat()) {
+    for (const child of children.flat(Infinity)) {
       if (child === false || child === null || child === undefined) {
         continue;
       }
@@ -1077,6 +1083,7 @@
     add("Changes", check.changelog && link(check.changelog));
     add("Git", check.git_repo && `${check.git_repo}${check.git_ref ? ` at ${check.git_ref}` : ""}`);
     add("Scope", container.scope);
+    add("Security", securityFact(container.name));
 
     if (feature("settings")) {
       const currentPolicy = container.policy || "auto";
@@ -1172,6 +1179,7 @@
           { class: "unit-name" },
           container.name,
           health && el("span", { class: `badge-health health-${health}` }, health),
+          securityBadge(container.name),
         ),
         el("span", { class: "unit-image" }, container.image),
         recent && el("span", { class: "unit-last" }, `Updated ${ago(recent.when)}`),
@@ -1616,6 +1624,687 @@
     );
   }
 
+  // Security view
+
+  // A scan is polled this often while it runs. Scans take minutes, so a slow
+  // poll keeps the page well inside the API's rate limit.
+  const SECURITY_POLL_MS = 5_000;
+  const FINDING_LIMIT = 25;
+  const SEVERITIES = ["critical", "high", "medium", "low", "unknown"];
+  const GATES = [
+    { value: "off", label: "Never hold updates" },
+    { value: "critical", label: "Critical findings" },
+    { value: "high", label: "High or critical findings" },
+    { value: "medium", label: "Medium or worse" },
+    { value: "low", label: "Any rated finding" },
+  ];
+
+  let securityTimer = null;
+
+  async function loadSecurity() {
+    if (!feature("security")) {
+      return;
+    }
+
+    try {
+      state.security = await request("GET", "/v1/security");
+      state.securityProblem = "";
+    } catch (problem) {
+      state.securityProblem = problem.message;
+    }
+  }
+
+  async function loadSecurityDetail(name) {
+    try {
+      const data = await request("GET", `/v1/security/${encodeURIComponent(name)}`);
+
+      state.securityDetails.set(name, data.container);
+    } catch (problem) {
+      state.securityDetails.set(name, { problem: problem.message });
+    }
+  }
+
+  function securityRunning() {
+    return Boolean(state.security && state.security.job && state.security.job.running);
+  }
+
+  function scheduleSecurityPoll() {
+    if (!securityTimer && securityRunning()) {
+      securityTimer = setTimeout(pollSecurity, SECURITY_POLL_MS);
+    }
+  }
+
+  async function pollSecurity() {
+    securityTimer = null;
+
+    if (!state.session || !state.session.authenticated) {
+      return;
+    }
+
+    const wasRunning = securityRunning();
+
+    await loadSecurity();
+
+    if (wasRunning && !securityRunning()) {
+      const job = state.security.job;
+      const scanned = job.total - job.failed;
+
+      if (job.failed > 0) {
+        notify(
+          scanned > 0
+            ? `Scanned ${count(scanned, "container")}. ${capitalise(count(job.failed, "container"))} couldn't be scanned; Watchtower's log has the reason.`
+            : "The scan didn't finish. Watchtower's log has the reason.",
+          true,
+        );
+      } else {
+        notify(`Scanned ${count(job.total, "container")}.`);
+      }
+
+      // Open reports are now out of date.
+      state.securityDetails.clear();
+      await Promise.all([...state.securityExpanded].map(loadSecurityDetail));
+    }
+
+    renderSecurity();
+    renderManifest();
+    scheduleSecurityPoll();
+  }
+
+  async function startSecurityScan(names) {
+    try {
+      const data = await request("POST", "/v1/security/scan", names ? { containers: names } : undefined);
+
+      state.security = { ...(state.security || {}), job: data.job };
+    } catch (problem) {
+      notify(`Couldn't start the scan. ${capitalise(problem.message)}.`, true);
+    }
+
+    renderSecurity();
+    scheduleSecurityPoll();
+  }
+
+  function securityReport(name) {
+    if (!state.security) {
+      return null;
+    }
+
+    return (state.security.containers || []).find((report) => report.name === name) || null;
+  }
+
+  function total(counts) {
+    return SEVERITIES.reduce((sum, level) => sum + ((counts && counts[level]) || 0), 0);
+  }
+
+  function serious(counts) {
+    return Boolean(counts) && counts.critical + counts.high > 0;
+  }
+
+  // "3 critical, 5 high", naming at most `limit` levels, worst first.
+  function severityList(counts, limit = SEVERITIES.length) {
+    return SEVERITIES.filter((level) => counts && counts[level] > 0)
+      .slice(0, limit)
+      .map((level) => `${counts[level]} ${level}`)
+      .join(", ");
+  }
+
+  // A container's scan state, in the words the page uses for it.
+  function securityStatus(report) {
+    if (!report) {
+      return { key: "unknown", label: "Not scanned yet" };
+    }
+
+    if (report.error && total(report.counts) === 0) {
+      return { key: "unknown", label: "Couldn't scan" };
+    }
+
+    if (serious(report.counts)) {
+      return { key: "failed", label: severityList(report.counts, 2) };
+    }
+
+    if (total(report.counts) > 0) {
+      return { key: "waiting", label: severityList(report.counts, 2) };
+    }
+
+    return { key: "fresh", label: "No known issues" };
+  }
+
+  // The containers to list: every watched container, scanned or not. Reports
+  // of removed containers are left out once the container list has loaded.
+  function securityRows() {
+    const reports = (state.security && state.security.containers) || [];
+
+    if (!state.containersLoaded || state.containers.length === 0) {
+      return reports.map((report) => ({ name: report.name, report, container: null }));
+    }
+
+    return state.containers.map((container) => ({
+      name: container.name,
+      report: reports.find((report) => report.name === container.name) || null,
+      container,
+    }));
+  }
+
+  // Worst first, then by name, with unscanned containers last.
+  function rank(row) {
+    const counts = row.report && row.report.counts;
+
+    if (!counts) {
+      return [-1, 0, 0];
+    }
+
+    return [counts.critical, counts.high, total(counts)];
+  }
+
+  function sortedSecurityRows() {
+    return securityRows().sort((a, b) => {
+      const left = rank(a);
+      const right = rank(b);
+
+      for (let i = 0; i < left.length; i++) {
+        if (left[i] !== right[i]) {
+          return right[i] - left[i];
+        }
+      }
+
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  function securityLookout(rows) {
+    const security = state.security;
+    const job = security && security.job;
+    const scanned = rows.filter((row) => row.report && !(row.report.error && total(row.report.counts) === 0));
+    const unscanned = rows.length - scanned.length;
+    let line;
+    let note;
+
+    if (state.securityProblem && !security) {
+      line = "The scan results didn't load.";
+      note = state.securityProblem;
+    } else if (!security) {
+      line = "Reading the scan results.";
+      note = "Loading what Watchtower knows about each image.";
+    } else if (!security.available) {
+      line = "The image scanner isn't available.";
+      note = security.reason || "";
+    } else if (securityRunning()) {
+      const current = (job.current || []).join(", ");
+
+      line = current ? `Scanning ${current}.` : "Starting the scan.";
+      note = `${job.done} of ${count(job.total, "container")} scanned so far.`;
+
+      if (scanned.length === 0) {
+        note += " The first scan downloads Trivy's vulnerability database, which can take a few minutes.";
+      }
+    } else if (scanned.length === 0) {
+      line = "No image has been scanned yet.";
+      note = "A scan looks for known vulnerabilities, leaked secrets, and risky settings in each running image. It only reads images and changes nothing.";
+    } else {
+      const flagged = scanned.filter((row) => serious(row.report.counts)).length;
+      const newest = scanned.map((row) => new Date(row.report.scanned_at)).sort((a, b) => b - a)[0];
+      const fixing = scanned.filter((row) => row.report.update && !row.report.update.held && total(row.report.update.fixed_counts) > 0);
+      const fixes = fixing.reduce((sum, row) => sum + total(row.report.update.fixed_counts), 0);
+
+      line =
+        flagged === 0
+          ? `No critical or high vulnerabilities in ${scanned.length === 1 ? "the scanned image" : `the ${scanned.length} scanned images`}.`
+          : `${flagged} of ${count(scanned.length, "scanned container")} ${flagged === 1 ? "has" : "have"} critical or high vulnerabilities.`;
+      note = `Last scanned ${ago(newest)} with ${capitalise(security.scanner || "the scanner")}.`;
+
+      if (fixes > 0) {
+        note += ` ${capitalise(count(fixing.length, "waiting update"))} would fix ${count(fixes, "known issue")}.`;
+      }
+
+      if (unscanned > 0) {
+        note += ` ${capitalise(count(unscanned, "container"))} not scanned yet.`;
+      }
+    }
+
+    return el(
+      "header",
+      { class: "lookout" },
+      el("h1", { class: "lookout-line" }, line),
+      note && el("p", { class: "lookout-note" }, note),
+      security &&
+        security.available &&
+        el(
+          "div",
+          { class: "actions" },
+          el(
+            "button",
+            {
+              class: "button button-primary",
+              type: "button",
+              disabled: securityRunning() || rows.length === 0,
+              onclick: () => startSecurityScan(),
+            },
+            securityRunning() ? "Scanning" : scanned.length > 0 ? "Scan all again" : "Scan all containers",
+          ),
+        ),
+    );
+  }
+
+  // Whether updates are scanned before they're applied, and how to change it.
+  function securityPolicy() {
+    const security = state.security;
+
+    if (!security || !security.available) {
+      return null;
+    }
+
+    const where = feature("settings") ? [" ", el("a", { href: "#/settings" }, "Change this in Settings"), "."] : "";
+
+    if (!security.scan_updates) {
+      return el(
+        "p",
+        { class: "section-note" },
+        "Updates are applied without being scanned first. Turn on Scan updates first to see what each update fixes and to hold back ones that add serious vulnerabilities.",
+        where,
+      );
+    }
+
+    const gate = GATES.find((item) => item.value === security.gate);
+
+    return el(
+      "p",
+      { class: "section-note" },
+      "Each update's new image is scanned before it's applied. ",
+      security.gate === "off" || !gate
+        ? "None are held back."
+        : `Updates whose new image adds ${gate.label.toLowerCase()} are held back.`,
+      where,
+    );
+  }
+
+  function findingKey(finding) {
+    return finding.kind === "vulnerability" ? `${finding.kind}|${finding.id}|${finding.package}` : `${finding.kind}|${finding.id}|${finding.target}`;
+  }
+
+  // What the user can do about a container's findings, most useful first.
+  function fixAdvice(report, detail, container) {
+    const items = [];
+    const update = report.update;
+    const findings = (detail && detail.findings) || [];
+    const fixedByUpdate = new Set(((detail && detail.update && detail.update.fixed) || []).map(findingKey));
+    const fixedTotal = update ? total(update.fixed_counts) : 0;
+    const introducedTotal = update ? total(update.introduced_counts) : 0;
+
+    if (total(report.counts) === 0 && !report.error) {
+      items.push("Trivy found nothing it knows about in this image. Scan again now and then: new advisories are published every day.");
+
+      return items;
+    }
+
+    if (update && update.held) {
+      items.push([
+        el("strong", null, "The waiting update is held back. "),
+        `Its new image adds ${severityList(update.introduced_counts)} that this one doesn't have, which is at or above the ${update.gate} gate. The container keeps its current image until a cleaner one is published.`,
+        feature("settings") && [" To apply it anyway, lower the gate in ", el("a", { href: "#/settings" }, "Settings"), "."],
+      ]);
+    } else if (update && fixedTotal > 0) {
+      const button =
+        container &&
+        canUpdate(container) &&
+        el(
+          "button",
+          {
+            class: "button button-primary button-tiny",
+            type: "button",
+            disabled: updateRunning(),
+            onclick: () => confirmUpdate([container]),
+          },
+          "Update to fix",
+        );
+
+      items.push([
+        el("strong", null, `The waiting update fixes ${fixedTotal} of these`),
+        ` (${severityList(update.fixed_counts)})`,
+        introducedTotal > 0 ? `, and brings in ${count(introducedTotal, "new one")} (${severityList(update.introduced_counts)}).` : ".",
+        button && [" ", button],
+      ]);
+    } else if (update) {
+      items.push("An update is waiting, but its new image has the same findings.");
+    }
+
+    if (detail && !detail.problem) {
+      const vulnerabilities = findings.filter((finding) => finding.kind === "vulnerability");
+      const waitingForImage = vulnerabilities.filter((finding) => finding.fixed_version && !fixedByUpdate.has(findingKey(finding))).length;
+      const unfixed = vulnerabilities.filter((finding) => !finding.fixed_version).length;
+      const secrets = findings.filter((finding) => finding.kind === "secret").length;
+      const settings = findings.filter((finding) => finding.kind === "misconfiguration").length;
+
+      if (waitingForImage > 0) {
+        items.push([
+          el("strong", null, `${waitingForImage} ${waitingForImage === 1 ? "has" : "have"} a fixed package version this image doesn't include yet. `),
+          "The fix arrives when the image's maintainer publishes a rebuilt image, and Watchtower updates the container then. If you build this image yourself, rebuild it on an updated base image.",
+        ]);
+      }
+
+      if (unfixed > 0) {
+        items.push([
+          el("strong", null, `${unfixed} ${unfixed === 1 ? "has" : "have"} no fix published yet. `),
+          "These wait on the package's own project to release a patch. The advisory link says whether there's a workaround.",
+        ]);
+      }
+
+      if (secrets > 0) {
+        items.push([
+          el("strong", null, `${count(secrets, "secret")} found in the image. `),
+          "Anyone who can pull the image can read them. Rotate them, and pass them to the container at run time instead.",
+        ]);
+      }
+
+      if (settings > 0) {
+        items.push([
+          el("strong", null, `${count(settings, "image setting")} ${settings === 1 ? "is" : "are"} risky, `),
+          "such as running as root. Each one below says how to change it.",
+        ]);
+      }
+    }
+
+    return items;
+  }
+
+  function findingRow(finding, fixedByUpdate) {
+    const id = /^https?:\/\//.test(finding.url || "")
+      ? el("a", { class: "finding-id", href: finding.url, rel: "noreferrer", target: "_blank" }, finding.id)
+      : el("span", { class: "finding-id" }, finding.id);
+    let where;
+
+    if (finding.kind === "vulnerability") {
+      where = [
+        code(finding.package || "unknown package"),
+        " ",
+        finding.installed_version || "",
+        finding.fixed_version ? [" → fixed in ", el("strong", null, finding.fixed_version)] : ", no fix yet",
+      ];
+    } else if (finding.resolution) {
+      where = finding.resolution;
+    } else {
+      where = finding.target && code(finding.target);
+    }
+
+    return el(
+      "li",
+      { class: "finding" },
+      el("span", { class: `sev sev-${finding.severity}` }, finding.severity),
+      el(
+        "span",
+        { class: "finding-body" },
+        el(
+          "span",
+          { class: "finding-head" },
+          id,
+          finding.kind !== "vulnerability" && el("span", { class: "finding-kind" }, finding.kind === "secret" ? "Secret" : "Image setting"),
+          fixedByUpdate && el("span", { class: "finding-kind finding-fixed" }, "Fixed by the update"),
+        ),
+        finding.title && el("span", { class: "finding-title" }, finding.title),
+        where && el("span", { class: "finding-where" }, where),
+      ),
+    );
+  }
+
+  function findingList(name, detail) {
+    const all = detail.findings || [];
+    const fixedByUpdate = new Set(((detail.update && detail.update.fixed) || []).map(findingKey));
+    const shown = state.securityFixableOnly ? all.filter((finding) => finding.fixed_version || fixedByUpdate.has(findingKey(finding))) : all;
+    const showAll = state.securityShowAll.has(name);
+    const visible = showAll ? shown : shown.slice(0, FINDING_LIMIT);
+
+    if (all.length === 0) {
+      return null;
+    }
+
+    return el(
+      "div",
+      { class: "changes" },
+      el(
+        "div",
+        { class: "findings-head" },
+        el("h3", { class: "detail-title" }, "Findings"),
+        el(
+          "label",
+          { class: "toggle" },
+          el("input", {
+            type: "checkbox",
+            checked: state.securityFixableOnly,
+            onchange: (event) => {
+              state.securityFixableOnly = event.target.checked;
+              renderSecurity();
+            },
+          }),
+          "Only ones with a fix",
+        ),
+      ),
+      shown.length === 0
+        ? el("p", { class: "setting-help" }, "None of these has a fix published yet.")
+        : el("ul", { class: "finding-list" }, visible.map((finding) => findingRow(finding, fixedByUpdate.has(findingKey(finding))))),
+      shown.length > visible.length &&
+        el(
+          "button",
+          {
+            class: "button button-quiet button-tiny",
+            type: "button",
+            onclick: () => {
+              state.securityShowAll.add(name);
+              renderSecurity();
+            },
+          },
+          `Show all ${shown.length}`,
+        ),
+      detail.truncated && el("p", { class: "setting-help" }, `Only the ${all.length} most severe findings are kept.`),
+      state.security && state.security.ignore_unfixed && el("p", { class: "setting-help" }, "Findings with no published fix are left out of this scan."),
+    );
+  }
+
+  function securityDetail(row) {
+    const { name, report, container } = row;
+
+    if (!report) {
+      return el(
+        "div",
+        { class: "unit-detail", id: `security-${name}` },
+        el("p", null, "This container's image hasn't been scanned yet."),
+        scanOneButton(name),
+      );
+    }
+
+    let detail = state.securityDetails.get(name);
+
+    // The summary moved on, so the open report is out of date.
+    if (detail && !detail.problem && new Date(detail.scanned_at) < new Date(report.scanned_at)) {
+      detail = null;
+    }
+
+    if (!detail) {
+      state.securityDetails.set(name, { loading: true, scanned_at: report.scanned_at });
+      loadSecurityDetail(name).then(renderSecurity);
+    }
+
+    const ready = detail && !detail.loading && !detail.problem ? detail : null;
+    const advice = fixAdvice(report, ready, container);
+    const counts = report.counts || {};
+
+    return el(
+      "div",
+      { class: "unit-detail", id: `security-${name}` },
+      report.error && el("p", { class: "problem" }, `Watchtower couldn't scan this image: ${report.error}`),
+      total(counts) > 0 &&
+        el(
+          "ul",
+          { class: "severity-counts", "aria-label": "Findings by severity" },
+          SEVERITIES.filter((level) => counts[level] > 0).map((level) =>
+            el("li", { class: `sev sev-${level}` }, el("strong", null, String(counts[level])), ` ${level}`),
+          ),
+          report.fixable > 0 && el("li", { class: "severity-fixable" }, `${report.fixable} with a fix`),
+        ),
+      advice.length > 0 &&
+        el(
+          "div",
+          { class: "changes" },
+          el("h3", { class: "detail-title" }, "How to fix"),
+          el("ul", { class: "advice" }, advice.map((item) => el("li", null, item))),
+        ),
+      detail && detail.problem && el("p", { class: "problem" }, `The findings didn't load. ${detail.problem}`),
+      !ready && !(detail && detail.problem) && total(counts) > 0 && el("p", { class: "setting-help" }, "Loading findings."),
+      ready && findingList(name, ready),
+      el(
+        "p",
+        { class: "setting-help" },
+        `Scanned ${ago(new Date(report.scanned_at))}`,
+        report.scanner && ` with ${capitalise(report.scanner)}${report.scanner_version ? ` ${report.scanner_version}` : ""}`,
+        report.image_id && [" (image ", code(shortDigest(report.image_id)), ")"],
+        ". ",
+        scanOneButton(name),
+      ),
+    );
+  }
+
+  function scanOneButton(name) {
+    if (!state.security || !state.security.available) {
+      return null;
+    }
+
+    return el(
+      "button",
+      { class: "link-button", type: "button", disabled: securityRunning(), onclick: () => startSecurityScan([name]) },
+      securityReport(name) ? "Scan again" : "Scan now",
+    );
+  }
+
+  function securityUnit(row) {
+    const { name, report, container } = row;
+    const status = securityStatus(report);
+    const open = state.securityExpanded.has(name);
+    const scanning = securityRunning() && (state.security.job.current || []).includes(name);
+    const shown = scanning ? { key: "working", label: "Scanning" } : status;
+    const update = report && report.update;
+    let note = null;
+
+    if (update && update.held) {
+      note = "Update held back";
+    } else if (update && total(update.fixed_counts) > 0) {
+      note = `Waiting update fixes ${total(update.fixed_counts)}`;
+    }
+
+    return el(
+      "li",
+      { class: "unit" },
+      el(
+        "div",
+        { class: "unit-head unit-head-solo" },
+        el(
+          "button",
+          {
+            class: "unit-toggle",
+            type: "button",
+            "aria-expanded": String(open),
+            "aria-controls": `security-${name}`,
+            onclick: () => {
+              if (open) {
+                state.securityExpanded.delete(name);
+              } else {
+                state.securityExpanded.add(name);
+              }
+
+              renderSecurity();
+            },
+          },
+          el("span", { class: `end end-${shown.key}`, "aria-hidden": "true" }),
+          el(
+            "span",
+            null,
+            el("span", { class: "unit-name" }, name),
+            el("span", { class: "unit-image" }, (report && report.image) || (container && container.image) || ""),
+            note && el("span", { class: "unit-last" }, note),
+          ),
+          el("span", { class: `unit-state state-${shown.key}` }, shown.label),
+        ),
+      ),
+      open && securityDetail(row),
+    );
+  }
+
+  function securityContent() {
+    const rows = sortedSecurityRows();
+    const available = state.security && state.security.available;
+
+    return [
+      securityLookout(rows),
+      securityPolicy(),
+      available && rows.length > 0 && el("ul", { class: "manifest" }, rows.map(securityUnit)),
+      available &&
+        state.security.saved === false &&
+        rows.some((row) => row.report) &&
+        el("p", { class: "section-note" }, "Scan results last until Watchtower restarts. Mount a folder at ", code("/data"), " to keep them."),
+    ];
+  }
+
+  function renderSecurity() {
+    const slot = document.getElementById("security-slot");
+
+    if (slot) {
+      slot.replaceChildren(...securityContent().filter(Boolean));
+    }
+  }
+
+  function securityView() {
+    if (!feature("security")) {
+      return el(
+        "div",
+        null,
+        el("h1", { class: "title" }, "Image scanning is switched off."),
+        el(
+          "p",
+          { class: "lede" },
+          "Watchtower can scan each container's image for known vulnerabilities with Trivy, show what's affected and how to fix it, and hold back updates that make things worse. Add ",
+          code("security"),
+          " to ",
+          code("WATCHTOWER_HTTP_API_ENDPOINTS"),
+          " and restart Watchtower to use it here.",
+        ),
+        el(
+          "p",
+          { class: "section-note" },
+          "Trivy runs in a short-lived container next to Watchtower, so nothing extra is installed. Its vulnerability database is kept in a Docker volume between scans.",
+        ),
+      );
+    }
+
+    return el("div", { id: "security-slot" }, securityContent().filter(Boolean));
+  }
+
+  // A small mark on the Containers view for images with serious findings.
+  function securityBadge(name) {
+    const report = feature("security") ? securityReport(name) : null;
+
+    if (!report || !serious(report.counts)) {
+      return null;
+    }
+
+    const level = report.counts.critical > 0 ? "critical" : "high";
+
+    return el("span", { class: `sev badge-security sev-${level}` }, `${report.counts[level]} ${level}`);
+  }
+
+  // The security row in a container's details on the Containers view.
+  function securityFact(name) {
+    if (!feature("security")) {
+      return null;
+    }
+
+    const report = securityReport(name);
+    const open = () => state.securityExpanded.add(name);
+
+    if (!report) {
+      return el("span", null, "Not scanned yet. ", el("a", { class: "link-subtle", href: "#/security", onclick: open }, "Security"));
+    }
+
+    const status = securityStatus(report);
+
+    return el("span", null, `${capitalise(status.label)}. `, el("a", { class: "link-subtle", href: "#/security", onclick: open }, "How to fix"));
+  }
+
   // Settings view
 
   const SCHEDULES = [
@@ -1672,6 +2361,10 @@
 
       if ("include_stopped" in changes) {
         await loadContainers();
+      }
+
+      if ("scan" in changes || "scan_gate" in changes) {
+        await loadSecurity();
       }
 
       notify(state.settings.saved ? "Settings saved." : "Settings changed until Watchtower restarts.");
@@ -1822,6 +2515,79 @@
         ],
       ),
       custom,
+    );
+  }
+
+  function gateSetting() {
+    const entry = state.settings.settings.scan_gate;
+    const id = "setting-scan_gate";
+
+    return el(
+      "li",
+      { class: "setting setting-wide" },
+      el("label", { class: "setting-name", for: id }, "Hold back updates that add"),
+      el(
+        "span",
+        { class: "setting-value" },
+        el(
+          "select",
+          {
+            class: "select",
+            id,
+            disabled: !state.settings.settings.scan.value,
+            onchange: (event) => changeSettings({ scan_gate: event.target.value }, id),
+          },
+          GATES.map((item) => el("option", { value: item.value, selected: entry.value === item.value }, item.label)),
+        ),
+      ),
+      el(
+        "span",
+        { class: "setting-help" },
+        "A held update is skipped and reported, and the container keeps its current image. Only findings the running image doesn't already have count, and a scan that fails never holds an update.",
+        !state.settings.settings.scan.value && " Needs Scan updates first to be on.",
+        entry.changed && [
+          " Changed on this page. ",
+          el(
+            "button",
+            { class: "link-button", type: "button", onclick: () => changeSettings({ scan_gate: null }, id) },
+            "Go back to the startup value",
+          ),
+        ],
+      ),
+    );
+  }
+
+  function securitySettings() {
+    const security = state.security;
+    const rows = [
+      switchSetting(
+        "scan",
+        "Scan updates first",
+        "Scan the new image of each waiting update before applying it, and note which known vulnerabilities it fixes. Each scan adds a little time to an update.",
+      ),
+      gateSetting(),
+    ];
+
+    if (security && security.available) {
+      rows.push(
+        el(
+          "li",
+          { class: "setting" },
+          el("span", { class: "setting-name" }, "Scanner"),
+          el("span", { class: "setting-help" }, code(security.scanner_image || security.scanner), " runs in a short-lived container for each scan."),
+        ),
+      );
+    } else if (security) {
+      rows.push(el("li", { class: "setting" }, el("p", { class: "problem" }, security.reason || "The image scanner isn't available.")));
+    }
+
+    return el(
+      "section",
+      { class: "section" },
+      el("h2", { class: "section-title" }, "Security"),
+      el("ul", { class: "manifest" }, rows),
+      feature("security") &&
+        el("p", { class: "section-note" }, "Scan results and fixes are on the ", el("a", { href: "#/security" }, "Security"), " page."),
     );
   }
 
@@ -2396,6 +3162,10 @@
       );
     }
 
+    if (editable && state.settings.settings.scan) {
+      sections.push(securitySettings());
+    }
+
     if (feature("settings")) {
       sections.push(notificationsSection());
     }
@@ -2490,6 +3260,11 @@
           ),
           setting("Show settings", feature("config"), feature("config") ? "Shows the setup above." : enableHint("config")),
           setting(
+            "Scan images",
+            feature("security"),
+            feature("security") ? "Scans running images for known vulnerabilities and shows how to fix them." : enableHint("security"),
+          ),
+          setting(
             "Change settings",
             feature("settings"),
             feature("settings") ? "Lets you change the schedule and switches above." : enableHint("settings"),
@@ -2576,6 +3351,7 @@
 
   const views = [
     { hash: "#/containers", label: "Containers", draw: containersView },
+    { hash: "#/security", label: "Security", draw: securityView },
     { hash: "#/history", label: "History", draw: historyView },
     { hash: "#/settings", label: "Settings", draw: settingsView },
   ];
@@ -2681,14 +3457,27 @@
       }
 
       renderManifest();
+    } else if (view.draw === securityView) {
+      await Promise.all([loadContainers(), loadChecks(), !securityTimer && loadSecurity()]);
+      renderSecurity();
     }
   }
 
   async function start() {
     render();
     // History also feeds each container's update history on the Containers view.
-    await Promise.all([loadContainers(), loadConfig(), loadSettings(), loadHistory(), loadChecks(), loadNotifications()]);
+    await Promise.all([
+      loadContainers(),
+      loadConfig(),
+      loadSettings(),
+      loadHistory(),
+      loadChecks(),
+      loadNotifications(),
+      loadSecurity(),
+    ]);
     render();
+    // Picks up a security scan that was already running.
+    scheduleSecurityPoll();
     // Picks up an update that was already running, for example before a reload.
     await pollActivity();
   }
@@ -2700,6 +3489,9 @@
     if (currentView().draw === historyView) {
       await loadHistory();
       render();
+    } else if (currentView().draw === securityView && !securityTimer) {
+      await loadSecurity();
+      renderSecurity();
     }
   });
 

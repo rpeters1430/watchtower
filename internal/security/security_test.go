@@ -1,0 +1,260 @@
+package security
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
+)
+
+var errScan = errors.New("scanner exited with status 1")
+
+type stubScanner struct {
+	mu      sync.Mutex
+	results map[string]*scanner.Result
+	calls   map[string]int
+	release chan struct{}
+}
+
+func (s *stubScanner) Name() string { return "stub" }
+
+func (s *stubScanner) ReviewUpdate(_ context.Context, current, latest string) (*scanner.Review, error) {
+	diff := scanner.Compare(s.results[current], s.results[latest])
+
+	return &scanner.Review{
+		Current: s.results[current],
+		Latest:  s.results[latest],
+		Diff:    diff,
+		Gate:    scanner.GateOff,
+	}, nil
+}
+
+func (s *stubScanner) Rescan(_ context.Context, image string) (*scanner.Result, error) {
+	if s.release != nil {
+		<-s.release
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.calls == nil {
+		s.calls = map[string]int{}
+	}
+
+	s.calls[image]++
+
+	result, ok := s.results[image]
+	if !ok {
+		return nil, errScan
+	}
+
+	return result, nil
+}
+
+var (
+	critical = scanner.Finding{
+		ID: "CVE-1", Kind: scanner.KindVulnerability, Severity: scanner.SeverityCritical,
+		Package: "openssl", InstalledVersion: "3.0.1", FixedVersion: "3.0.2",
+	}
+	high = scanner.Finding{
+		ID: "CVE-2", Kind: scanner.KindVulnerability, Severity: scanner.SeverityHigh, Package: "zlib",
+	}
+	medium = scanner.Finding{
+		ID: "CVE-3", Kind: scanner.KindVulnerability, Severity: scanner.SeverityMedium,
+		Package: "curl", FixedVersion: "8.1",
+	}
+)
+
+func newStub() *stubScanner {
+	return &stubScanner{results: map[string]*scanner.Result{
+		"sha256:old": {Scanner: "stub", Image: "sha256:old", Findings: []scanner.Finding{critical, high}},
+		"sha256:new": {Scanner: "stub", Image: "sha256:new", Findings: []scanner.Finding{high, medium}},
+	}}
+}
+
+func waitForJob(t *testing.T, service *Service) Job {
+	t.Helper()
+
+	var job Job
+
+	require.Eventually(t, func() bool {
+		job = service.Job()
+
+		return !job.Running
+	}, 5*time.Second, 5*time.Millisecond)
+
+	return job
+}
+
+func TestServiceAppliesRuntimeGate(t *testing.T) {
+	t.Parallel()
+
+	gate := scanner.GateOff
+	service := NewService(nil, newStub(), OpenStore(nil, ""), Options{
+		Gate: func() scanner.Gate { return gate },
+	})
+
+	review, err := service.ReviewUpdate(t.Context(), "sha256:old", "sha256:new")
+	require.NoError(t, err)
+	assert.False(t, review.Hold)
+
+	gate = scanner.GateMedium
+	review, err = service.ReviewUpdate(t.Context(), "sha256:old", "sha256:new")
+	require.NoError(t, err)
+	assert.True(t, review.Hold, "the update adds a medium finding")
+	assert.Equal(t, scanner.GateMedium, review.Gate)
+
+	assert.False(t, service.Enabled())
+	assert.Equal(t, "stub", service.ScannerName())
+}
+
+func TestRecordReview(t *testing.T) {
+	t.Parallel()
+
+	stub := newStub()
+	service := NewService(nil, stub, OpenStore(nil, ""), Options{})
+
+	review, err := service.ReviewUpdate(t.Context(), "sha256:old", "sha256:new")
+	require.NoError(t, err)
+
+	// A waiting update: the report is the running image, with the update's comparison.
+	service.RecordReview("/web", "nginx", "sha256:old", "sha256:new", review, false)
+
+	report, ok := service.Store().Get("web")
+	require.True(t, ok)
+	assert.Equal(t, "sha256:old", report.ImageID)
+	assert.Equal(t, 1, report.Counts.Critical)
+	assert.Equal(t, 1, report.Fixable)
+	require.NotNil(t, report.Update)
+	assert.Equal(t, 1, report.Update.FixedCounts.Critical)
+	assert.Equal(t, 1, report.Update.IntroducedCounts.Medium)
+	assert.Equal(t, "CVE-1", report.Update.Fixed[0].ID)
+
+	// Summaries leave out the finding lists but keep the counts.
+	summary := service.Store().Summaries()[0]
+	assert.Nil(t, summary.Findings)
+	assert.Nil(t, summary.Update.Fixed)
+	assert.Equal(t, 1, summary.Update.FixedCounts.Critical)
+
+	// After the update the container runs the new image, with no update waiting.
+	service.now = func() time.Time { return time.Now().Add(time.Minute) }
+	service.RecordReview("web", "nginx", "sha256:old", "sha256:new", review, true)
+
+	report, _ = service.Store().Get("web")
+	assert.Equal(t, "sha256:new", report.ImageID)
+	assert.Nil(t, report.Update)
+	assert.Equal(t, 0, report.Counts.Critical)
+}
+
+func TestStartScansEachImageOnce(t *testing.T) {
+	t.Parallel()
+
+	stub := newStub()
+	service := NewService(nil, stub, OpenStore(nil, ""), Options{})
+
+	job, err := service.Start(t.Context(), []Target{
+		{Name: "/web", Image: "nginx", ImageID: "sha256:old"},
+		{Name: "web-2", Image: "nginx", ImageID: "sha256:old"},
+		{Name: "broken", Image: "gone", ImageID: "sha256:missing"},
+		{Name: "built", Image: "local"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 3, job.Total)
+
+	job = waitForJob(t, service)
+	assert.Equal(t, 3, job.Done)
+	assert.Equal(t, 1, job.Failed)
+	assert.NotNil(t, job.FinishedAt)
+	assert.Equal(t, 1, stub.calls["sha256:old"])
+
+	web, ok := service.Store().Get("web")
+	require.True(t, ok)
+	assert.Equal(t, 2, web.Counts.Total())
+
+	broken, _ := service.Store().Get("broken")
+	assert.Contains(t, broken.Error, "status 1")
+}
+
+func TestStartKeepsWaitingUpdate(t *testing.T) {
+	t.Parallel()
+
+	stub := newStub()
+	service := NewService(nil, stub, OpenStore(nil, ""), Options{})
+
+	review, err := service.ReviewUpdate(t.Context(), "sha256:old", "sha256:new")
+	require.NoError(t, err)
+	service.RecordReview("web", "nginx", "sha256:old", "sha256:new", review, false)
+
+	service.now = func() time.Time { return time.Now().Add(time.Minute) }
+	_, err = service.Start(t.Context(), []Target{{Name: "web", Image: "nginx", ImageID: "sha256:old"}})
+	require.NoError(t, err)
+	waitForJob(t, service)
+
+	report, _ := service.Store().Get("web")
+	require.NotNil(t, report.Update, "the same image still has the same update waiting")
+	assert.Equal(t, "sha256:new", report.Update.LatestImageID)
+}
+
+func TestStartRejectsOverlapAndEmpty(t *testing.T) {
+	t.Parallel()
+
+	stub := newStub()
+	stub.release = make(chan struct{})
+	service := NewService(nil, stub, OpenStore(nil, ""), Options{})
+
+	_, err := service.Start(t.Context(), nil)
+	require.ErrorIs(t, err, ErrNothingToScan)
+
+	_, err = service.Start(t.Context(), []Target{{Name: "web", ImageID: "sha256:old"}})
+	require.NoError(t, err)
+
+	_, err = service.Start(t.Context(), []Target{{Name: "web", ImageID: "sha256:old"}})
+	require.ErrorIs(t, err, ErrBusy)
+
+	close(stub.release)
+	waitForJob(t, service)
+}
+
+func TestStorePersists(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := OpenStore(nil, dir)
+	require.True(t, store.Persistent())
+
+	when := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	store.Record(Report{Name: "web", ImageID: "sha256:old", ScannedAt: when, Counts: scanner.Counts{High: 2}})
+	// An older report never replaces a newer one.
+	store.Record(Report{Name: "web", ImageID: "sha256:older", ScannedAt: when.Add(-time.Hour)})
+
+	assert.FileExists(t, filepath.Join(dir, FileName))
+
+	reopened := OpenStore(nil, dir)
+	report, ok := reopened.Get("web")
+	require.True(t, ok)
+	assert.Equal(t, "sha256:old", report.ImageID)
+	assert.Equal(t, 2, report.Counts.High)
+
+	// Reports of containers not scanned for a long time drop out.
+	reopened.Record(Report{Name: "db", ScannedAt: when.Add(retention + time.Hour)})
+	_, ok = reopened.Get("web")
+	assert.False(t, ok)
+}
+
+func TestNewReportCapsFindings(t *testing.T) {
+	t.Parallel()
+
+	findings := make([]scanner.Finding, maxFindings+5)
+	report := newReport("web", "nginx", "sha256:x", &scanner.Result{Findings: findings}, nil, time.Now())
+
+	assert.Len(t, report.Findings, maxFindings)
+	assert.True(t, report.Truncated)
+	assert.Equal(t, maxFindings+5, report.Counts.Total())
+}
