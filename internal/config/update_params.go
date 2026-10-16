@@ -61,5 +61,6 @@ func (c Config) UpdateParams(overrides RunOverrides) types.UpdateParams {
 		ComposeProjects:     c.Git.ComposeProjects,
 		AutoRollback:        c.Update.AutoRollback,
 		ContainerOverrides:  c.Update.ContainerOverrides,
+		Registry:            c.Registry,
 	}
 }
