@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
 
+	"github.com/nicholas-fedor/watchtower/internal/scheduling"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -57,7 +58,7 @@ type PruneResponse struct {
 type PruneHandler struct {
 	log        *zerolog.Logger
 	store      ImageStore
-	updateLock chan bool
+	updateLock *scheduling.UpdateLock
 
 	UsagePath string
 	PrunePath string
@@ -73,7 +74,7 @@ type PruneHandler struct {
 //
 // Returns:
 //   - *PruneHandler: Handler ready to register.
-func NewPruneHandler(log *zerolog.Logger, store ImageStore, updateLock chan bool) *PruneHandler {
+func NewPruneHandler(log *zerolog.Logger, store ImageStore, updateLock *scheduling.UpdateLock) *PruneHandler {
 	if log == nil {
 		nop := zerolog.Nop()
 		log = &nop
@@ -148,12 +149,11 @@ func (h *PruneHandler) Prune(c fiber.Ctx) error {
 	}
 
 	if h.updateLock != nil {
-		select {
-		case token := <-h.updateLock:
-			defer func() { h.updateLock <- token }()
-		default:
+		if !h.updateLock.TryLock() {
 			return sendText(c, fiber.StatusConflict, "an update is running; try again when it has finished")
 		}
+
+		defer h.updateLock.Unlock()
 	}
 
 	ctx, cancel := context.WithTimeout(c.Context(), PruneTimeout)

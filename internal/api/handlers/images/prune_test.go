@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nicholas-fedor/watchtower/internal/scheduling"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -89,11 +90,10 @@ func TestPruneHandlerPrune(t *testing.T) {
 		SpaceReclaimed: 4096,
 	}}
 
-	lock := make(chan bool, 1)
-	lock <- true
+	lock := scheduling.NewUpdateLock()
 
 	store.duringFn = func() {
-		assert.Empty(t, lock, "the update lock is held while pruning")
+		assert.False(t, lock.TryLock(), "the update lock is held while pruning")
 	}
 
 	app := pruneApp(NewPruneHandler(testLogger(), store, lock))
@@ -104,7 +104,7 @@ func TestPruneHandlerPrune(t *testing.T) {
 	assert.InDelta(t, 2, body["images_deleted"], 0)
 	assert.InDelta(t, 4096, body["space_reclaimed"], 0)
 	assert.Equal(t, []any{"nginx:1.27"}, body["untagged"])
-	assert.Len(t, lock, 1, "the update lock is released afterwards")
+	assertUnlocked(t, lock, "the update lock is released afterwards")
 
 	status, body = send(t, app, http.MethodPost, "/v1/images/prune")
 	require.Equal(t, http.StatusOK, status)
@@ -117,17 +117,27 @@ func TestPruneHandlerPrune(t *testing.T) {
 	store.err = errors.New("daemon down")
 	status, _ = send(t, app, http.MethodPost, "/v1/images/prune")
 	assert.Equal(t, http.StatusInternalServerError, status)
-	assert.Len(t, lock, 1, "the update lock is released after a failure")
+	assertUnlocked(t, lock, "the update lock is released after a failure")
 }
 
 func TestPruneHandlerRefusesDuringUpdate(t *testing.T) {
 	t.Parallel()
 
 	store := &stubImageStore{}
-	// An empty lock means an update scan holds it.
-	lock := make(chan bool, 1)
+	// An update scan holds the lock.
+	lock := scheduling.NewUpdateLock()
+	require.True(t, lock.TryLock())
 
 	status, _ := send(t, pruneApp(NewPruneHandler(testLogger(), store, lock)), http.MethodPost, "/v1/images/prune?all=true")
 	assert.Equal(t, http.StatusConflict, status)
 	assert.Empty(t, store.pruned)
+}
+
+// assertUnlocked checks that lock is free, leaving it free.
+func assertUnlocked(t *testing.T, lock *scheduling.UpdateLock, msg string) {
+	t.Helper()
+
+	if assert.True(t, lock.TryLock(), msg) {
+		lock.Unlock()
+	}
 }
