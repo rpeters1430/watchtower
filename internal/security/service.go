@@ -105,8 +105,9 @@ type Activity struct {
 
 // Options configures a Service.
 type Options struct {
-	// ScannerImage is the scanner container image, shown to users.
-	ScannerImage string
+	// ScannerImage returns the image of the scanner in force, shown to
+	// users. Nil means none is shown.
+	ScannerImage func() string
 	// IgnoreUnfixed is true when findings without a fix are left out.
 	IgnoreUnfixed bool
 	// Enabled reports whether pending updates are scanned. Nil means off.
@@ -180,7 +181,11 @@ func (s *Service) ScannerName() string {
 // Returns:
 //   - string: Image reference.
 func (s *Service) ScannerImage() string {
-	return s.options.ScannerImage
+	if s.options.ScannerImage == nil {
+		return ""
+	}
+
+	return s.options.ScannerImage()
 }
 
 // IgnoreUnfixed reports whether findings without a fix are left out.

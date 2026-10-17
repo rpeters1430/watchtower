@@ -1744,6 +1744,25 @@
     { value: "low", label: "Any rated finding" },
   ];
 
+  const SCANNERS = [
+    {
+      value: "trivy",
+      label: "Trivy",
+      help: "Trivy looks for known vulnerabilities, leaked secrets, and risky image settings.",
+    },
+    {
+      value: "grype",
+      label: "Grype",
+      help: "Grype looks for known vulnerabilities only, using Anchore's vulnerability database.",
+    },
+  ];
+
+  function scannerLabel(name) {
+    const known = SCANNERS.find((item) => item.value === name);
+
+    return known ? known.label : capitalise(name || "the scanner");
+  }
+
   let securityTimer = null;
   let scanClockTimer = null;
 
@@ -2148,10 +2167,16 @@
       const current = (job.current || []).join(", ");
 
       line = current ? `Scanning ${current}.` : "Starting the scan.";
-      note = scanned.length === 0 ? "The first scan downloads Trivy's vulnerability database, which can take a few minutes." : "";
+      note =
+        scanned.length === 0
+          ? `The first scan downloads ${scannerLabel(security.scanner)}'s vulnerability database, which can take a few minutes.`
+          : "";
     } else if (scanned.length === 0) {
       line = "No image has been scanned yet.";
-      note = "A scan looks for known vulnerabilities, leaked secrets, and risky settings in each running image. It only reads images and changes nothing.";
+      note =
+        security.scanner === "grype"
+          ? "A scan looks for known vulnerabilities in each running image. It only reads images and changes nothing."
+          : "A scan looks for known vulnerabilities, leaked secrets, and risky settings in each running image. It only reads images and changes nothing.";
     } else {
       const flagged = scanned.filter((row) => serious(row.report.counts)).length;
       const newest = scanned.map((row) => new Date(row.report.scanned_at)).sort((a, b) => b - a)[0];
@@ -2162,7 +2187,7 @@
         flagged === 0
           ? `No critical or high vulnerabilities in ${scanned.length === 1 ? "the scanned image" : `the ${scanned.length} scanned images`}.`
           : `${flagged} of ${count(scanned.length, "scanned container")} ${flagged === 1 ? "has" : "have"} critical or high vulnerabilities.`;
-      note = `Last scanned ${ago(newest)} with ${capitalise(security.scanner || "the scanner")}.`;
+      note = `Last scanned ${ago(newest)} with ${scannerLabel(security.scanner)}.`;
 
       if (fixes > 0) {
         note += ` ${capitalise(count(fixing.length, "waiting update"))} would fix ${count(fixes, "known issue")}.`;
@@ -2243,7 +2268,9 @@
     const introducedTotal = update ? total(update.introduced_counts) : 0;
 
     if (total(report.counts) === 0 && !report.error) {
-      items.push("Trivy found nothing it knows about in this image. Scan again now and then: new advisories are published every day.");
+      items.push(
+        `${scannerLabel(report.scanner)} found nothing it knows about in this image. Scan again now and then: new advisories are published every day.`,
+      );
 
       return items;
     }
@@ -2596,7 +2623,7 @@
         el(
           "p",
           { class: "lede" },
-          "Watchtower can scan each container's image for known vulnerabilities with Trivy, show what's affected and how to fix it, and hold back updates that make things worse. Add ",
+          "Watchtower can scan each container's image for known vulnerabilities with Trivy or Grype, show what's affected and how to fix it, and hold back updates that make things worse. Add ",
           code("security"),
           " to ",
           code("WATCHTOWER_HTTP_API_ENDPOINTS"),
@@ -2605,7 +2632,7 @@
         el(
           "p",
           { class: "section-note" },
-          "Trivy runs in a short-lived container next to Watchtower, so nothing extra is installed. Its vulnerability database is kept in a Docker volume between scans.",
+          "The scanner runs in a short-lived container next to Watchtower, so nothing extra is installed. Its vulnerability database is kept in a Docker volume between scans, and its image is checked for a newer release once a day.",
         ),
       );
     }
@@ -2706,7 +2733,7 @@
         await loadContainers();
       }
 
-      if ("scan" in changes || "scan_gate" in changes) {
+      if ("scan" in changes || "scan_gate" in changes || "scanner" in changes) {
         await loadSecurity();
       }
 
@@ -2900,6 +2927,45 @@
     );
   }
 
+  function scannerSetting(security) {
+    const entry = state.settings.settings.scanner;
+    const id = "setting-scanner";
+    const chosen = SCANNERS.find((item) => item.value === entry.value);
+
+    return el(
+      "li",
+      { class: "setting setting-wide" },
+      el("label", { class: "setting-name", for: id }, "Scan with"),
+      el(
+        "span",
+        { class: "setting-value" },
+        el(
+          "select",
+          { class: "select", id, onchange: (event) => changeSettings({ scanner: event.target.value }, id) },
+          SCANNERS.map((item) => el("option", { value: item.value, selected: entry.value === item.value }, item.label)),
+        ),
+      ),
+      el(
+        "span",
+        { class: "setting-help" },
+        chosen && `${chosen.help} `,
+        security && security.available && security.scanner === entry.value && [
+          code(security.scanner_image || security.scanner),
+          " runs in a short-lived container for each scan, and Watchtower checks for a newer release of it once a day. ",
+        ],
+        "Results from each scanner are kept until that container is scanned again.",
+        entry.changed && [
+          " Changed on this page. ",
+          el(
+            "button",
+            { class: "link-button", type: "button", onclick: () => changeSettings({ scanner: null }, id) },
+            "Go back to the startup value",
+          ),
+        ],
+      ),
+    );
+  }
+
   function securitySettings() {
     const security = state.security;
     const rows = [
@@ -2912,14 +2978,7 @@
     ];
 
     if (security && security.available) {
-      rows.push(
-        el(
-          "li",
-          { class: "setting" },
-          el("span", { class: "setting-name" }, "Scanner"),
-          el("span", { class: "setting-help" }, code(security.scanner_image || security.scanner), " runs in a short-lived container for each scan."),
-        ),
-      );
+      rows.push(scannerSetting(security));
     } else if (security) {
       rows.push(el("li", { class: "setting" }, el("p", { class: "problem" }, security.reason || "The image scanner isn't available.")));
     }

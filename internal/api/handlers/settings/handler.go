@@ -121,7 +121,9 @@ func (h *Handler) Get(c fiber.Ctx) error {
 // Patch changes one or more runtime settings.
 //
 //	@Summary		Change runtime settings
-//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium, high, or critical), schedule (cron)
+//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium, high, or critical), scanner (trivy or
+//
+// grype), schedule (cron)
 //
 // and container_overrides (map). JSON null resets one.
 //
@@ -281,6 +283,11 @@ func (h *Handler) send(c fiber.Ctx) error {
 				Default: gateName(defaults.ScanGate),
 				Changed: changed[runtime.KeyScanGate],
 			},
+			runtime.KeyScanner: {
+				Value:   backendName(values.Scanner),
+				Default: backendName(defaults.Scanner),
+				Changed: changed[runtime.KeyScanner],
+			},
 		},
 		Saved:          snapshot.Persistent,
 		ScheduleActive: h.scheduleActive,
@@ -302,6 +309,15 @@ func gateName(gate scanner.Gate) string {
 	}
 
 	return string(gate)
+}
+
+// backendName returns the scanner's name, the default scanner when none is set.
+func backendName(name string) string {
+	if name == "" {
+		return scanner.DefaultBackend
+	}
+
+	return name
 }
 
 // nextRun returns the next scheduled scan time, or nil when none is scheduled.

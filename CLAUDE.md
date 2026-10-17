@@ -103,7 +103,7 @@ Adding or changing an option touches several layers, kept deliberately separate:
 - `--data-dir` (default `/data`) holds `settings.json`, `history.json`, `checks.json`, and `security.json`. If the directory is missing or not writable, both fall back to memory only; nothing fails. `--run-once` ignores saved overrides.
 - Notification URLs added from the UI live in the same store (`notification_services`), not in `PATCH`: `/v1/settings/notifications` adds and removes them, `OnNotificationChange` pushes the list to the notifier's `SetExtraURLs`, and responses never echo the URLs.
 - `internal/metrics` also keeps each container's latest check result (`ContainerStatus`), fed by `/v1/check` and by every scan's report, and served by `GET /v1/check`. The next scheduled run reaches `/v1/settings` through `ScheduleDeps.ReportNextRun`.
-- `scan` and `scan_gate` are run-time settings too. `ApplyTo` drops `params.SecurityReviewer` when `scan` is off, and `security.Service` reads the gate per review, so neither needs a restart.
+- `scan`, `scan_gate`, and `scanner` are run-time settings too. `ApplyTo` drops `params.SecurityReviewer` when `scan` is off, and `security.Service` reads the gate per review, so neither needs a restart.
 - `/v1/settings` (endpoint name `settings`) exposes the store over GET and PATCH. To make another setting editable: add it to `settings.Values`, the `overrides` struct and its `apply`/`set`, `ApplyTo`, the handler's response, the Settings view in `app.js`, and the docs table. A setting baked into the Docker client at construction (for example include-stopped) cannot be changed this way without reworking the client.
 
 ### Update engine
@@ -133,7 +133,7 @@ Enabled with the `ui` endpoint name and served at `/ui/` by the same Fiber serve
 
 ### Image scanning (`pkg/scanner`, `internal/security`)
 
-- `pkg/scanner` runs Trivy in a short-lived container through the Docker API (the image is `FROM scratch`, so nothing is bundled), normalizes findings, compares two scans (`Compare`), and caches results by image ID for 12 hours (`Reviewer`).
+- `pkg/scanner` runs Trivy or Grype in a short-lived container through the Docker API (the image is `FROM scratch`, so nothing is bundled), normalizes findings, compares two scans (`Compare`), and caches results by image ID for 12 hours (`Reviewer`, one per backend). `Selector` picks the backend per call from the run-time `scanner` setting. `DockerRunner` pulls a present scanner image again once every `ImageRefreshInterval` (24h) so `:latest` follows new releases.
 - `internal/security.Service` wraps the reviewer. It is built in `runMain` whenever a Docker client can be made, regardless of `--scan`, so scanning can be switched on at run time and running images can be scanned on request. It implements `types.SecurityReviewer` and `types.SecurityRecorder`; `internal/actions` calls `RecordReview` after restarts, so each container's latest report (running image plus any waiting update's diff) lands in `security.Store` (`security.json`).
 - `/v1/security` (endpoint name `security`) serves the summaries, `/v1/security/{name}` one report with findings, and `POST /v1/security/scan` starts a background scan of running images. The UI's Security view is built on these.
 

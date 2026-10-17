@@ -39,6 +39,8 @@ const (
 	KeyScan = "scan"
 	// KeyScanGate is the lowest severity of a new finding that holds an update.
 	KeyScanGate = "scan_gate"
+	// KeyScanner is the vulnerability scanner that scans images: trivy or grype.
+	KeyScanner = "scanner"
 	// KeyContainerOverrides maps container names to policy overrides (auto, monitor_only, pinned, update).
 	KeyContainerOverrides = "container_overrides"
 )
@@ -74,6 +76,8 @@ type Values struct {
 	Scan bool
 	// ScanGate holds updates whose new image adds findings at or above it.
 	ScanGate scanner.Gate
+	// Scanner is the vulnerability scanner backend, such as "trivy".
+	Scanner string
 }
 
 // Snapshot contains a consistent view of the effective settings and their
@@ -104,6 +108,7 @@ type overrides struct {
 	ContainerOverrides map[string]string `json:"container_overrides,omitempty"`
 	Scan               *bool             `json:"scan,omitempty"`
 	ScanGate           *scanner.Gate     `json:"scan_gate,omitempty"`
+	Scanner            *string           `json:"scanner,omitempty"`
 	// NotificationServices are notification destinations added at run time.
 	// They add to the URLs from flags rather than replacing them.
 	NotificationServices []NotificationService `json:"notification_services,omitempty"`
@@ -200,6 +205,7 @@ func (s *Store) Overridden() map[string]bool {
 		KeyContainerOverrides: s.overrides.ContainerOverrides != nil,
 		KeyScan:               s.overrides.Scan != nil,
 		KeyScanGate:           s.overrides.ScanGate != nil,
+		KeyScanner:            s.overrides.Scanner != nil,
 	}
 }
 
@@ -221,6 +227,7 @@ func (s *Store) Snapshot() Snapshot {
 			KeyContainerOverrides: s.overrides.ContainerOverrides != nil,
 			KeyScan:               s.overrides.Scan != nil,
 			KeyScanGate:           s.overrides.ScanGate != nil,
+			KeyScanner:            s.overrides.Scanner != nil,
 		},
 		Persistent: s.path != "",
 	}
@@ -388,6 +395,17 @@ func (s *Store) load() {
 		saved.Schedule = &trimmed
 	}
 
+	if saved.Scanner != nil {
+		backend, err := scanner.ParseBackend(*saved.Scanner)
+		if err != nil {
+			s.log.Warn().Err(err).Str("path", s.path).Msg("Saved scanner is not known, using the default")
+
+			saved.Scanner = nil
+		} else {
+			saved.Scanner = &backend
+		}
+	}
+
 	err = s.validate(s.defaults, saved.apply(s.defaults))
 	if err != nil {
 		s.log.Warn().Err(err).Str("path", s.path).Msg("Saved settings no longer apply, using defaults")
@@ -468,6 +486,10 @@ func (o *overrides) apply(defaults Values) Values {
 		values.ScanGate = *o.ScanGate
 	}
 
+	if o.Scanner != nil {
+		values.Scanner = *o.Scanner
+	}
+
 	return values
 }
 
@@ -502,6 +524,24 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 		}
 
 		o.ScanGate = &gate
+
+		return nil
+	case KeyScanner:
+		var name *string
+
+		err := decode(key, raw, &name)
+		if err != nil || name == nil {
+			o.Scanner = nil
+
+			return err
+		}
+
+		backend, err := scanner.ParseBackend(*name)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidValue, err)
+		}
+
+		o.Scanner = &backend
 
 		return nil
 	case KeySchedule:

@@ -48,8 +48,11 @@ func (p fakePull) JSONMessages(context.Context) iter.Seq2[jsonstream.Message, er
 func (p fakePull) Wait(context.Context) error { return p.err }
 
 type fakeDocker struct {
-	hasImage  bool
+	hasImage bool
+	// imageIDs are the IDs ImageInspect reports in turn; the last repeats.
+	imageIDs  []string
 	pulled    []string
+	unpulled  []string
 	pullErr   error
 	createErr error
 	created   dockerClient.ContainerCreateOptions
@@ -66,7 +69,16 @@ func (f *fakeDocker) ImageInspect(
 	...dockerClient.ImageInspectOption,
 ) (dockerClient.ImageInspectResult, error) {
 	if f.hasImage {
-		return dockerClient.ImageInspectResult{}, nil
+		var result dockerClient.ImageInspectResult
+
+		if len(f.imageIDs) > 0 {
+			result.ID = f.imageIDs[0]
+			if len(f.imageIDs) > 1 {
+				f.imageIDs = f.imageIDs[1:]
+			}
+		}
+
+		return result, nil
 	}
 
 	return dockerClient.ImageInspectResult{}, errFake
@@ -80,6 +92,16 @@ func (f *fakeDocker) ImagePull(
 	f.pulled = append(f.pulled, ref)
 
 	return fakePull{ReadCloser: io.NopCloser(bytes.NewReader(nil)), err: f.pullErr}, nil
+}
+
+func (f *fakeDocker) ImageRemove(
+	_ context.Context,
+	imageID string,
+	_ dockerClient.ImageRemoveOptions,
+) (dockerClient.ImageRemoveResult, error) {
+	f.unpulled = append(f.unpulled, imageID)
+
+	return dockerClient.ImageRemoveResult{}, nil
 }
 
 func (f *fakeDocker) ContainerCreate(
@@ -166,12 +188,59 @@ func TestDockerRunnerRun(t *testing.T) {
 	assert.Equal(t, []string{"scanner-1"}, api.removed)
 }
 
-func TestDockerRunnerSkipsPullWhenPresent(t *testing.T) {
+func TestDockerRunnerPassesEnv(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeDocker{logs: frame(stdcopy.Stdout, "{}")}
+
+	_, err := newTestRunner(api).Run(t.Context(), RunSpec{Image: "grype", Env: []string{"A=b"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"A=b"}, api.created.Config.Env)
+}
+
+func TestDockerRunnerRefreshesPresentImage(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeDocker{hasImage: true, imageIDs: []string{"sha256:old", "sha256:new"}, logs: frame(stdcopy.Stdout, "{}")}
+	runner := newTestRunner(api)
+	now := time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC)
+	runner.now = func() time.Time { return now }
+
+	_, err := runner.Run(t.Context(), RunSpec{Image: "trivy"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"trivy"}, api.pulled, "the first scan checks for a newer image")
+	assert.Equal(t, []string{"sha256:old"}, api.unpulled, "the image the pull replaced is removed")
+
+	now = now.Add(ImageRefreshInterval - time.Minute)
+	_, err = runner.Run(t.Context(), RunSpec{Image: "trivy"})
+	require.NoError(t, err)
+	assert.Len(t, api.pulled, 1, "no check within the refresh interval")
+
+	now = now.Add(time.Minute)
+	_, err = runner.Run(t.Context(), RunSpec{Image: "trivy"})
+	require.NoError(t, err)
+	assert.Len(t, api.pulled, 2, "checked again once the interval has passed")
+	assert.Len(t, api.unpulled, 1, "nothing to remove when the image did not change")
+}
+
+func TestDockerRunnerKeepsPresentImageWhenRefreshFails(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeDocker{hasImage: true, pullErr: errFake, logs: frame(stdcopy.Stdout, "{}")}
+
+	out, err := newTestRunner(api).Run(t.Context(), RunSpec{Image: "trivy"})
+	require.NoError(t, err)
+	assert.JSONEq(t, "{}", string(out))
+	assert.Equal(t, []string{"trivy"}, api.pulled)
+	assert.Empty(t, api.unpulled)
+}
+
+func TestDockerRunnerSkipsRefreshForDigest(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeDocker{hasImage: true, logs: frame(stdcopy.Stdout, "{}")}
 
-	_, err := newTestRunner(api).Run(t.Context(), RunSpec{Image: "trivy"})
+	_, err := newTestRunner(api).Run(t.Context(), RunSpec{Image: "aquasec/trivy@sha256:abc"})
 	require.NoError(t, err)
 	assert.Empty(t, api.pulled)
 }

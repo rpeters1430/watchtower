@@ -78,6 +78,7 @@ func TestUpdateAppliesAndPersists(t *testing.T) {
 		KeyContainerOverrides: false,
 		KeyScan:               false,
 		KeyScanGate:           false,
+		KeyScanner:            false,
 	}, store.Overridden())
 	assert.Equal(t, Snapshot{
 		Effective:  want,
@@ -317,4 +318,38 @@ func TestScanSettings(t *testing.T) {
 	require.NoError(t, store.Update(changes(t, `{"scan_gate":null}`)))
 	assert.Equal(t, scanner.GateOff, store.Effective().ScanGate)
 	assert.False(t, store.Overridden()[KeyScanGate])
+}
+
+func TestScannerSetting(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := Open(nil, dir, Values{Scanner: scanner.TrivyName}, Validators{})
+
+	require.NoError(t, store.Update(changes(t, `{"scanner":"Grype"}`)))
+	assert.Equal(t, scanner.GrypeName, store.Effective().Scanner)
+	assert.True(t, store.Overridden()[KeyScanner])
+
+	err := store.Update(changes(t, `{"scanner":"clair"}`))
+	require.ErrorIs(t, err, ErrInvalidValue)
+	assert.Equal(t, scanner.GrypeName, store.Effective().Scanner)
+
+	// The choice survives a restart.
+	reopened := Open(nil, dir, Values{Scanner: scanner.TrivyName}, Validators{})
+	assert.Equal(t, scanner.GrypeName, reopened.Effective().Scanner)
+
+	require.NoError(t, reopened.Update(changes(t, `{"scanner":null}`)))
+	assert.Equal(t, scanner.TrivyName, reopened.Effective().Scanner)
+	assert.False(t, reopened.Overridden()[KeyScanner])
+}
+
+func TestUnknownSavedScannerIsDropped(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, FileName), []byte(`{"scanner":"clair","cleanup":true}`), 0o600))
+
+	store := Open(nil, dir, Values{Scanner: scanner.TrivyName}, Validators{})
+	assert.Equal(t, scanner.TrivyName, store.Effective().Scanner)
+	assert.True(t, store.Effective().Cleanup, "other saved settings still apply")
 }

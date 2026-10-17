@@ -894,6 +894,14 @@
   list-parse: none
   hidden: false
   deprecated: ""
+--scanner
+  shorthand: ""
+  kind: string
+  default: "trivy"
+  env: WATCHTOWER_SCANNER
+  list-parse: none
+  hidden: false
+  deprecated: ""
 --scan-gate
   shorthand: ""
   kind: string
@@ -907,6 +915,14 @@
   kind: string
   default: "aquasec/trivy:latest"
   env: WATCHTOWER_SCAN_IMAGE
+  list-parse: none
+  hidden: false
+  deprecated: ""
+--scan-grype-image
+  shorthand: ""
+  kind: string
+  default: "anchore/grype:latest"
+  env: WATCHTOWER_SCAN_GRYPE_IMAGE
   list-parse: none
   hidden: false
   deprecated: ""

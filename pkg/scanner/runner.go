@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -30,6 +31,11 @@ const maxStderrBytes = 4 << 10
 // cleanupTimeout bounds removing a scanner container after its run.
 const cleanupTimeout = 30 * time.Second
 
+// ImageRefreshInterval is how often a scanner image that is already present
+// is pulled again, so a tag such as "latest" picks up new scanner releases.
+// An image pinned by digest is never pulled again.
+const ImageRefreshInterval = 24 * time.Hour
+
 // Labels set on every scanner container. The enable label keeps Watchtower
 // from treating its own scanner containers as update candidates.
 const (
@@ -52,6 +58,8 @@ type RunSpec struct {
 	Image string
 	// Args are passed to the image entrypoint.
 	Args []string
+	// Env holds "KEY=value" environment variables for the scanner.
+	Env []string
 	// Volumes maps named volumes to mount points inside the container.
 	Volumes map[string]string
 	// Log, when set and the context carries a ProgressFunc, receives each
@@ -76,6 +84,11 @@ type dockerAPI interface {
 		ref string,
 		options dockerClient.ImagePullOptions,
 	) (dockerClient.ImagePullResponse, error)
+	ImageRemove(
+		ctx context.Context,
+		imageID string,
+		options dockerClient.ImageRemoveOptions,
+	) (dockerClient.ImageRemoveResult, error)
 	ContainerCreate(
 		ctx context.Context,
 		options dockerClient.ContainerCreateOptions,
@@ -109,6 +122,11 @@ type DockerRunner struct {
 	api    dockerAPI
 	socket string
 	logger *zerolog.Logger
+	now    func() time.Time
+
+	mu sync.Mutex
+	// pulled records when each scanner image was last pulled or checked.
+	pulled map[string]time.Time
 }
 
 // NewDockerRunner creates a runner on a Docker client.
@@ -125,7 +143,13 @@ func NewDockerRunner(logger *zerolog.Logger, api dockerAPI, socket string) *Dock
 		socket = DefaultDockerSocket
 	}
 
-	return &DockerRunner{api: api, socket: socket, logger: logger}
+	return &DockerRunner{
+		api:    api,
+		socket: socket,
+		logger: logger,
+		now:    time.Now,
+		pulled: make(map[string]time.Time),
+	}
 }
 
 // Run pulls the scanner image if it is missing, runs it, waits for it to
@@ -153,6 +177,7 @@ func (r *DockerRunner) Run(ctx context.Context, spec RunSpec) ([]byte, error) {
 		Config: &dockerContainer.Config{
 			Image: spec.Image,
 			Cmd:   spec.Args,
+			Env:   spec.Env,
 			Labels: map[string]string{
 				enableLabel:  "false",
 				scannerLabel: "true",
@@ -204,7 +229,10 @@ func (r *DockerRunner) Run(ctx context.Context, spec RunSpec) ([]byte, error) {
 	return stdout, nil
 }
 
-// ensureImage pulls the scanner image when the daemon does not have it.
+// ensureImage pulls the scanner image when the daemon does not have it, and
+// pulls it again once ImageRefreshInterval has passed since the last pull, so
+// a tag such as "latest" stays on the newest scanner release. When a refresh
+// fails, the image already present is used.
 //
 // Parameters:
 //   - ctx: Context for the inspect and pull.
@@ -213,14 +241,55 @@ func (r *DockerRunner) Run(ctx context.Context, spec RunSpec) ([]byte, error) {
 // Returns:
 //   - error: Non-nil when the image is missing and cannot be pulled.
 func (r *DockerRunner) ensureImage(ctx context.Context, image string) error {
-	_, err := r.api.ImageInspect(ctx, image)
-	if err == nil {
+	inspected, err := r.api.ImageInspect(ctx, image)
+	present := err == nil
+
+	if present && !r.refreshDue(image) {
 		return nil
 	}
 
-	r.logger.Info().Str("image", image).Msg("Pulling scanner image")
-	ReportProgress(ctx, "Downloading the scanner image "+image)
+	if present {
+		r.logger.Debug().Str("image", image).Msg("Checking for a newer scanner image")
+		ReportProgress(ctx, "Checking for a newer version of the scanner image "+image)
+	} else {
+		r.logger.Info().Str("image", image).Msg("Pulling scanner image")
+		ReportProgress(ctx, "Downloading the scanner image "+image)
+	}
 
+	err = r.pull(ctx, image)
+
+	// A failed refresh is retried after the next interval, not on every scan.
+	r.markPulled(image)
+
+	if err != nil {
+		if !present {
+			return err
+		}
+
+		r.logger.Warn().
+			Err(err).
+			Str("image", image).
+			Msg("Could not check for a newer scanner image, using the one already present")
+
+		return nil
+	}
+
+	if present {
+		r.removeSuperseded(ctx, image, inspected.ID)
+	}
+
+	return nil
+}
+
+// pull pulls the scanner image and waits for the pull to finish.
+//
+// Parameters:
+//   - ctx: Context for the pull.
+//   - image: Scanner image reference.
+//
+// Returns:
+//   - error: Non-nil when the pull fails.
+func (r *DockerRunner) pull(ctx context.Context, image string) error {
 	response, err := r.api.ImagePull(ctx, image, dockerClient.ImagePullOptions{})
 	if err != nil {
 		return fmt.Errorf("pulling scanner image %s: %w", image, err)
@@ -234,6 +303,66 @@ func (r *DockerRunner) ensureImage(ctx context.Context, image string) error {
 	}
 
 	return nil
+}
+
+// refreshDue reports whether a present scanner image should be pulled again.
+//
+// Parameters:
+//   - image: Scanner image reference.
+//
+// Returns:
+//   - bool: True when the image is referenced by tag and was not pulled
+//     within ImageRefreshInterval by this runner.
+func (r *DockerRunner) refreshDue(image string) bool {
+	// A digest names one image for good, so there is nothing newer to fetch.
+	if strings.Contains(image, "@") {
+		return false
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	last, ok := r.pulled[image]
+
+	return !ok || r.now().Sub(last) >= ImageRefreshInterval
+}
+
+// markPulled records that image was just pulled or checked.
+//
+// Parameters:
+//   - image: Scanner image reference.
+func (r *DockerRunner) markPulled(image string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.pulled[image] = r.now()
+}
+
+// removeSuperseded removes the scanner image a refresh replaced, so each
+// scanner release does not leave an untagged image behind. A failure only
+// leaves the old image in place.
+//
+// Parameters:
+//   - ctx: Context for the inspect and removal.
+//   - image: Scanner image reference.
+//   - previousID: Image ID the reference named before the pull.
+func (r *DockerRunner) removeSuperseded(ctx context.Context, image, previousID string) {
+	current, err := r.api.ImageInspect(ctx, image)
+	if err != nil || previousID == "" || current.ID == previousID {
+		return
+	}
+
+	r.logger.Info().
+		Str("image", image).
+		Str("previous_id", previousID).
+		Str("image_id", current.ID).
+		Msg("Updated scanner image")
+	ReportProgress(ctx, "Updated the scanner image "+image)
+
+	_, err = r.api.ImageRemove(ctx, previousID, dockerClient.ImageRemoveOptions{PruneChildren: true})
+	if err != nil {
+		r.logger.Debug().Err(err).Str("image_id", previousID).Msg("Could not remove the previous scanner image")
+	}
 }
 
 // wait blocks until the container exits or ctx ends.
