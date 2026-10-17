@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add Grype as a selectable scanner and keep scanner images current by @claude
 - Scan updates by default, show ETA and queue, and show each update's CVE diff live by @claude
 - Show what an on-demand scan is doing, step by step by @claude
 - Show image scan results and how to fix them by @claude
@@ -2972,10 +2973,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#32](https://github.com/rpeters1430/watchtower/pull/32)
-- @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#31](https://github.com/rpeters1430/watchtower/pull/31)
+- @rpeters1430 made their first contribution in [#34](https://github.com/rpeters1430/watchtower/pull/34)
 - @claude made their first contribution
+- @github-actions[bot] made their first contribution in [#33](https://github.com/rpeters1430/watchtower/pull/33)
+- @renovate[bot] made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
 - @allcontributors[bot] made their first contribution
