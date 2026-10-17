@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Show security scan steps and time left during updates, and prune unused images by @claude
 - Add Grype as a selectable scanner and keep scanner images current by @claude
 - Scan updates by default, show ETA and queue, and show each update's CVE diff live by @claude
 - Show what an on-demand scan is doing, step by step by @claude
@@ -2973,9 +2974,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#34](https://github.com/rpeters1430/watchtower/pull/34)
+- @rpeters1430 made their first contribution in [#36](https://github.com/rpeters1430/watchtower/pull/36)
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#33](https://github.com/rpeters1430/watchtower/pull/33)
+- @github-actions[bot] made their first contribution in [#35](https://github.com/rpeters1430/watchtower/pull/35)
 - @renovate[bot] made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
