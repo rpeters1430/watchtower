@@ -1368,6 +1368,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update patch dependency updates by @renovate[bot]
 - Update github/codeql-action action to v4.39.0 by @renovate[bot]
 - Regenerate swagger documents by @rpeters1430
 - Update minor dependency updates by @renovate[bot]
@@ -2974,10 +2975,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#36](https://github.com/rpeters1430/watchtower/pull/36)
-- @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#35](https://github.com/rpeters1430/watchtower/pull/35)
+- @rpeters1430 made their first contribution in [#38](https://github.com/rpeters1430/watchtower/pull/38)
 - @renovate[bot] made their first contribution
+- @github-actions[bot] made their first contribution in [#37](https://github.com/rpeters1430/watchtower/pull/37)
+- @claude made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
 - @allcontributors[bot] made their first contribution
