@@ -39,28 +39,48 @@ func newSecurityService(
 		return nil
 	}
 
+	// Both scanners are set up so the choice can change at run time. Neither
+	// runs, or downloads anything, until it scans an image.
 	runner := scanner.NewDockerRunner(log, api, cfg.DockerSocket)
 	trivy := scanner.NewTrivy(log, runner, scanner.TrivyOptions{
 		Image:         cfg.Image,
 		CacheVolume:   cfg.CacheVolume,
 		IgnoreUnfixed: cfg.IgnoreUnfixed,
 	})
+	grype := scanner.NewGrype(log, runner, scanner.GrypeOptions{
+		Image:         cfg.GrypeImage,
+		IgnoreUnfixed: cfg.IgnoreUnfixed,
+	})
+
+	selector := scanner.NewSelector(
+		func() string { return runtimeSettings.Effective().Scanner },
+		map[string]scanner.Selection{
+			scanner.TrivyName: {
+				Reviewer: scanner.NewReviewer(trivy, cfg.Gate, cfg.Timeout),
+				Image:    cfg.Image,
+			},
+			scanner.GrypeName: {
+				Reviewer: scanner.NewReviewer(grype, cfg.Gate, cfg.Timeout),
+				Image:    grype.Image(),
+			},
+		},
+	)
 
 	values := runtimeSettings.Effective()
 	if values.Scan {
 		log.Info().
-			Str("scanner", trivy.Name()).
-			Str("image", cfg.Image).
+			Str("scanner", selector.Name()).
+			Str("image", selector.Image()).
 			Str("gate", string(values.ScanGate)).
 			Msg("Image scanning enabled")
 	}
 
 	return security.NewService(
 		log,
-		scanner.NewReviewer(trivy, cfg.Gate, cfg.Timeout),
+		selector,
 		security.OpenStore(log, dataDir),
 		security.Options{
-			ScannerImage:  cfg.Image,
+			ScannerImage:  selector.Image,
 			IgnoreUnfixed: cfg.IgnoreUnfixed,
 			Enabled:       func() bool { return runtimeSettings.Effective().Scan },
 			Gate:          func() scanner.Gate { return runtimeSettings.Effective().ScanGate },

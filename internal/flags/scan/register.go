@@ -19,7 +19,14 @@ func Specs() []spec.FlagSpec {
 			Kind:    spec.KindBool,
 			Default: true,
 			EnvKeys: []string{"WATCHTOWER_SCAN"},
-			Help:    "Scan the new image of each pending update for known vulnerabilities with Trivy before updating",
+			Help:    "Scan the new image of each pending update for known vulnerabilities before updating",
+		},
+		{
+			Name:    "scanner",
+			Kind:    spec.KindString,
+			Default: scanner.DefaultBackend,
+			EnvKeys: []string{"WATCHTOWER_SCANNER"},
+			Help:    "Vulnerability scanner to run (trivy, grype)",
 		},
 		{
 			Name:    "scan-gate",
@@ -34,6 +41,13 @@ func Specs() []spec.FlagSpec {
 			Default: scanner.DefaultTrivyImage,
 			EnvKeys: []string{"WATCHTOWER_SCAN_IMAGE"},
 			Help:    "Trivy image used to scan images",
+		},
+		{
+			Name:    "scan-grype-image",
+			Kind:    spec.KindString,
+			Default: scanner.DefaultGrypeImage,
+			EnvKeys: []string{"WATCHTOWER_SCAN_GRYPE_IMAGE"},
+			Help:    "Grype image used to scan images",
 		},
 		{
 			Name:    "scan-timeout",
@@ -54,7 +68,7 @@ func Specs() []spec.FlagSpec {
 			Kind:    spec.KindString,
 			Default: scanner.DefaultTrivyCacheVolume,
 			EnvKeys: []string{"WATCHTOWER_SCAN_CACHE_VOLUME"},
-			Help:    "Docker volume that keeps the vulnerability database between scans",
+			Help:    "Docker volume that keeps Trivy's vulnerability database between scans",
 		},
 		{
 			Name:    "scan-docker-socket",

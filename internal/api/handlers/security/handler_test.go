@@ -68,7 +68,7 @@ func newApp(t *testing.T, service *security.Service, list func(context.Context) 
 
 func newService(stub *stubScanner) *security.Service {
 	return security.NewService(nil, stub, security.OpenStore(nil, ""), security.Options{
-		ScannerImage: "aquasec/trivy:latest",
+		ScannerImage: func() string { return "aquasec/trivy:latest" },
 		Enabled:      func() bool { return true },
 		Gate:         func() scanner.Gate { return scanner.GateHigh },
 	})

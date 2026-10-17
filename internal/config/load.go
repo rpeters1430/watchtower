@@ -641,9 +641,15 @@ func readOptionalFile(path string) ([]byte, error) {
 //
 // Returns:
 //   - scan.Scan: Parsed scanning settings.
-//   - error: Non-nil when --scan-gate is not a known gate.
+//   - error: Non-nil when --scan-gate is not a known gate or --scanner is
+//     not a known scanner.
 func loadScan(vCfg *viper.Viper) (scan.Scan, error) {
 	gate, err := scanner.ParseGate(vCfg.GetString("scan-gate"))
+	if err != nil {
+		return scan.Scan{}, fmt.Errorf("load scan settings: %w", err)
+	}
+
+	backend, err := scanner.ParseBackend(vCfg.GetString("scanner"))
 	if err != nil {
 		return scan.Scan{}, fmt.Errorf("load scan settings: %w", err)
 	}
@@ -651,7 +657,9 @@ func loadScan(vCfg *viper.Viper) (scan.Scan, error) {
 	return scan.Scan{
 		Enabled:       vCfg.GetBool("scan"),
 		Gate:          gate,
+		Backend:       backend,
 		Image:         strings.TrimSpace(vCfg.GetString("scan-image")),
+		GrypeImage:    strings.TrimSpace(vCfg.GetString("scan-grype-image")),
 		Timeout:       vCfg.GetDuration("scan-timeout"),
 		IgnoreUnfixed: vCfg.GetBool("scan-ignore-unfixed"),
 		CacheVolume:   strings.TrimSpace(vCfg.GetString("scan-cache-volume")),

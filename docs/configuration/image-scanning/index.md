@@ -1,13 +1,13 @@
 # Image Scanning
 
-Watchtower can scan the new image of each pending update with [Trivy](https://trivy.dev) before it replaces a container.
+Watchtower can scan the new image of each pending update with [Trivy](https://trivy.dev) or [Grype](https://github.com/anchore/grype) before it replaces a container.
 Scanning is on by default; set `--scan=false` to update without it. See [Image Scanning](../../advanced-features/image-scanning/index.md) for how it works.
 
-`scan` and `scan-gate` set the starting values. Both can be changed while Watchtower runs, from the web UI's Settings page or the [settings endpoint](../../http-api/endpoints/settings/index.md).
+`scan`, `scan-gate`, and `scanner` set the starting values. All three can be changed while Watchtower runs, from the web UI's Settings page or the [settings endpoint](../../http-api/endpoints/settings/index.md).
 
 ## Scan
 
-Scans the new image of each pending update, and the image it replaces, for known vulnerabilities, secrets, and image configuration problems.
+Scans the new image of each pending update, and the image it replaces, for known vulnerabilities (and, with Trivy, secrets and image configuration problems).
 Notifications then list the vulnerabilities each update fixed, the web UI shows each scan's progress on the Containers view while the update runs, and the Security view lists what the update fixed and brought in.
 Images are scanned one at a time, so an update of many containers takes longer with scanning on.
 
@@ -34,6 +34,22 @@ Environment Variable: WATCHTOWER_SCAN_GATE
              Default: off
 ```
 
+## Scanner
+
+The scanner that scans images. Trivy also checks images for leaked secrets and risky settings; Grype checks for known vulnerabilities only, using Anchore's database.
+Each scanner keeps its own results cache and vulnerability database volume, so switching back and forth does not mix their findings.
+
+```text
+            Argument: --scanner
+Environment Variable: WATCHTOWER_SCANNER
+     Possible Values: trivy, grype
+             Default: trivy
+```
+
+!!! Note
+    Watchtower pulls the scanner image again once a day, so a tag such as `latest` follows new scanner releases, and removes the image it replaced.
+    If that pull fails, the image already present is used. An image pinned by digest (`name@sha256:…`) is never pulled again.
+
 ## Scan Image
 
 The Trivy image Watchtower runs to scan images. Pin a version, or point at a mirror, to control which scanner runs.
@@ -45,9 +61,20 @@ Environment Variable: WATCHTOWER_SCAN_IMAGE
              Default: aquasec/trivy:latest
 ```
 
+## Scan Grype Image
+
+The Grype image Watchtower runs when the scanner is `grype`. Grype's vulnerability database is kept in the `watchtower-grype-cache` volume.
+
+```text
+            Argument: --scan-grype-image
+Environment Variable: WATCHTOWER_SCAN_GRYPE_IMAGE
+                Type: String
+             Default: anchore/grype:latest
+```
+
 ## Scan Timeout
 
-Bounds the scan of one image. The first scan also downloads Trivy's vulnerability database, so allow time for it.
+Bounds the scan of one image. The first scan also downloads the scanner's vulnerability database, so allow time for it.
 Scans run one at a time, because every scan shares the cache volume, and the timeout only starts once a scan's turn comes.
 Large images, such as ones bundling machine learning models, can take longer than the default on slow disks; raise this if a scan fails with "scan did not finish in time".
 
@@ -71,7 +98,7 @@ Environment Variable: WATCHTOWER_SCAN_IGNORE_UNFIXED
 
 ## Scan Cache Volume
 
-The Docker volume that keeps Trivy's vulnerability database between scans. Docker creates it on first use.
+The Docker volume that keeps Trivy's vulnerability database between scans. Docker creates it on first use. Grype always uses `watchtower-grype-cache`.
 
 ```text
             Argument: --scan-cache-volume
@@ -82,7 +109,7 @@ Environment Variable: WATCHTOWER_SCAN_CACHE_VOLUME
 
 ## Scan Docker Socket
 
-The host path of the Docker socket mounted into the scanner container, so Trivy reads images from the local daemon.
+The host path of the Docker socket mounted into the scanner container, so the scanner reads images from the local daemon.
 Change it when the daemon's socket lives elsewhere on the host, for example with rootless Docker.
 
 ```text

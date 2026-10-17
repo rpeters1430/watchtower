@@ -644,6 +644,7 @@ func (p *process) runMain(cfg types.RunConfig) int {
 			IncludeStopped: appCfg.Client.IncludeStopped,
 			Scan:           appCfg.Scan.Enabled,
 			ScanGate:       appCfg.Scan.Gate,
+			Scanner:        appCfg.Scan.Backend,
 		},
 		settings.Validators{
 			Schedule: scheduling.ValidateSpec,

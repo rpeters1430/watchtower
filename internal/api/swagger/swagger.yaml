@@ -1218,7 +1218,7 @@ paths:
       - application/json
       description: 'Changes the named settings: monitor_only, cleanup, rolling_restart,
         auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium,
-        high, or critical), schedule (cron)'
+        high, or critical), scanner (trivy or grype), schedule (cron)'
       parameters:
       - description: Setting names mapped to new values
         in: body
