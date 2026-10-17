@@ -53,6 +53,9 @@
     securityExpanded: new Set(),
     securityShowAll: new Set(),
     securityFixableOnly: false,
+    imageUsage: null,
+    imageUsageProblem: "",
+    pruning: "",
   };
 
   const app = document.getElementById("app");
@@ -324,6 +327,19 @@
     }
   }
 
+  async function loadImageUsage() {
+    if (!feature("images")) {
+      return;
+    }
+
+    try {
+      state.imageUsage = await request("GET", "/v1/images/usage");
+      state.imageUsageProblem = "";
+    } catch (problem) {
+      state.imageUsageProblem = problem.message;
+    }
+  }
+
   async function loadSettings() {
     if (!feature("settings")) {
       return;
@@ -408,6 +424,7 @@
     }
 
     renderProgress();
+    scheduleScanClock();
   }
 
   // An update this page didn't start (a schedule, another tab, or one started
@@ -504,9 +521,9 @@
 
         return "Asking the registry for the new image.";
       case "scanning":
-        return `Checking the new image for known vulnerabilities and comparing it with the running one. ${
-          entry.scan && entry.scan.step ? `${entry.scan.step}.` : "Starting the scanner."
-        } Images are scanned one at a time.`;
+        return entry.scan && entry.scan.steps && entry.scan.steps.length > 0
+          ? "Checking the new image for known vulnerabilities and comparing it with the running one. Images are scanned one at a time."
+          : "Checking the new image for known vulnerabilities and comparing it with the running one. Starting the scanner.";
       case "scanned":
         return entry.scan && entry.scan.error
           ? "The new image couldn't be scanned, so it's updated without a review. Waiting its turn to restart."
@@ -623,6 +640,101 @@
     }
 
     return el("progress", props);
+  }
+
+  // While an update's new image is scanned: a bar against the estimate, the
+  // time left, and the scanner's steps so far, newest first, so a long scan
+  // visibly moves on. The first scan downloads the vulnerability database,
+  // which can take several minutes.
+  function scanProgress(entry) {
+    const scan = entry.scan;
+
+    if (entry.step !== "scanning") {
+      return null;
+    }
+
+    const started = new Date((scan && scan.started_at) || entry.since);
+    const finish = scan && scan.estimated_finish_at ? new Date(scan.estimated_finish_at) : null;
+    const now = Date.now();
+    const late = finish && finish.getTime() <= now;
+    const props = { class: "progress", "aria-label": `Scan progress for ${cleanName(entry.name)}`, max: "1" };
+
+    // The bar follows the estimate but never fills before the scan ends.
+    if (finish && !late && finish > started) {
+      props.value = String(Math.min(0.95, Math.max(0, (now - started) / (finish - started))));
+    }
+
+    let left;
+
+    if (!finish) {
+      left = " Time left is worked out once Watchtower has timed a scan.";
+    } else if (late) {
+      left = " Taking longer than earlier scans; the steps below show it's still working.";
+    } else {
+      left = [
+        " About ",
+        el("span", { "data-until": scan.estimated_finish_at }, remaining(finish)),
+        ` left, finishing around ${clockShort.format(finish)}.`,
+      ];
+    }
+
+    const steps = ((scan && scan.steps) || []).slice().reverse();
+
+    return [
+      el("progress", props),
+      el(
+        "p",
+        { class: "unit-progress-text" },
+        "Scanning for ",
+        el("span", { "data-since": started.toISOString() }, elapsed(started)),
+        ".",
+        left,
+      ),
+      steps.length > 0 &&
+        el(
+          "ol",
+          { class: "scan-log scan-log-compact", "aria-label": `Scanner steps for ${cleanName(entry.name)}` },
+          steps.map((step) =>
+            el(
+              "li",
+              { class: "scan-log-entry" },
+              el(
+                "time",
+                { datetime: step.at, title: clockShort.format(new Date(step.at)) },
+                `+${stepOffset(started, new Date(step.at))}`,
+              ),
+              el("span", null, step.message),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  // The scanner's current step and time left, for the line at the top.
+  function scanNow(entry) {
+    const scan = entry.scan;
+
+    if (entry.step !== "scanning" || !scan || !scan.step) {
+      return "";
+    }
+
+    const finish = scan.estimated_finish_at ? new Date(scan.estimated_finish_at) : null;
+    const left = finish && finish.getTime() > Date.now() ? ` About ${remaining(finish)} left.` : "";
+
+    return ` Now: ${scan.step.replace(/\.$/, "")}.${left}`;
+  }
+
+  // How far into a scan a step began, as minutes and seconds.
+  function stepOffset(start, at) {
+    const seconds = Math.max(0, Math.floor((at - start) / 1000));
+
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  }
+
+  function updateScanning() {
+    return Boolean(
+      state.activity && state.activity.running && (state.activity.containers || []).some((entry) => entry.step === "scanning"),
+    );
   }
 
   function renderProgress() {
@@ -986,7 +1098,7 @@
 
       if (active.length === 1) {
         line = `Updating ${cleanName(active[0].name)}.`;
-        note = activityDetail(active[0]) + started;
+        note = activityDetail(active[0]) + scanNow(active[0]) + started;
       } else if (active.length > 1) {
         const names = active.map((entry) => cleanName(entry.name)).join(", ");
         // Containers sharing an image share one download, so its progress speaks for all of them.
@@ -1380,6 +1492,7 @@
           { class: "unit-progress", role: "status" },
           activityBar(entry),
           el("p", { class: "unit-progress-text" }, activityDetail(entry)),
+          scanProgress(entry),
           scanDiff(entry),
         ),
       open && facts(container),
@@ -1804,7 +1917,7 @@
   // Ticks the elapsed times on the scan status panel once a second, without
   // asking Watchtower for anything.
   function scheduleScanClock() {
-    const wanted = securityRunning() || state.securityStarting;
+    const wanted = securityRunning() || state.securityStarting || updateScanning();
 
     if (wanted && !scanClockTimer) {
       scanClockTimer = setInterval(tickScanClock, 1_000);
@@ -3463,6 +3576,131 @@
     return el("section", { class: "section" }, parts);
   }
 
+  // Asks before removing images, because a removed image has to be
+  // downloaded again before anything can use it.
+  function confirmPrune(all) {
+    const usage = state.imageUsage;
+    const dialog = el("dialog", { class: "confirm", "aria-labelledby": "confirm-title" });
+    const close = () => {
+      dialog.close();
+      dialog.remove();
+    };
+
+    dialog.append(
+      el("h2", { class: "confirm-title", id: "confirm-title" }, all ? "Remove unused images?" : "Remove untagged images?"),
+      el(
+        "p",
+        { class: "confirm-body" },
+        all
+          ? "Docker deletes every image that no container uses, running or stopped. That includes images kept for projects that aren't running and the scanner image, which is downloaded again on the next scan."
+          : "Docker deletes images that no longer have a name, usually left behind when a newer version was pulled.",
+        all && usage && usage.reclaimable > 0 ? ` This frees about ${bytes(usage.reclaimable)}.` : "",
+      ),
+      el(
+        "div",
+        { class: "confirm-actions" },
+        el("button", { class: "button", type: "button", onclick: close }, "Cancel"),
+        el(
+          "button",
+          {
+            class: "button button-primary",
+            type: "button",
+            onclick: () => {
+              close();
+              pruneImages(all);
+            },
+          },
+          all ? "Remove unused images" : "Remove untagged images",
+        ),
+      ),
+    );
+
+    dialog.addEventListener("cancel", () => dialog.remove());
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+
+  async function pruneImages(all) {
+    state.pruning = all ? "all" : "dangling";
+    render();
+
+    try {
+      const data = await request("POST", `/v1/images/prune?all=${all}`);
+      const removed = data.images_deleted || 0;
+
+      notify(
+        removed > 0
+          ? `Removed ${count(removed, "image")} and freed ${bytes(data.space_reclaimed)}.`
+          : "There were no images to remove.",
+      );
+    } catch (problem) {
+      notify(
+        problem.status === 409
+          ? "An update is running. Remove images once it has finished."
+          : `Couldn't remove images. ${capitalise(problem.message)}.`,
+        true,
+      );
+    }
+
+    state.pruning = "";
+    await loadImageUsage();
+    render();
+  }
+
+  function diskSection() {
+    const usage = state.imageUsage;
+    const busy = Boolean(state.pruning) || updateRunning();
+    let summary;
+
+    if (usage) {
+      const unused = Math.max(0, usage.total_count - usage.active_count);
+      const reclaim =
+        unused > 0
+          ? `${capitalise(count(unused, "image"))} ${unused === 1 ? "isn't" : "aren't"} used by any container; removing ${unused === 1 ? "it" : "them"} frees about ${bytes(usage.reclaimable)}.`
+          : "Every image is in use.";
+
+      summary = `${capitalise(count(usage.total_count, "image"))} ${usage.total_count === 1 ? "uses" : "use"} ${bytes(usage.total_size)}. ${reclaim}`;
+    } else {
+      summary = state.imageUsageProblem ? `Disk usage didn't load. ${state.imageUsageProblem}` : "Reading disk usage.";
+    }
+
+    return el(
+      "section",
+      { class: "section" },
+      el("h2", { class: "section-title" }, "Disk space"),
+      el(
+        "ul",
+        { class: "manifest" },
+        el(
+          "li",
+          { class: "setting setting-wide" },
+          el("span", { class: "setting-name" }, "Unused images"),
+          el(
+            "span",
+            { class: "setting-value" },
+            el(
+              "button",
+              { class: "button button-quiet", type: "button", disabled: busy, onclick: () => confirmPrune(true) },
+              state.pruning === "all" ? "Removing…" : "Remove unused images",
+            ),
+          ),
+          el(
+            "span",
+            { class: "setting-help" },
+            summary,
+            " ",
+            el(
+              "button",
+              { class: "link-button", type: "button", disabled: busy, onclick: () => confirmPrune(false) },
+              state.pruning === "dangling" ? "Removing untagged images…" : "Only remove untagged images",
+            ),
+            updateRunning() && " Wait for the running update to finish first.",
+          ),
+        ),
+      ),
+    );
+  }
+
   function settingsView() {
     const config = state.config;
     const editable = feature("settings") && state.settings;
@@ -3572,6 +3810,10 @@
       sections.push(notificationsSection());
     }
 
+    if (feature("images")) {
+      sections.push(diskSection());
+    }
+
     if (feature("config") && config) {
       sections.push(
         el(
@@ -3665,6 +3907,11 @@
             "Scan images",
             feature("security"),
             feature("security") ? "Scans running images for known vulnerabilities and shows how to fix them." : enableHint("security"),
+          ),
+          setting(
+            "Free disk space",
+            feature("images"),
+            feature("images") ? "Shows how much space images use and removes the unused ones." : enableHint("images"),
           ),
           setting(
             "Change settings",
@@ -3876,6 +4123,7 @@
       loadChecks(),
       loadNotifications(),
       loadSecurity(),
+      currentView().draw === settingsView && loadImageUsage(),
     ]);
     render();
     // Picks up a security scan that was already running.
@@ -3894,6 +4142,9 @@
     } else if (currentView().draw === securityView && !securityTimer) {
       await loadSecurity();
       renderSecurity();
+    } else if (currentView().draw === settingsView && feature("images")) {
+      await loadImageUsage();
+      render();
     }
   });
 

@@ -545,6 +545,100 @@ const docTemplate = `{
                 ]
             }
         },
+        "/v1/images/prune": {
+            "post": {
+                "description": "Removes images that no container uses, like docker image prune. By default only dangling (untagged) images are removed; all=true removes every unused image, including scanner images,",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "Remove unused images",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Remove every unused image, not only dangling ones",
+                        "name": "all",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "What was removed",
+                        "schema": {
+                            "$ref": "#/definitions/images.PruneResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid all value",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "An update is running",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to remove images",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/images/usage": {
+            "get": {
+                "description": "Returns how much disk space Docker images use on the host and how much removing unused images would free.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "Image disk usage",
+                "responses": {
+                    "200": {
+                        "description": "Image disk usage",
+                        "schema": {
+                            "$ref": "#/definitions/images.UsageResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid API token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to read image disk usage",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/metrics": {
             "get": {
                 "description": "Returns Watchtower scan metrics in Prometheus exposition format.",
@@ -767,7 +861,7 @@ const docTemplate = `{
                 ]
             },
             "patch": {
-                "description": "Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium, high, or critical), scanner (trivy or grype), schedule (cron)",
+                "description": "Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium, high, or critical), scanner (trivy or",
                 "consumes": [
                     "application/json"
                 ],
@@ -1308,6 +1402,10 @@ const docTemplate = `{
                     "description": "Error says why the scan failed. The update goes ahead without a review.",
                     "type": "string"
                 },
+                "estimated_finish_at": {
+                    "description": "EstimatedFinishAt is when the scan is expected to finish, in RFC 3339,\nbased on how long earlier scans took. Omitted when there is nothing to\nbase it on, and once the scan is done.",
+                    "type": "string"
+                },
                 "fixed_counts": {
                     "description": "FixedCounts tallies, by severity, the findings the update fixes.",
                     "allOf": [
@@ -1332,8 +1430,36 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "started_at": {
+                    "description": "StartedAt is when the scan began, in RFC 3339.",
+                    "type": "string"
+                },
                 "step": {
                     "description": "Step says what the scanner is doing while Step is scanning.",
+                    "type": "string"
+                },
+                "step_started_at": {
+                    "description": "StepStartedAt is when the scanner began its current step, in RFC 3339.",
+                    "type": "string"
+                },
+                "steps": {
+                    "description": "Steps lists what the scanner has done so far, oldest first, up to the\nmost recent maxScanSteps.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/activity.ScanStep"
+                    }
+                }
+            }
+        },
+        "activity.ScanStep": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "description": "At is when the step began, in RFC 3339.",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "Message says what the scanner did.",
                     "type": "string"
                 }
             }
@@ -1476,6 +1602,67 @@ const docTemplate = `{
                 "source": {
                     "description": "Source is \"config\" for services set by flags or environment variables,\nwhich cannot be removed here, or \"settings\" for services added at run time.",
                     "type": "string"
+                }
+            }
+        },
+        "images.PruneResponse": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "description": "All is true when every unused image was removed, not only dangling ones.",
+                    "type": "boolean"
+                },
+                "api_version": {
+                    "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "images_deleted": {
+                    "description": "ImagesDeleted is the number of images deleted.",
+                    "type": "integer"
+                },
+                "space_reclaimed": {
+                    "description": "SpaceReclaimed is the number of bytes freed.",
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "description": "Timestamp is when the response was produced.",
+                    "type": "string"
+                },
+                "untagged": {
+                    "description": "Untagged lists the image references that were untagged.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "images.UsageResponse": {
+            "type": "object",
+            "properties": {
+                "active_count": {
+                    "description": "ActiveCount is the number of images at least one container uses.",
+                    "type": "integer"
+                },
+                "api_version": {
+                    "description": "APIVersion is the API version of the response.",
+                    "type": "string"
+                },
+                "reclaimable": {
+                    "description": "Reclaimable is the number of bytes removing unused images would free.",
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "description": "Timestamp is when the response was produced.",
+                    "type": "string"
+                },
+                "total_count": {
+                    "description": "TotalCount is the number of images on the host.",
+                    "type": "integer"
+                },
+                "total_size": {
+                    "description": "TotalSize is the number of bytes all images use.",
+                    "type": "integer"
                 }
             }
         },

@@ -19,6 +19,7 @@ The UI has no data of its own. It reads the other HTTP API endpoints, so each pa
 | Settings               |      `config`       |
 | Changing settings      |     `settings`      |
 | Security               |     `security`      |
+| Disk space and pruning |      `images`       |
 
 The simplest setup enables everything:
 
@@ -46,8 +47,9 @@ The `/data` volume is optional. With it, settings changed on the page, notificat
 ## What the Page Shows
 
 - **Containers**: each container's state comes from the most recent check or scan, kept by the server through [`GET /v1/check`](../check/index.md#latest_results), so it is the same in every browser and includes what scheduled scans found. The line at the top says when Watchtower last checked and when the next scheduled scan starts. Expanding a container lists its recent updates.
+- **Update progress**: while an update runs, each container shows its download progress and, with image scanning on, the scanner's steps as they happen, how long the scan has run, and roughly how long is left. The first scan after a restart has no time left to show until a scan has been timed, and it can take several minutes while the scanner downloads its vulnerability database.
 - **History**: every scan and check, with the containers each one updated, found an update for, or failed on.
-- **Settings**: the schedule and switches that can change while Watchtower runs, and the notification services. Pick a service such as ntfy, Discord, Telegram, Gotify, Pushover, Slack, email, or a webhook, fill in its details, send a test, and add it. Watchtower sends its update reports there from then on, alongside any [`notification-url`](../../../notifications/introduction/index.md#enabling_notifications) set in its configuration. See [notification services](../settings/index.md#notification_services) for how they are stored.
+- **Settings**: the schedule and switches that can change while Watchtower runs, and the notification services. Pick a service such as ntfy, Discord, Telegram, Gotify, Pushover, Slack, email, or a webhook, fill in its details, send a test, and add it. Watchtower sends its update reports there from then on, alongside any [`notification-url`](../../../notifications/introduction/index.md#enabling_notifications) set in its configuration. See [notification services](../settings/index.md#notification_services) for how they are stored. With the `images` endpoint on, a **Disk space** section shows how much space images take and removes the ones no container uses, all of them or only untagged ones, after asking first.
 
 ## Endpoints
 

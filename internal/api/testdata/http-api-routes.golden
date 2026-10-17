@@ -16,6 +16,7 @@ GET     /v1/containers/details   requires-auth
 GET     /v1/events               requires-auth
 GET     /v1/history              requires-auth
 GET     /v1/images               requires-auth
+GET     /v1/images/usage         requires-auth
 GET     /v1/metrics              requires-auth
 GET     /v1/settings             requires-auth
 GET     /v1/settings/notifications requires-auth
@@ -25,6 +26,7 @@ PATCH   /v1/settings             requires-auth
 POST    /ui/session              requires-auth
 POST    /v1/check                requires-auth
 POST    /v1/containers/:name/action requires-auth
+POST    /v1/images/prune         requires-auth
 POST    /v1/notify/test          requires-auth
 POST    /v1/settings/notifications requires-auth
 POST    /v1/settings/test-notification requires-auth

@@ -619,6 +619,15 @@ func (client MockClient) GetImageDiskUsage(ctx context.Context) (types.ImageDisk
 	return client.TestData.ImageDiskUsage, nil
 }
 
+// PruneImages reports that nothing was removed.
+func (client MockClient) PruneImages(ctx context.Context, _ bool) (types.ImagePruneReport, error) {
+	if err := client.checkContextCancellation(ctx); err != nil {
+		return types.ImagePruneReport{}, err
+	}
+
+	return types.ImagePruneReport{}, nil
+}
+
 // GetInfo returns mock system information for testing.
 func (client MockClient) GetInfo(ctx context.Context) (types.SystemInfo, error) {
 	if err := client.checkContextCancellation(ctx); err != nil {

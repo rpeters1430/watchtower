@@ -1661,6 +1661,48 @@ var _ = ginkgo.Describe("the client", func() {
 		})
 	})
 
+	ginkgo.Describe("PruneImages", func() {
+		prune := func(all bool, filters string) (types.ImagePruneReport, error) {
+			mockServer.Reset()
+
+			api, err := dockerClient.New(
+				dockerClient.WithHost(mockServer.URL()),
+				dockerClient.WithHTTPClient(mockServer.HTTPTestServer.Client()),
+				dockerClient.WithAPIVersion("1.52"),
+			)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+			mockServer.AppendHandlers(
+				ghttp.CombineHandlers(
+					ghttp.VerifyRequest("POST", gomega.MatchRegexp(`^/v[0-9.]+/images/prune$`), filters),
+					ghttp.RespondWithJSONEncoded(http.StatusOK, map[string]any{
+						"ImagesDeleted": []map[string]any{
+							{"Untagged": "nginx:1.27"},
+							{"Deleted": "sha256:aaa"},
+							{"Deleted": "sha256:bbb"},
+						},
+						"SpaceReclaimed": 2048,
+					}),
+				),
+			)
+
+			return (&client{log: testLog(), api: api}).PruneImages(context.Background(), all)
+		}
+
+		ginkgo.It("removes every unused image when all is set", func() {
+			report, err := prune(true, `filters=%7B%22dangling%22%3A%7B%22false%22%3Atrue%7D%7D`)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(report.ImagesDeleted).To(gomega.Equal(2))
+			gomega.Expect(report.Untagged).To(gomega.Equal([]string{"nginx:1.27"}))
+			gomega.Expect(report.SpaceReclaimed).To(gomega.Equal(int64(2048)))
+		})
+
+		ginkgo.It("removes only dangling images otherwise", func() {
+			_, err := prune(false, `filters=%7B%22dangling%22%3A%7B%22true%22%3Atrue%7D%7D`)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		})
+	})
+
 	ginkgo.Describe("TLS client methods", func() {
 		var (
 			tlsServer  *ghttp.Server

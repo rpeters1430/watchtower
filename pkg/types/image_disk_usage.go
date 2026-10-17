@@ -11,3 +11,13 @@ type ImageDiskUsage struct {
 	// ActiveCount is the number of images in use by containers.
 	ActiveCount int64
 }
+
+// ImagePruneReport is what removing unused images freed.
+type ImagePruneReport struct {
+	// ImagesDeleted is the number of image IDs the daemon deleted.
+	ImagesDeleted int
+	// Untagged lists the image references the daemon untagged.
+	Untagged []string
+	// SpaceReclaimed is the number of bytes freed.
+	SpaceReclaimed int64
+}

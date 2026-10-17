@@ -659,6 +659,18 @@ input {
   color: var(--failed);
 }
 
+/* The scanner's steps under a container whose update is being scanned. */
+.scan-log-compact {
+  max-width: 32rem;
+  max-height: 9rem;
+  padding-top: 0.4rem;
+  color: var(--ink-soft);
+}
+
+.scan-log-compact .scan-log-entry:first-child span {
+  color: var(--ink);
+}
+
 .scan-status-done {
   border-left-color: var(--line-strong);
 }

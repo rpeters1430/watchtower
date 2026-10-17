@@ -40,6 +40,9 @@ type ImageScanner interface {
 	ReviewUpdate(ctx context.Context, currentImage, latestImage string) (*scanner.Review, error)
 	// Rescan scans an image against the latest vulnerability database.
 	Rescan(ctx context.Context, image string) (*scanner.Result, error)
+	// Expected estimates how long scanning an image would take now. It
+	// returns false when it has nothing to base the estimate on.
+	Expected(image string) (time.Duration, bool)
 }
 
 // Target is one container to scan.
@@ -248,6 +251,51 @@ func (s *Service) ReviewUpdate(ctx context.Context, currentImage, latestImage st
 	return &gated, nil
 }
 
+// EstimateReview works out how long ReviewUpdate should take for an
+// update: the scanner's own estimate for each image, or else how long the
+// image's last on-request scan took, or else the average of those scans.
+//
+// Parameters:
+//   - currentImage: Image ID of the running container.
+//   - latestImage: Image ID the update switches to.
+//
+// Returns:
+//   - time.Duration: Expected time for both scans.
+//   - bool: False when there is nothing to base an estimate on.
+func (s *Service) EstimateReview(currentImage, latestImage string) (time.Duration, bool) {
+	var (
+		previous map[string]time.Duration
+		average  time.Duration
+		total    time.Duration
+	)
+
+	for _, imageID := range []string{latestImage, currentImage} {
+		if took, ok := s.scanner.Expected(imageID); ok {
+			total += took
+
+			continue
+		}
+
+		if previous == nil {
+			previous = s.previousScans()
+			average = mean(slices.Collect(maps.Values(previous)))
+		}
+
+		took, ok := previous[imageID]
+		if !ok {
+			took = average
+		}
+
+		if took == 0 {
+			return 0, false
+		}
+
+		total += took
+	}
+
+	return total, true
+}
+
 // RecordReview keeps what an update scan learned about a container. An
 // updated container now runs the new image, so its report is the new
 // image's scan. Otherwise the report is the running image's scan, with the
@@ -349,13 +397,7 @@ func (s *Service) Start(ctx context.Context, targets []Target) (Job, error) {
 		return Job{}, ErrBusy
 	}
 
-	previous := make(map[string]time.Duration)
-
-	for _, report := range s.store.Summaries() {
-		if report.ScanSeconds > 0 && report.Error == "" {
-			previous[report.ImageID] = time.Duration(report.ScanSeconds * float64(time.Second))
-		}
-	}
+	previous := s.previousScans()
 
 	waiting := make([]string, 0, total)
 
@@ -378,6 +420,23 @@ func (s *Service) Start(ctx context.Context, targets []Target) (Job, error) {
 	go s.run(ctx, order, byImage)
 
 	return job, nil
+}
+
+// previousScans maps each image ID to how long its last successful
+// on-request scan took, from the stored reports.
+//
+// Returns:
+//   - map[string]time.Duration: Scan durations by image ID.
+func (s *Service) previousScans() map[string]time.Duration {
+	previous := make(map[string]time.Duration)
+
+	for _, report := range s.store.Summaries() {
+		if report.ScanSeconds > 0 && report.Error == "" {
+			previous[report.ImageID] = time.Duration(report.ScanSeconds * float64(time.Second))
+		}
+	}
+
+	return previous
 }
 
 // snapshot copies the job state and adds the current estimate. Callers

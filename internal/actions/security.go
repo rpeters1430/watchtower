@@ -76,6 +76,12 @@ func reviewSecurity(
 
 		tracker.SetStep(c.Name(), c.ImageName(), activity.StepScanning)
 
+		if estimator, ok := reviewer.(types.SecurityEstimator); ok {
+			if expected, known := estimator.EstimateReview(current, latest); known {
+				tracker.SetScanEstimate(c.Name(), expected)
+			}
+		}
+
 		scanCtx := scanner.WithProgress(ctx, func(step string) {
 			tracker.SetScanStep(c.Name(), step)
 		})
