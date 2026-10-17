@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 	mock "github.com/stretchr/testify/mock"
@@ -45,6 +46,66 @@ type MockImageScanner_Expecter struct {
 
 func (_m *MockImageScanner) EXPECT() *MockImageScanner_Expecter {
 	return &MockImageScanner_Expecter{mock: &_m.Mock}
+}
+
+// Expected provides a mock function for the type MockImageScanner
+func (_mock *MockImageScanner) Expected(image string) (time.Duration, bool) {
+	ret := _mock.Called(image)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Expected")
+	}
+
+	var r0 time.Duration
+	var r1 bool
+	if returnFunc, ok := ret.Get(0).(func(string) (time.Duration, bool)); ok {
+		return returnFunc(image)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string) time.Duration); ok {
+		r0 = returnFunc(image)
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+	if returnFunc, ok := ret.Get(1).(func(string) bool); ok {
+		r1 = returnFunc(image)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	return r0, r1
+}
+
+// MockImageScanner_Expected_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Expected'
+type MockImageScanner_Expected_Call struct {
+	*mock.Call
+}
+
+// Expected is a helper method to define mock.On call
+//   - image string
+func (_e *MockImageScanner_Expecter) Expected(image any) *MockImageScanner_Expected_Call {
+	return &MockImageScanner_Expected_Call{Call: _e.mock.On("Expected", image)}
+}
+
+func (_c *MockImageScanner_Expected_Call) Run(run func(image string)) *MockImageScanner_Expected_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockImageScanner_Expected_Call) Return(duration time.Duration, b bool) *MockImageScanner_Expected_Call {
+	_c.Call.Return(duration, b)
+	return _c
+}
+
+func (_c *MockImageScanner_Expected_Call) RunAndReturn(run func(image string) (time.Duration, bool)) *MockImageScanner_Expected_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Name provides a mock function for the type MockImageScanner

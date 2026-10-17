@@ -63,6 +63,9 @@ const (
 	layerDone
 )
 
+// maxScanSteps caps how many steps one container's scan keeps.
+const maxScanSteps = 20
+
 // Snapshot is the state of the running scan.
 type Snapshot struct {
 	// Running is true while an update scan is in progress.
@@ -105,6 +108,17 @@ type Container struct {
 type Scan struct {
 	// Step says what the scanner is doing while Step is scanning.
 	Step string `json:"step,omitempty"`
+	// StartedAt is when the scan began, in RFC 3339.
+	StartedAt string `json:"started_at,omitempty"`
+	// StepStartedAt is when the scanner began its current step, in RFC 3339.
+	StepStartedAt string `json:"step_started_at,omitempty"`
+	// EstimatedFinishAt is when the scan is expected to finish, in RFC 3339,
+	// based on how long earlier scans took. Omitted when there is nothing to
+	// base it on, and once the scan is done.
+	EstimatedFinishAt string `json:"estimated_finish_at,omitempty"`
+	// Steps lists what the scanner has done so far, oldest first, up to the
+	// most recent maxScanSteps.
+	Steps []ScanStep `json:"steps,omitempty"`
 	// Done is true once the scan finished, successfully or not.
 	Done bool `json:"done"`
 	// Error says why the scan failed. The update goes ahead without a review.
@@ -115,6 +129,14 @@ type Scan struct {
 	IntroducedCounts scanner.Counts `json:"introduced_counts"`
 	// LatestCounts tallies the new image's findings by severity.
 	LatestCounts scanner.Counts `json:"latest_counts"`
+}
+
+// ScanStep is one step of a container's security scan.
+type ScanStep struct {
+	// At is when the step began, in RFC 3339.
+	At string `json:"at"`
+	// Message says what the scanner did.
+	Message string `json:"message"`
 }
 
 // Pull is the progress of one image pull.
@@ -254,7 +276,45 @@ func (t *Tracker) SetStep(name, image, step string) {
 //   - name: Container name.
 //   - step: What the scanner is doing.
 func (t *Tracker) SetScanStep(name, step string) {
-	t.updateScan(name, func(scan *Scan) { scan.Step = step })
+	if step == "" {
+		return
+	}
+
+	t.updateScan(name, func(scan *Scan) {
+		if scan.Step == step {
+			return
+		}
+
+		at := t.now().UTC().Format(time.RFC3339)
+		scan.Step = step
+		scan.StepStartedAt = at
+
+		scan.Steps = append(scan.Steps, ScanStep{At: at, Message: step})
+		if len(scan.Steps) > maxScanSteps {
+			scan.Steps = slices.Clone(scan.Steps[len(scan.Steps)-maxScanSteps:])
+		}
+	})
+}
+
+// SetScanEstimate records how long a container's scan is expected to take,
+// counted from when it began.
+//
+// Parameters:
+//   - name: Container name.
+//   - expected: Expected scan duration. Non-positive values are ignored.
+func (t *Tracker) SetScanEstimate(name string, expected time.Duration) {
+	if expected <= 0 {
+		return
+	}
+
+	t.updateScan(name, func(scan *Scan) {
+		began, err := time.Parse(time.RFC3339, scan.StartedAt)
+		if err != nil {
+			began = t.now()
+		}
+
+		scan.EstimatedFinishAt = began.Add(expected).UTC().Format(time.RFC3339)
+	})
 }
 
 // SetScanResult records how a container's update changes its findings, or
@@ -267,6 +327,8 @@ func (t *Tracker) SetScanStep(name, step string) {
 func (t *Tracker) SetScanResult(name string, review *scanner.Review, err error) {
 	t.updateScan(name, func(scan *Scan) {
 		scan.Step = ""
+		scan.StepStartedAt = ""
+		scan.EstimatedFinishAt = ""
 		scan.Done = true
 
 		if err != nil {
@@ -340,7 +402,7 @@ func (t *Tracker) updateScan(name string, change func(scan *Scan)) {
 	}
 
 	if entry.scan == nil {
-		entry.scan = &Scan{}
+		entry.scan = &Scan{StartedAt: t.now().UTC().Format(time.RFC3339)}
 	}
 
 	change(entry.scan)
@@ -362,6 +424,7 @@ func (t *Tracker) containersLocked(withPulls bool) []Container {
 
 		if entry.scan != nil {
 			scan := *entry.scan
+			scan.Steps = slices.Clone(scan.Steps)
 			container.Scan = &scan
 		}
 

@@ -16,6 +16,8 @@ type stubScanner struct {
 	errs     map[string]error
 	calls    map[string]int
 	deadline bool
+	// onScan, when set, runs during each scan, for example to move a test clock.
+	onScan func(ref string)
 }
 
 func (s *stubScanner) Name() string { return "stub" }
@@ -31,6 +33,10 @@ func (s *stubScanner) Scan(ctx context.Context, ref string) (*Result, error) {
 	s.calls[ref]++
 
 	_, s.deadline = ctx.Deadline()
+
+	if s.onScan != nil {
+		s.onScan(ref)
+	}
 
 	err := s.errs[ref]
 	if err != nil {
@@ -258,4 +264,81 @@ func TestReviewerQueuedScanHonoursContext(t *testing.T) {
 	require.NotErrorIs(t, err, ErrScanTimeout)
 
 	slow.release <- struct{}{}
+}
+
+func TestReviewerExpected(t *testing.T) {
+	t.Parallel()
+
+	stub := newStub(t)
+	reviewer := NewReviewer(stub, GateOff, time.Hour)
+
+	var mu sync.Mutex
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	reviewer.now = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return now
+	}
+	stub.onScan = func(ref string) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if ref == "sha256:old" {
+			now = now.Add(time.Minute)
+		} else {
+			now = now.Add(3 * time.Minute)
+		}
+	}
+
+	_, known := reviewer.Expected("sha256:new")
+	assert.False(t, known, "nothing to go on before the first scan")
+
+	_, err := reviewer.Rescan(t.Context(), "sha256:old")
+	require.NoError(t, err)
+
+	took, known := reviewer.Expected("sha256:old")
+	require.True(t, known)
+	assert.Zero(t, took, "a cached image needs no scan")
+
+	took, known = reviewer.Expected("sha256:other")
+	require.True(t, known)
+	assert.Equal(t, time.Minute, took, "an unknown image takes the average")
+
+	_, err = reviewer.Rescan(t.Context(), "sha256:new")
+	require.NoError(t, err)
+
+	took, _ = reviewer.Expected("sha256:other")
+	assert.Equal(t, 2*time.Minute, took)
+
+	// Once the cached result expires, the image's own last scan time is used.
+	mu.Lock()
+	now = now.Add(cacheLifetime)
+	mu.Unlock()
+
+	took, _ = reviewer.Expected("sha256:new")
+	assert.Equal(t, 3*time.Minute, took)
+}
+
+func TestReviewerReportsReviewSteps(t *testing.T) {
+	t.Parallel()
+
+	reviewer := NewReviewer(newStub(t), GateOff, time.Minute)
+
+	var (
+		mu    sync.Mutex
+		steps []string
+	)
+
+	ctx := WithProgress(t.Context(), func(step string) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		steps = append(steps, step)
+	})
+
+	_, err := reviewer.ReviewUpdate(ctx, "sha256:old", "sha256:new")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Scanning the new image", "Scanning the running image to compare"}, steps)
 }

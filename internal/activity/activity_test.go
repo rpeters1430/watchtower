@@ -3,6 +3,7 @@ package activity
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -195,4 +196,49 @@ func TestScanStepsAndResult(t *testing.T) {
 	require.NotNil(t, last)
 	assert.Equal(t, 1, last.Containers[0].Scan.FixedCounts.Critical)
 	assert.Equal(t, "timed out", last.Containers[1].Scan.Error)
+}
+
+func TestScanStepLogAndEstimate(t *testing.T) {
+	t.Parallel()
+
+	tracker := New()
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	tracker.now = func() time.Time { return now }
+	tracker.BeginScan()
+
+	tracker.SetStep("web", "nginx:latest", StepScanning)
+	tracker.SetScanEstimate("web", 4*time.Minute)
+
+	now = now.Add(10 * time.Second)
+
+	tracker.SetScanStep("web", "Scanning the new image")
+	tracker.SetScanStep("web", "Scanning the new image")
+
+	now = now.Add(time.Minute)
+
+	tracker.SetScanStep("web", "Downloading the vulnerability database")
+
+	scan := tracker.Snapshot().Containers[0].Scan
+	require.NotNil(t, scan)
+	assert.Equal(t, "2026-01-01T12:00:00Z", scan.StartedAt)
+	assert.Equal(t, "2026-01-01T12:04:00Z", scan.EstimatedFinishAt)
+	assert.Equal(t, "2026-01-01T12:01:10Z", scan.StepStartedAt)
+	assert.Equal(t, []ScanStep{
+		{At: "2026-01-01T12:00:10Z", Message: "Scanning the new image"},
+		{At: "2026-01-01T12:01:10Z", Message: "Downloading the vulnerability database"},
+	}, scan.Steps, "a repeated step is recorded once")
+
+	for i := range maxScanSteps + 5 {
+		tracker.SetScanStep("web", "Step "+string(rune('a'+i)))
+	}
+
+	scan = tracker.Snapshot().Containers[0].Scan
+	assert.Len(t, scan.Steps, maxScanSteps)
+
+	tracker.SetScanResult("web", nil, nil)
+
+	scan = tracker.Snapshot().Containers[0].Scan
+	assert.Empty(t, scan.EstimatedFinishAt, "a finished scan has no estimate")
+	assert.Empty(t, scan.StepStartedAt)
+	assert.NotEmpty(t, scan.Steps, "the steps stay for late pollers")
 }

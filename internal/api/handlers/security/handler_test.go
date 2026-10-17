@@ -31,6 +31,8 @@ func (s *stubScanner) ReviewUpdate(context.Context, string, string) (*scanner.Re
 	return &scanner.Review{}, nil
 }
 
+func (s *stubScanner) Expected(string) (time.Duration, bool) { return 0, false }
+
 func (s *stubScanner) Rescan(_ context.Context, image string) (*scanner.Result, error) {
 	if s.release != nil {
 		<-s.release

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -292,6 +293,19 @@ type Client interface {
 	//   - types.ImageDiskUsage: Aggregated image usage.
 	//   - error: Non-nil if retrieval fails, nil on success.
 	GetImageDiskUsage(ctx context.Context) (types.ImageDiskUsage, error)
+
+	// PruneImages removes images no container uses.
+	//
+	// Parameters:
+	//   - ctx: Context for cancellation and timeout control.
+	//   - all: True removes every image no container uses, as
+	//     "docker image prune --all" does. False removes only dangling
+	//     (untagged) images.
+	//
+	// Returns:
+	//   - types.ImagePruneReport: What was removed and the space freed.
+	//   - error: Non-nil if the daemon refuses or fails the prune.
+	PruneImages(ctx context.Context, all bool) (types.ImagePruneReport, error)
 
 	// GetInfo returns system information from the Docker daemon.
 	//
@@ -1581,6 +1595,53 @@ func (c *client) GetImageDiskUsage(ctx context.Context) (types.ImageDiskUsage, e
 		TotalCount:  result.Images.TotalCount,
 		ActiveCount: result.Images.ActiveCount,
 	}, nil
+}
+
+// PruneImages removes images no container uses.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control.
+//   - all: True removes every unused image; false only dangling ones.
+//
+// Returns:
+//   - types.ImagePruneReport: What was removed and the space freed.
+//   - error: Non-nil if the prune fails, nil on success.
+func (c *client) PruneImages(ctx context.Context, all bool) (types.ImagePruneReport, error) {
+	// The daemon's dangling filter set to false widens the prune to every
+	// unused image; without it only untagged images are removed.
+	filters := make(dockerClient.Filters).Add("dangling", strconv.FormatBool(!all))
+
+	result, err := c.api.ImagePrune(ctx, dockerClient.ImagePruneOptions{Filters: filters})
+	if err != nil {
+		c.logger().Debug().
+			Err(err).
+			Bool("all", all).
+			Msg("Failed to prune images")
+
+		return types.ImagePruneReport{}, fmt.Errorf("failed to prune images: %w", err)
+	}
+
+	report := types.ImagePruneReport{
+		SpaceReclaimed: int64(min(result.Report.SpaceReclaimed, math.MaxInt64)),
+	}
+
+	for _, deleted := range result.Report.ImagesDeleted {
+		if deleted.Deleted != "" {
+			report.ImagesDeleted++
+		}
+
+		if deleted.Untagged != "" {
+			report.Untagged = append(report.Untagged, deleted.Untagged)
+		}
+	}
+
+	c.logger().Info().
+		Bool("all", all).
+		Int("images_deleted", report.ImagesDeleted).
+		Int64("space_reclaimed", report.SpaceReclaimed).
+		Msg("Removed unused images")
+
+	return report, nil
 }
 
 // WaitForContainerHealthy waits for a container to become healthy or times out.

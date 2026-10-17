@@ -18,6 +18,8 @@
 //	POST /v1/check               Check for available updates (requires auth)
 //	GET  /v1/history             Historical scan results (requires auth)
 //	GET  /v1/images              Tracked images with digests (requires auth)
+//	GET  /v1/images/usage        Image disk usage (requires auth)
+//	POST /v1/images/prune        Remove unused images (requires auth)
 //	GET  /v1/config              Active configuration settings (requires auth)
 //	GET  /v1/events              Real-time events via SSE (events token auth)
 //	GET  /swagger/*              Swagger UI
@@ -30,7 +32,7 @@
 //   - containers.go: GET /v1/containers, GET /v1/containers/details.
 //   - check.go:   POST /v1/check.
 //   - history.go: GET /v1/history.
-//   - images.go:  GET /v1/images.
+//   - images.go:  GET /v1/images, GET /v1/images/usage, POST /v1/images/prune.
 //   - config.go:  GET /v1/config.
 //   - events.go:  GET /v1/events.
 package routes

@@ -22,6 +22,8 @@ type stubScanner struct {
 	results map[string]*scanner.Result
 	calls   map[string]int
 	release chan struct{}
+	// expected holds what Expected reports for each image.
+	expected map[string]time.Duration
 }
 
 func (s *stubScanner) Name() string { return "stub" }
@@ -35,6 +37,12 @@ func (s *stubScanner) ReviewUpdate(_ context.Context, current, latest string) (*
 		Diff:    diff,
 		Gate:    scanner.GateOff,
 	}, nil
+}
+
+func (s *stubScanner) Expected(image string) (time.Duration, bool) {
+	took, ok := s.expected[image]
+
+	return took, ok
 }
 
 func (s *stubScanner) Rescan(ctx context.Context, image string) (*scanner.Result, error) {
@@ -373,4 +381,32 @@ func TestEstimateUsesPreviousAndAverageDurations(t *testing.T) {
 	service.plan = plan{queue: []string{"sha256:z"}}
 	service.job.CurrentStartedAt = nil
 	assert.Nil(t, service.estimate())
+}
+
+func TestServiceEstimateReview(t *testing.T) {
+	t.Parallel()
+
+	stub := newStub()
+	store := OpenStore(nil, "")
+	service := NewService(nil, stub, store, Options{})
+
+	_, known := service.EstimateReview("sha256:old", "sha256:new")
+	assert.False(t, known, "nothing to go on yet")
+
+	// The scanner knows the new image; the running one falls back to its
+	// last on-request scan.
+	stub.expected = map[string]time.Duration{"sha256:new": 2 * time.Minute}
+
+	store.Record(Report{Name: "web", ImageID: "sha256:old", ScanSeconds: 30})
+
+	took, known := service.EstimateReview("sha256:old", "sha256:new")
+	require.True(t, known)
+	assert.Equal(t, 2*time.Minute+30*time.Second, took)
+
+	// An image nobody has timed takes the average of earlier scans.
+	store.Record(Report{Name: "db", ImageID: "sha256:db", ScanSeconds: 90})
+
+	took, known = service.EstimateReview("sha256:other", "sha256:new")
+	require.True(t, known)
+	assert.Equal(t, 2*time.Minute+time.Minute, took)
 }

@@ -1021,6 +1021,72 @@ func (_c *MockClient_Ping_Call) RunAndReturn(run func(ctx context.Context) error
 	return _c
 }
 
+// PruneImages provides a mock function for the type MockClient
+func (_mock *MockClient) PruneImages(ctx context.Context, all bool) (types.ImagePruneReport, error) {
+	ret := _mock.Called(ctx, all)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PruneImages")
+	}
+
+	var r0 types.ImagePruneReport
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) (types.ImagePruneReport, error)); ok {
+		return returnFunc(ctx, all)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) types.ImagePruneReport); ok {
+		r0 = returnFunc(ctx, all)
+	} else {
+		r0 = ret.Get(0).(types.ImagePruneReport)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, bool) error); ok {
+		r1 = returnFunc(ctx, all)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_PruneImages_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PruneImages'
+type MockClient_PruneImages_Call struct {
+	*mock.Call
+}
+
+// PruneImages is a helper method to define mock.On call
+//   - ctx context.Context
+//   - all bool
+func (_e *MockClient_Expecter) PruneImages(ctx any, all any) *MockClient_PruneImages_Call {
+	return &MockClient_PruneImages_Call{Call: _e.mock.On("PruneImages", ctx, all)}
+}
+
+func (_c *MockClient_PruneImages_Call) Run(run func(ctx context.Context, all bool)) *MockClient_PruneImages_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 bool
+		if args[1] != nil {
+			arg1 = args[1].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_PruneImages_Call) Return(imagePruneReport types.ImagePruneReport, err error) *MockClient_PruneImages_Call {
+	_c.Call.Return(imagePruneReport, err)
+	return _c
+}
+
+func (_c *MockClient_PruneImages_Call) RunAndReturn(run func(ctx context.Context, all bool) (types.ImagePruneReport, error)) *MockClient_PruneImages_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // PullImageByName provides a mock function for the type MockClient
 func (_mock *MockClient) PullImageByName(ctx context.Context, imageName string) error {
 	ret := _mock.Called(ctx, imageName)

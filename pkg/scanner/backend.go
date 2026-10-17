@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // DefaultBackend is the scanner used when none is chosen.
@@ -114,6 +115,18 @@ func (s *Selector) ReviewUpdate(ctx context.Context, currentImage, latestImage s
 //   - error: Non-nil when the scan fails.
 func (s *Selector) Rescan(ctx context.Context, image string) (*Result, error) {
 	return s.current().Reviewer.Rescan(ctx, image)
+}
+
+// Expected estimates how long the backend in force would take to scan image.
+//
+// Parameters:
+//   - image: Image ID or name.
+//
+// Returns:
+//   - time.Duration: Expected scan time.
+//   - bool: False when there is nothing to base an estimate on.
+func (s *Selector) Expected(image string) (time.Duration, bool) {
+	return s.current().Reviewer.Expected(image)
 }
 
 // current returns the backend in force.
