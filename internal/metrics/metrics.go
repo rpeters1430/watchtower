@@ -580,6 +580,7 @@ func (m *Metrics) HandleUpdate() {
 			if change.ScanFailed {
 				m.failedScans.Inc()
 			}
+
 			m.scanned.Set(float64(change.Scanned))
 			m.updated.Set(float64(change.Updated))
 			m.failed.Set(float64(change.Failed))

@@ -41,5 +41,4 @@ func registerUpdateRoute(ctx context.Context, app *fiber.App, auth fiber.Handler
 
 	// Progress of the running scan, whether requested here or scheduled.
 	app.Get(update.StatusPath, auth, config.TimeoutMiddleware(), update.Status(activity.Default().Snapshot))
-
 }
