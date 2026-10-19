@@ -1368,6 +1368,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update module github.com/valyala/fasthttp to v1.76.0 by @renovate[bot]
 - Update patch dependency updates by @renovate[bot]
 - Update patch dependency updates by @renovate[bot]
 - Update github/codeql-action action to v4.39.0 by @renovate[bot]
@@ -2976,9 +2977,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#40](https://github.com/rpeters1430/watchtower/pull/40)
+- @rpeters1430 made their first contribution in [#42](https://github.com/rpeters1430/watchtower/pull/42)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#39](https://github.com/rpeters1430/watchtower/pull/39)
+- @github-actions[bot] made their first contribution in [#41](https://github.com/rpeters1430/watchtower/pull/41)
 - @claude made their first contribution
 - @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
