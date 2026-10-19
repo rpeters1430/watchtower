@@ -213,6 +213,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Update the compose image label when recreating containers by @nicholas-fedor
+- Wait for the HTTP API to drain before exiting by @nicholas-fedor
+- Replace the update lock channel with a lock type by @nicholas-fedor
+- Pass registry settings explicitly by @nicholas-fedor
+- Bind the http api on ipv6 hosts by @nicholas-fedor
+- Stop the api server when canceled during startup by @nicholas-fedor
+- Record scans that end in an error as failed by @nicholas-fedor
+- Skip containers that disappear before they are stopped by @nicholas-fedor
+- Leave shutdown signal handling to the caller by @nicholas-fedor
+- Sort the images endpoint results by @nicholas-fedor
+- Report the container's repository digest in image endpoints by @nicholas-fedor
+- Keep legacy slack channel ids in converted urls by @nicholas-fedor
+- Always order containers after network and link targets by @nicholas-fedor
+- Keep digest fallback warnings out of notifications by @nicholas-fedor
+- Detect container ids from systemd cgroup scopes by @nicholas-fedor
+- Stop logging each watchtower container check by @nicholas-fedor
+- Log container dependencies once per scan by @nicholas-fedor
+- Validate the self-update orchestrator environment by @nicholas-fedor
+- Link changelogs for scp-style clone urls with any user by @nicholas-fedor
+- Handle containers without config data by @nicholas-fedor
+- Declare the apache 2.0 license in the swagger spec by @nicholas-fedor
+- Return empty arrays when api filters match nothing by @nicholas-fedor
+- Stop listing when an image inspect is canceled by @nicholas-fedor
+- Close each secret file after reading it by @nicholas-fedor
 - Run image scans one at a time and allow longer scans by @claude
 - Track fixed vulnerabilities after update and fix ui refresh by @rpeters1430
 - Resolve existing golangci-lint findings by @claude
@@ -574,6 +598,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- Index identifiers for dependency link matching by @nicholas-fedor
 - Reduce scan-cycle memory allocations by @nicholas-fedor
 - Cache HTTP client for registry authentication requests by @nicholas-fedor
 
@@ -1297,6 +1322,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Continuous Integration
 
+- Port upstream fixes for the pre-existing golangci-lint failures by @claude
 - Publish multi-arch images with :latest tag for NAS deployment by @rpeters1430
 - Publish only from main as latest by @claude
 - Publish container image to GHCR on push by @rpeters1430
@@ -2977,12 +3003,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#42](https://github.com/rpeters1430/watchtower/pull/42)
-- @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#41](https://github.com/rpeters1430/watchtower/pull/41)
+- @rpeters1430 made their first contribution in [#44](https://github.com/rpeters1430/watchtower/pull/44)
 - @claude made their first contribution
-- @Copilot made their first contribution
 - @nicholas-fedor made their first contribution
+- @github-actions[bot] made their first contribution in [#43](https://github.com/rpeters1430/watchtower/pull/43)
+- @renovate[bot] made their first contribution
+- @Copilot made their first contribution
 - @allcontributors[bot] made their first contribution
 - @rooty0 made their first contribution
 - @NotaInutilis made their first contribution
