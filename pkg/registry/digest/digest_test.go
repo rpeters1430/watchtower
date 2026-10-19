@@ -159,6 +159,18 @@ func TestDigestsMatch(t *testing.T) {
 			remoteDigest: "",
 			expected:     false,
 		},
+		{
+			name:         "empty remote digest does not match a local digest without a hash",
+			localDigests: []string{"repo@sha256:"},
+			remoteDigest: "sha256:",
+			expected:     false,
+		},
+		{
+			name:         "empty remote digest does not match a local digest with nothing after @",
+			localDigests: []string{"repo@"},
+			remoteDigest: "",
+			expected:     false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1378,6 +1390,19 @@ func TestExtractHeadDigest(t *testing.T) {
 			expected: "abc",
 			wantErr:  false,
 		},
+		{
+			name: "returns an empty digest for a GET fallback when Docker-Content-Digest has no hash",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     http.Header{"Docker-Content-Digest": []string{"sha256:"}},
+					Body:       http.NoBody,
+				}
+			},
+			expected: "",
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1548,6 +1573,45 @@ func TestExtractGetDigest(t *testing.T) {
 					Status:     "200 OK",
 					Header:     http.Header{},
 					Body:       &errReadCloser{},
+				}
+			},
+			expected: "",
+			wantErr:  true,
+		},
+		{
+			name: "falls back to the body when the digest header has no hash",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     http.Header{"Docker-Content-Digest": []string{"sha256:"}},
+					Body:       io.NopCloser(strings.NewReader("sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")),
+				}
+			},
+			expected: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+			wantErr:  false,
+		},
+		{
+			name: "returns error when the digest header has no hash and the body is empty",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     http.Header{"Docker-Content-Digest": []string{"sha256:"}},
+					Body:       http.NoBody,
+				}
+			},
+			expected: "",
+			wantErr:  true,
+		},
+		{
+			name: "returns error when JSON body digest has no hash",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"digest": "sha256:"}`)),
 				}
 			},
 			expected: "",
