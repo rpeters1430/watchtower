@@ -3194,6 +3194,8 @@ Include <code>history</code> in <a href="../../../configuration/http-api/#http_a
 <li><code>scan</code>: an update scan, whether scheduled or started through <a href="../update/"><code>/v1/update</code></a>.</li>
 <li><code>check</code>: an update availability check started through <a href="../check/"><code>/v1/check</code></a>. No containers are changed, so <code>updated</code> and <code>restarted</code> are <code>0</code>. <code>scanned</code> is the number of containers checked, <code>failed</code> is the number that could not be checked, and <code>updates_available</code> is the number with a newer image.</li>
 </ul>
+<p>An entry for a scan that ended in an error also has <code>"scan_failed": true</code>, and its counts are those the scan reached.
+The field is omitted for other scans.</p>
 <h3 id="containers">Containers<a class="headerlink" href="#containers" title="Permanent link">&para;</a></h3>
 <p><code>containers</code> names the containers an entry is about. It lists only containers with something to report, so a scan that changed nothing has no <code>containers</code> field. Entries recorded before this field existed don't have it either.</p>
 <table>
@@ -3279,7 +3281,7 @@ Include <code>history</code> in <a href="../../../configuration/http-api/#http_a
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 14, 2026 15:12:12 UTC"><span class="timeago" datetime="2026-10-14T15:12:12+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 14, 2026 15:12:12 UTC">2026-10-14</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 15, 2026 01:45:26 UTC"><span class="timeago" datetime="2026-10-15T01:45:26+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 15, 2026 01:45:26 UTC">2026-10-15</span>
   </span>
 
     
