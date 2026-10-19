@@ -3,7 +3,11 @@ package scheduling_test
 import (
 	"context"
 	"net/netip"
+	"os"
+	"os/signal"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -100,35 +104,123 @@ func testDeps(
 	}
 }
 
+// TestWaitForRunningUpdate verifies that the shutdown wait takes the update
+// lock and keeps it, waiting for a running update to finish first, and that
+// the wait ends when its timeout passes or its context is canceled.
 func TestWaitForRunningUpdate(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+	t.Parallel()
 
-		lock := make(chan bool, 1) // lock is taken (no value in channel)
+	t.Run("no update running", func(t *testing.T) {
+		t.Parallel()
 
-		start := time.Now()
-		done := make(chan struct{})
+		lock := scheduling.NewUpdateLock()
 
-		go func() {
-			scheduling.WaitForRunningUpdate(testLogger(), ctx, lock)
+		scheduling.WaitForRunningUpdate(testLogger(), t.Context(), lock)
 
-			elapsed := time.Since(start)
-			// Should have waited for the timeout
-			if elapsed < 40*time.Millisecond {
-				t.Errorf("expected elapsed >= 40ms, got %v", elapsed)
+		assert.False(t, lock.TryLock(), "an update could start after the shutdown wait")
+	})
+
+	t.Run("update running", func(t *testing.T) {
+		t.Parallel()
+
+		synctest.Test(t, func(t *testing.T) {
+			lock := scheduling.NewUpdateLock()
+			require.True(t, lock.TryLock())
+
+			done := make(chan struct{})
+
+			go func() {
+				scheduling.WaitForRunningUpdate(testLogger(), t.Context(), lock)
+				close(done)
+			}()
+
+			synctest.Wait()
+
+			select {
+			case <-done:
+				t.Fatal("the shutdown wait returned while an update was running")
+			default:
 			}
 
-			close(done)
-		}()
+			lock.Unlock()
+			<-done
 
-		go func() {
-			time.Sleep(50 * time.Millisecond)
-			cancel()
-		}()
+			assert.False(t, lock.TryLock(), "an update could start after the shutdown wait")
+		})
+	})
 
+	t.Run("update outlasts the wait", func(t *testing.T) {
+		t.Parallel()
+
+		synctest.Test(t, func(t *testing.T) {
+			lock := scheduling.NewUpdateLock()
+			require.True(t, lock.TryLock())
+
+			start := time.Now()
+
+			scheduling.WaitForRunningUpdate(testLogger(), t.Context(), lock)
+
+			assert.Equal(t, 60*time.Second, time.Since(start))
+		})
+	})
+
+	t.Run("context canceled", func(t *testing.T) {
+		t.Parallel()
+
+		synctest.Test(t, func(t *testing.T) {
+			lock := scheduling.NewUpdateLock()
+			require.True(t, lock.TryLock())
+
+			ctx, cancel := context.WithCancel(t.Context())
+			start := time.Now()
+
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				cancel()
+			}()
+
+			scheduling.WaitForRunningUpdate(testLogger(), ctx, lock)
+
+			assert.Equal(t, 50*time.Millisecond, time.Since(start))
+		})
+	})
+}
+
+// TestRunUpgradesOnSchedule_WaitingRunStopsAtShutdown verifies that a
+// scheduled run waiting for the update lock gives up when the scheduler shuts
+// down, instead of starting an update once the lock comes free.
+func TestRunUpgradesOnSchedule_WaitingRunStopsAtShutdown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := mockActions.CreateMockClient(&mockActions.TestData{}, false, false)
+
+		var updated atomic.Bool
+
+		deps := testDeps(client, func(context.Context, types.Filter, types.UpdateParams) *metrics.Metric {
+			updated.Store(true)
+
+			return &metrics.Metric{}
+		}, func(logging.StartupParams) {})
+
+		// Another update holds the lock while the scheduled run comes due.
+		deps.Lock = scheduling.NewUpdateLock()
+		require.True(t, deps.Lock.TryLock())
+
+		deps.ScheduleSpec = "@every 1s"
+
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+
+		go func() { done <- scheduling.RunUpgradesOnSchedule(ctx, deps) }()
+
+		time.Sleep(1500 * time.Millisecond)
+		cancel()
+
+		require.NoError(t, <-done)
+
+		deps.Lock.Unlock()
 		synctest.Wait()
-		<-done
+
+		assert.False(t, updated.Load(), "a scheduled run started an update after shutdown")
 	})
 }
 
@@ -249,23 +341,6 @@ func TestRunUpgradesOnSchedule_UpdateOnStartSkippedWhenCanceled(t *testing.T) {
 	}
 }
 
-func TestWaitForRunningUpdate_NoUpdateRunning(t *testing.T) {
-	ctx := context.Background()
-
-	lock := make(chan bool, 1)
-	lock <- true // lock is available
-
-	start := time.Now()
-
-	scheduling.WaitForRunningUpdate(testLogger(), ctx, lock)
-
-	elapsed := time.Since(start)
-
-	if elapsed >= 10*time.Millisecond {
-		t.Errorf("expected elapsed < 10ms, got %v", elapsed)
-	}
-}
-
 func TestRunUpgradesOnSchedule_InvalidCronSpec(t *testing.T) {
 	client := mockActions.CreateMockClient(&mockActions.TestData{}, false, false)
 
@@ -381,6 +456,63 @@ func TestRunUpgradesOnSchedule_ContextCancellation(t *testing.T) {
 	err := scheduling.RunUpgradesOnSchedule(canceledCtx, deps)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+// TestRunUpgradesOnSchedule_StopsOnlyOnCancellation verifies that the scheduler
+// leaves signal handling to its caller. An interrupt sent to the process does
+// not stop it, and canceling its context does.
+//
+// The interrupt goes to the whole test process, so this test must not run in
+// parallel with tests that register or depend on signal handlers. It does not
+// call t.Parallel, and neither does any other test in this package.
+func TestRunUpgradesOnSchedule_StopsOnlyOnCancellation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sends an interrupt signal to the test process")
+	}
+
+	// Hold the interrupt so it does not end the test process.
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
+	t.Cleanup(func() { signal.Stop(interrupts) })
+
+	client := mockActions.CreateMockClient(&mockActions.TestData{}, false, false)
+	runUpdatesWithNotifications := func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
+		return &metrics.Metric{}
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	done := make(chan error, 1)
+
+	go func() {
+		done <- scheduling.RunUpgradesOnSchedule(ctx, testDeps(client, runUpdatesWithNotifications, func(logging.StartupParams) {}))
+	}()
+
+	process, err := os.FindProcess(os.Getpid())
+	require.NoError(t, err)
+	require.NoError(t, process.Signal(os.Interrupt))
+
+	select {
+	case <-interrupts:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "the interrupt was not delivered")
+	}
+
+	select {
+	case err := <-done:
+		require.FailNow(t, "the scheduler stopped on the interrupt", "error: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "the scheduler did not stop after cancellation")
 	}
 }
 

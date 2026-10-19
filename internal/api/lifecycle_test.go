@@ -2,11 +2,24 @@ package api
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
+	"math/big"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -15,6 +28,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/events"
 	"github.com/nicholas-fedor/watchtower/internal/logging"
 	"github.com/nicholas-fedor/watchtower/internal/metrics"
+	"github.com/nicholas-fedor/watchtower/internal/scheduling"
 	mockContainer "github.com/nicholas-fedor/watchtower/pkg/container/mocks"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
@@ -66,7 +80,7 @@ func runServerAndShutdown(t *testing.T, opts config.Options) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- SetupAndStartAPI(ctx, opts)
+		errCh <- apiStartErr(SetupAndStartAPI(ctx, opts))
 	}()
 
 	// Wait for SetupAndStartAPI to return (non-blocking modes) or give the
@@ -116,6 +130,7 @@ func TestSetupAndStartAPI(t *testing.T) {
 			opts: config.Options{
 				Token:                       "test-token",
 				EnableUpdateAPI:             true,
+				UpdateLock:                  scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: nil,
 				FilterByImage:               func(_ []string, f types.Filter) types.Filter { return f },
 				DefaultMetrics:              func() *metrics.Metrics { return testMetrics },
@@ -128,6 +143,7 @@ func TestSetupAndStartAPI(t *testing.T) {
 			opts: config.Options{
 				Token:           "test-token",
 				EnableUpdateAPI: true,
+				UpdateLock:      scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 					return &metrics.Metric{}
 				},
@@ -142,6 +158,7 @@ func TestSetupAndStartAPI(t *testing.T) {
 			opts: config.Options{
 				Token:           "test-token",
 				EnableUpdateAPI: true,
+				UpdateLock:      scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 					return &metrics.Metric{}
 				},
@@ -162,7 +179,7 @@ func TestSetupAndStartAPI(t *testing.T) {
 				t.Skip("empty token not allowed for token-required APIs")
 			}
 
-			err := SetupAndStartAPI(ctx, withTestLogger(tt.opts))
+			_, err := SetupAndStartAPI(ctx, withTestLogger(tt.opts))
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -194,6 +211,7 @@ func TestSetupAndStartAPI_FullAPILifecycle(t *testing.T) {
 		EventBroadcaster:    events.NewBroadcaster(),
 		UnblockHTTPAPI:      true,
 		EnableUpdateAPI:     true,
+		UpdateLock:          scheduling.NewUpdateLock(),
 		EnableMetricsAPI:    true,
 		EnableContainersAPI: true,
 		EnableCheckAPI:      true,
@@ -210,7 +228,7 @@ func TestSetupAndStartAPI_FullAPILifecycle(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- SetupAndStartAPI(ctx, opts)
+		errCh <- apiStartErr(SetupAndStartAPI(ctx, opts))
 	}()
 
 	// UnblockHTTPAPI=true → non-blocking; should return after bind.
@@ -229,7 +247,7 @@ func TestSetupAndStartAPI_NoAPIs(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	err := SetupAndStartAPI(ctx, config.Options{Token: "test"})
+	_, err := SetupAndStartAPI(ctx, config.Options{Token: "test"})
 	assert.NoError(t, err)
 }
 
@@ -281,6 +299,7 @@ func TestSetupAndStartAPI_AllAPIs(t *testing.T) {
 		Token:               "test-token",
 		EventsToken:         "events-token",
 		EnableUpdateAPI:     true,
+		UpdateLock:          scheduling.NewUpdateLock(),
 		EnableMetricsAPI:    true,
 		EnableContainersAPI: true,
 		EnableCheckAPI:      true,
@@ -317,7 +336,7 @@ func TestIntegration_HealthLiveness_And_Startup(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- SetupAndStartAPI(ctx, opts)
+		errCh <- apiStartErr(SetupAndStartAPI(ctx, opts))
 	}()
 
 	select {
@@ -337,6 +356,7 @@ func TestRegisterUpdateRoute_UnblockHTTPAPI(t *testing.T) {
 	opts := withTestListenAddr(config.Options{
 		Token:           "test-token",
 		EnableUpdateAPI: true,
+		UpdateLock:      scheduling.NewUpdateLock(),
 		UnblockHTTPAPI:  false,
 		RateLimit:       60,
 		RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
@@ -355,7 +375,7 @@ func TestRegisterUpdateRoute_UnblockHTTPAPI(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- SetupAndStartAPI(ctx, opts)
+		errCh <- apiStartErr(SetupAndStartAPI(ctx, opts))
 	}()
 
 	// Blocking mode: wait for bind + startup message without expecting return.
@@ -389,6 +409,7 @@ func TestSetupAndStartAPI_MissingUpdateDependencies(t *testing.T) {
 			opts: config.Options{
 				Token:                       "test-token",
 				EnableUpdateAPI:             true,
+				UpdateLock:                  scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: nil,
 				FilterByImage:               func(_ []string, f types.Filter) types.Filter { return f },
 				DefaultMetrics:              func() *metrics.Metrics { return testMetrics },
@@ -400,6 +421,7 @@ func TestSetupAndStartAPI_MissingUpdateDependencies(t *testing.T) {
 			opts: config.Options{
 				Token:           "test-token",
 				EnableUpdateAPI: true,
+				UpdateLock:      scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 					return &metrics.Metric{}
 				},
@@ -413,6 +435,7 @@ func TestSetupAndStartAPI_MissingUpdateDependencies(t *testing.T) {
 			opts: config.Options{
 				Token:           "test-token",
 				EnableUpdateAPI: true,
+				UpdateLock:      scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 					return &metrics.Metric{}
 				},
@@ -465,7 +488,7 @@ func TestSetupAndStartAPI_MissingUpdateDependencies(t *testing.T) {
 				opts = withTestLogger(opts)
 			}
 
-			err := SetupAndStartAPI(ctx, opts)
+			_, err := SetupAndStartAPI(ctx, opts)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -489,6 +512,7 @@ func TestSetupAndStartAPI_AllEndpointsEnableAll(t *testing.T) {
 		},
 		UnblockHTTPAPI:      true,
 		EnableUpdateAPI:     true,
+		UpdateLock:          scheduling.NewUpdateLock(),
 		EnableMetricsAPI:    true,
 		EnableContainersAPI: true,
 		EnableCheckAPI:      true,
@@ -516,7 +540,7 @@ func TestSetupAndStartAPI_AllEndpointsEnableAll(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- SetupAndStartAPI(ctx, opts)
+		errCh <- apiStartErr(SetupAndStartAPI(ctx, opts))
 	}()
 
 	select {
@@ -546,7 +570,7 @@ func TestRunServer_NonBlockingReturnsAfterBind(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- SetupAndStartAPI(ctx, opts)
+		done <- apiStartErr(SetupAndStartAPI(ctx, opts))
 	}()
 
 	select {
@@ -567,6 +591,7 @@ func TestRunServer_BlockingUntilCancel(t *testing.T) {
 	opts := withTestListenAddr(config.Options{
 		Token:           "test-token",
 		EnableUpdateAPI: true,
+		UpdateLock:      scheduling.NewUpdateLock(),
 		UnblockHTTPAPI:  false,
 		RateLimit:       60,
 		RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
@@ -583,7 +608,7 @@ func TestRunServer_BlockingUntilCancel(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- SetupAndStartAPI(ctx, opts)
+		done <- apiStartErr(SetupAndStartAPI(ctx, opts))
 	}()
 
 	select {
@@ -610,6 +635,7 @@ func TestRunServer_UnblockWithUpdateAPI_NonBlocking(t *testing.T) {
 	opts := withTestListenAddr(config.Options{
 		Token:           "test-token",
 		EnableUpdateAPI: true,
+		UpdateLock:      scheduling.NewUpdateLock(),
 		UnblockHTTPAPI:  true,
 		RateLimit:       60,
 		RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
@@ -624,7 +650,7 @@ func TestRunServer_UnblockWithUpdateAPI_NonBlocking(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- SetupAndStartAPI(ctx, opts)
+		done <- apiStartErr(SetupAndStartAPI(ctx, opts))
 	}()
 
 	select {
@@ -653,7 +679,7 @@ func TestRunServer_BindFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	err := SetupAndStartAPI(ctx, opts)
+	_, err := SetupAndStartAPI(ctx, opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to start HTTP server")
 }
@@ -738,4 +764,449 @@ func TestGetAPIAddr_IPv6(t *testing.T) {
 			assert.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+// TestListen_AddressFamilies verifies the address families listen binds for
+// each kind of host. An IPv6 host binds that address, and the unspecified IPv6
+// address accepts IPv6 clients, and IPv4 clients where the system supports
+// dual-stack listeners. An unset or IPv4 host stays on IPv4, so the default
+// bind does not start accepting IPv6 clients.
+func TestListen_AddressFamilies(t *testing.T) {
+	tests := []struct {
+		name    string
+		address string
+		// needsIPv6 skips the case on hosts without an IPv6 loopback address.
+		needsIPv6 bool
+		// wantHost is the host the listener reports.
+		wantHost string
+		// reachable lists the loopback hosts that must accept a connection.
+		reachable []string
+		// dualStack also requires IPv4 clients to connect where the system
+		// supports dual-stack listeners.
+		dualStack bool
+		// unreachable lists the loopback hosts that must refuse a connection.
+		unreachable []string
+	}{
+		{
+			name:        "unset host",
+			address:     ":0",
+			wantHost:    "0.0.0.0",
+			reachable:   []string{"127.0.0.1"},
+			unreachable: []string{"::1"},
+		},
+		{
+			name:        "IPv4 unspecified",
+			address:     "0.0.0.0:0",
+			wantHost:    "0.0.0.0",
+			reachable:   []string{"127.0.0.1"},
+			unreachable: []string{"::1"},
+		},
+		{
+			name:      "IPv4 loopback",
+			address:   "127.0.0.1:0",
+			wantHost:  "127.0.0.1",
+			reachable: []string{"127.0.0.1"},
+		},
+		{
+			name:      "IPv4-mapped IPv6",
+			address:   "[::ffff:127.0.0.1]:0",
+			wantHost:  "127.0.0.1",
+			reachable: []string{"127.0.0.1"},
+		},
+		{
+			name:      "IPv6 loopback",
+			address:   "[::1]:0",
+			needsIPv6: true,
+			wantHost:  "::1",
+			reachable: []string{"::1"},
+		},
+		{
+			name:      "IPv6 unspecified",
+			address:   "[::]:0",
+			needsIPv6: true,
+			wantHost:  "::",
+			reachable: []string{"::1"},
+			dualStack: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.needsIPv6 {
+				requireIPv6Loopback(t)
+			}
+
+			ln, err := listen(t.Context(), tt.address, "", "")
+			require.NoError(t, err)
+
+			defer ln.Close()
+
+			host, port, err := net.SplitHostPort(ln.Addr().String())
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantHost, host)
+
+			reachable := tt.reachable
+			if tt.dualStack && supportsDualStack(t) {
+				reachable = append(reachable, "127.0.0.1")
+			}
+
+			var dialer net.Dialer
+
+			for _, client := range reachable {
+				conn, err := dialer.DialContext(t.Context(), "tcp", net.JoinHostPort(client, port))
+				if assert.NoError(t, err, "a client on %s could not connect", client) {
+					_ = conn.Close()
+				}
+			}
+
+			for _, client := range tt.unreachable {
+				conn, err := dialer.DialContext(t.Context(), "tcp", net.JoinHostPort(client, port))
+				if err == nil {
+					_ = conn.Close()
+				}
+
+				assert.Error(t, err, "a client on %s connected", client)
+			}
+		})
+	}
+}
+
+// TestSetupAndStartAPI_IPv6Host verifies that the API serves requests on an
+// IPv6 host and releases the socket when canceled.
+func TestSetupAndStartAPI_IPv6Host(t *testing.T) {
+	requireIPv6Loopback(t)
+
+	ln, err := listenTCP(t, "[::1]:0")
+	require.NoError(t, err)
+
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	host, port, err := net.SplitHostPort(addr)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	opts := withTestLogger(config.Options{
+		Host:            host,
+		Port:            port,
+		EnableHealthAPI: true,
+		RateLimit:       60,
+	})
+
+	require.NoError(t, apiStartErr(SetupAndStartAPI(ctx, opts)))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/livez", nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	cancel()
+	requireAddrReleased(t, addr)
+}
+
+// requireIPv6Loopback skips the test on hosts without an IPv6 loopback
+// address, such as containers with IPv6 disabled.
+func requireIPv6Loopback(t *testing.T) {
+	t.Helper()
+
+	ln, err := listenTCP(t, "[::1]:0")
+	if err != nil {
+		t.Skipf("IPv6 loopback unavailable: %v", err)
+	}
+
+	_ = ln.Close()
+}
+
+// supportsDualStack reports whether a TCP listener on the unspecified IPv6
+// address also accepts IPv4 clients on this system. OpenBSD and DragonFly BSD,
+// for example, keep such a listener IPv6 only.
+func supportsDualStack(t *testing.T) bool {
+	t.Helper()
+
+	ln, err := listenTCP(t, "[::]:0")
+	if err != nil {
+		return false
+	}
+
+	defer ln.Close()
+
+	_, port, err := net.SplitHostPort(ln.Addr().String())
+	require.NoError(t, err)
+
+	var dialer net.Dialer
+
+	conn, err := dialer.DialContext(t.Context(), "tcp4", net.JoinHostPort("127.0.0.1", port))
+	if err != nil {
+		return false
+	}
+
+	_ = conn.Close()
+
+	return true
+}
+
+// listenTCP binds addr for a test, over the address family of its host.
+func listenTCP(t *testing.T, addr string) (net.Listener, error) {
+	t.Helper()
+
+	var listenConfig net.ListenConfig
+
+	return listenConfig.Listen(t.Context(), "tcp", addr)
+}
+
+// apiStartErr returns the error from SetupAndStartAPI or runServer, for tests
+// that only check whether the server started.
+//
+// Parameters:
+//   - _: Channel that closes once the server has stopped.
+//   - err: Error from SetupAndStartAPI or runServer.
+//
+// Returns:
+//   - error: err.
+func apiStartErr(_ <-chan struct{}, err error) error {
+	return err
+}
+
+// freeAddr returns a local IPv4 address with a port that was free when it
+// was chosen.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+
+	ln, err := listenTCP(t, "127.0.0.1:0")
+	require.NoError(t, err)
+
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	return addr
+}
+
+// requireAddrReleased waits until addr can be bound again, which shows the
+// server stopped listening on it.
+func requireAddrReleased(t *testing.T, addr string) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		ln, err := listenTCP(t, addr)
+		if err != nil {
+			return false
+		}
+
+		_ = ln.Close()
+
+		return true
+	}, ShutdownGracePeriod+2*time.Second, 20*time.Millisecond, "the server kept listening on %s", addr)
+}
+
+// TestRunServer_CancelBetweenBindAndServe verifies that a server canceled
+// after its socket is bound but before it starts serving still stops and
+// releases the socket, in blocking and non-blocking mode. Fiber runs OnListen
+// hooks in that gap, so the hook cancels there and waits until the shutdown
+// has run, which a server that is not serving yet ignores.
+func TestRunServer_CancelBetweenBindAndServe(t *testing.T) {
+	for _, block := range []bool{true, false} {
+		t.Run(map[bool]string{true: "blocking", false: "non-blocking"}[block], func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			shutdownRan := make(chan struct{})
+
+			app := New(testLogger(), 60, ProxyConfig{}, CORSConfig{}, true)
+			app.Hooks().OnPostShutdown(func(error) error {
+				close(shutdownRan)
+
+				return nil
+			})
+			app.Hooks().OnListen(func(fiber.ListenData) error {
+				cancel()
+
+				select {
+				case <-shutdownRan:
+				case <-time.After(ShutdownGracePeriod):
+				}
+
+				return nil
+			})
+
+			addr := freeAddr(t)
+			done := make(chan error, 1)
+
+			go func() {
+				done <- apiStartErr(runServer(ctx, testLogger(), app, addr, "", "", block, nil, nil))
+			}()
+
+			select {
+			case err := <-done:
+				require.NoError(t, err)
+			case <-time.After(ShutdownGracePeriod + 2*time.Second):
+				t.Fatal("the server canceled between bind and serve did not stop")
+			}
+
+			requireAddrReleased(t, addr)
+		})
+	}
+}
+
+// TestSetupAndStartAPI_StartupMessageAfterBind verifies that in blocking mode
+// the startup message is written once the API socket is bound, and not at all
+// when the socket cannot be bound.
+func TestSetupAndStartAPI_StartupMessageAfterBind(t *testing.T) {
+	blockingOpts := func(addr string, startup func(logging.StartupParams)) config.Options {
+		host, port, err := net.SplitHostPort(addr)
+		require.NoError(t, err)
+
+		return withTestLogger(config.Options{
+			Host:            host,
+			Port:            port,
+			Token:           "test-token",
+			EnableUpdateAPI: true,
+			UpdateLock:      scheduling.NewUpdateLock(),
+			RateLimit:       60,
+			RunUpdatesWithNotifications: func(context.Context, types.Filter, types.UpdateParams) *metrics.Metric {
+				return &metrics.Metric{}
+			},
+			FilterByImage:       func(_ []string, f types.Filter) types.Filter { return f },
+			DefaultMetrics:      func() *metrics.Metrics { return &metrics.Metrics{} },
+			WriteStartupMessage: startup,
+		})
+	}
+
+	t.Run("bound", func(t *testing.T) {
+		addr := freeAddr(t)
+		bound := make(chan bool, 1)
+
+		opts := blockingOpts(addr, func(logging.StartupParams) {
+			// Binding the address fails while the API holds it.
+			ln, err := listenTCP(t, addr)
+			if err == nil {
+				_ = ln.Close()
+			}
+
+			bound <- err != nil
+		})
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		done := make(chan error, 1)
+
+		go func() {
+			done <- apiStartErr(SetupAndStartAPI(ctx, opts))
+		}()
+
+		select {
+		case wasBound := <-bound:
+			assert.True(t, wasBound, "the startup message was written before the API socket was bound")
+		case <-time.After(2 * time.Second):
+			t.Fatal("the startup message was not written")
+		}
+
+		cancel()
+		require.NoError(t, <-done)
+	})
+
+	t.Run("address in use", func(t *testing.T) {
+		taken, err := listenTCP(t, "127.0.0.1:0")
+		require.NoError(t, err)
+
+		defer taken.Close()
+
+		var called atomic.Bool
+
+		opts := blockingOpts(taken.Addr().String(), func(logging.StartupParams) { called.Store(true) })
+
+		_, err = SetupAndStartAPI(t.Context(), opts)
+		require.ErrorContains(t, err, "failed to start HTTP server")
+		assert.False(t, called.Load(), "the startup message was written although the API could not bind")
+	})
+}
+
+// writeTestCertificate writes a self-signed certificate for 127.0.0.1 and its
+// key to dir and returns their paths.
+func writeTestCertificate(t *testing.T, dir string) (string, string) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "watchtower-test"},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	require.NoError(t, err)
+
+	certPath := filepath.Join(dir, "cert.pem")
+	keyPath := filepath.Join(dir, "key.pem")
+
+	require.NoError(t, os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
+	require.NoError(t, os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600))
+
+	return certPath, keyPath
+}
+
+// TestSetupAndStartAPI_TLS verifies that the API serves HTTPS with the
+// configured certificate, refuses clients limited to TLS 1.1, and releases its
+// socket when canceled.
+func TestSetupAndStartAPI_TLS(t *testing.T) {
+	certPath, keyPath := writeTestCertificate(t, t.TempDir())
+
+	addr := freeAddr(t)
+	host, port, err := net.SplitHostPort(addr)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	opts := withTestLogger(config.Options{
+		Host:            host,
+		Port:            port,
+		EnableHealthAPI: true,
+		RateLimit:       60,
+		TLSCertPath:     certPath,
+		TLSKeyPath:      keyPath,
+	})
+
+	require.NoError(t, apiStartErr(SetupAndStartAPI(ctx, opts)))
+
+	client := &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+addr+"/livez", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	dialer := &tls.Dialer{Config: &tls.Config{
+		InsecureSkipVerify: true,
+		MaxVersion:         tls.VersionTLS11,
+	}}
+
+	conn, err := dialer.DialContext(ctx, "tcp4", addr)
+	if err == nil {
+		_ = conn.Close()
+	}
+
+	require.Error(t, err, "a TLS 1.1 client was accepted")
+
+	cancel()
+	requireAddrReleased(t, addr)
 }

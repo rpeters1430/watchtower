@@ -31,6 +31,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/events"
 	"github.com/nicholas-fedor/watchtower/internal/api/routes"
 	"github.com/nicholas-fedor/watchtower/internal/metrics"
+	"github.com/nicholas-fedor/watchtower/internal/scheduling"
 	"github.com/nicholas-fedor/watchtower/internal/testutil/golden"
 	"github.com/nicholas-fedor/watchtower/pkg/container"
 	mockContainer "github.com/nicholas-fedor/watchtower/pkg/container/mocks"
@@ -214,7 +215,7 @@ func fixtureOptions(client container.Client, store *metrics.Metrics) config.Opti
 		Filter:              func(types.FilterableContainer) bool { return true },
 		FilterDesc:          "Checking all containers (except explicitly disabled with label)",
 		IncludeStopped:      true,
-		UpdateLock:          newUpdateLock(),
+		UpdateLock:          scheduling.NewUpdateLock(),
 		BaseParams: types.UpdateParams{
 			Cleanup:        true,
 			LifecycleHooks: true,
@@ -226,14 +227,6 @@ func fixtureOptions(client container.Client, store *metrics.Metrics) config.Opti
 		DefaultMetrics:   func() *metrics.Metrics { return store },
 		EventBroadcaster: events.NewBroadcaster(),
 	})
-}
-
-// newUpdateLock returns an update lock holding its token, so an update can start.
-func newUpdateLock() chan bool {
-	lock := make(chan bool, 1)
-	lock <- true
-
-	return lock
 }
 
 // newFixtureApp builds the HTTP API from opts the same way SetupAndStartAPI
@@ -270,38 +263,12 @@ func normalizeVolatile(t *testing.T, body []byte) []byte {
 	return body
 }
 
-// sortJSONArray sorts the elements of the top-level array field key by their
-// encoded form, for responses whose element order is unspecified.
-func sortJSONArray(t *testing.T, body []byte, key string) []byte {
-	t.Helper()
-
-	var fields map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(body, &fields))
-
-	var elements []json.RawMessage
-	require.NoError(t, json.Unmarshal(fields[key], &elements))
-
-	slices.SortFunc(elements, func(a, b json.RawMessage) int { return bytes.Compare(a, b) })
-
-	sorted, err := json.Marshal(elements)
-	require.NoError(t, err)
-
-	fields[key] = sorted
-
-	out, err := json.Marshal(fields)
-	require.NoError(t, err)
-
-	return out
-}
-
 // responseRequest describes one request recorded in a response snapshot.
 type responseRequest struct {
 	method string
 	target string
 	// token is sent as a bearer token when set.
 	token string
-	// sortKey names a top-level array whose element order is unspecified.
-	sortKey string
 }
 
 // snapshotHeaders returns the response headers in snapshot form, without
@@ -422,12 +389,6 @@ func (r *responseRecorder) recordOne(t *testing.T, req responseRequest) {
 		}
 	}
 
-	// Sorting re-encodes the body, so it runs before the placeholders, which
-	// the encoder would escape, are substituted.
-	if req.sortKey != "" {
-		body = sortJSONArray(t, body, req.sortKey)
-	}
-
 	body = normalizeVolatile(t, body)
 
 	if strings.HasPrefix(resp.Header.Get(fiber.HeaderContentType), fiber.MIMEApplicationJSON) {
@@ -462,15 +423,15 @@ func TestHTTPAPIResponses(t *testing.T) {
 		responseRequest{method: http.MethodGet, target: "/v1/containers?name=missing", token: fixtureAPIToken},
 		responseRequest{method: http.MethodGet, target: "/v1/containers/details", token: fixtureAPIToken},
 		responseRequest{method: http.MethodGet, target: "/v1/containers/details?image=redis:7", token: fixtureAPIToken},
-		responseRequest{method: http.MethodGet, target: "/v1/images", token: fixtureAPIToken, sortKey: "images"},
+		responseRequest{method: http.MethodGet, target: "/v1/images", token: fixtureAPIToken},
 		responseRequest{method: http.MethodGet, target: "/v1/images?name=missing", token: fixtureAPIToken},
 		responseRequest{method: http.MethodGet, target: "/v1/status", token: fixtureAPIToken},
 		responseRequest{method: http.MethodGet, target: "/v1/history", token: fixtureAPIToken},
 		responseRequest{method: http.MethodPost, target: "/v1/update", token: fixtureAPIToken},
 	)
 
-	// The update records its scan asynchronously.
-	require.Eventually(t, func() bool { return store.GetLastScan() != nil }, probeTimeout, 10*time.Millisecond)
+	// The update records its scan asynchronously, and the history entry last.
+	require.Eventually(t, func() bool { return len(store.GetHistory(nil, nil, 0)) == 1 }, probeTimeout, 10*time.Millisecond)
 
 	recorder.record(t,
 		responseRequest{method: http.MethodGet, target: "/v1/status", token: fixtureAPIToken},
@@ -481,7 +442,34 @@ func TestHTTPAPIResponses(t *testing.T) {
 	)
 
 	// The asynchronous update returns its lock when it finishes.
-	require.Eventually(t, func() bool { return len(opts.UpdateLock) == 1 }, probeTimeout, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		if !opts.UpdateLock.TryLock() {
+			return false
+		}
+
+		opts.UpdateLock.Unlock()
+
+		return true
+	}, probeTimeout, 10*time.Millisecond)
+
+	// A scan that ends in an error is reported as failed, with the counts it
+	// reached, by the update, the status, and the history.
+	failedStore := newFixtureMetrics(t)
+	failedOpts := fixtureOptions(newFixtureClient(t), failedStore)
+	failedOpts.RunUpdatesWithNotifications = func(context.Context, types.Filter, types.UpdateParams) *metrics.Metric {
+		return &metrics.Metric{Scanned: 5, Updated: 1, Failed: 0, Restarted: 0, Skipped: 0, ScanFailed: true}
+	}
+
+	recorder.app = newFixtureApp(t, failedOpts)
+	recorder.record(t, responseRequest{method: http.MethodPost, target: "/v1/update", token: fixtureAPIToken})
+
+	require.Eventually(t, func() bool { return len(failedStore.GetHistory(nil, nil, 0)) == 1 }, probeTimeout,
+		10*time.Millisecond)
+
+	recorder.record(t,
+		responseRequest{method: http.MethodGet, target: "/v1/status", token: fixtureAPIToken},
+		responseRequest{method: http.MethodGet, target: "/v1/history", token: fixtureAPIToken},
+	)
 
 	golden.Assert(t, "http-api-responses", recorder.snapshot())
 }
@@ -509,7 +497,8 @@ func TestHTTPAPIErrorResponses(t *testing.T) {
 	)
 
 	busyOpts := fixtureOptions(newFixtureClient(t), newFixtureMetrics(t))
-	busyOpts.UpdateLock = make(chan bool, 1)
+	busyOpts.UpdateLock = scheduling.NewUpdateLock()
+	require.True(t, busyOpts.UpdateLock.TryLock())
 
 	recorder.app = newFixtureApp(t, busyOpts)
 	recorder.record(t, responseRequest{method: http.MethodPost, target: "/v1/update", token: fixtureAPIToken})

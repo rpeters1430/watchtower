@@ -56,6 +56,11 @@ type Operations interface {
 		containerID string,
 		options dockerClient.ContainerRenameOptions,
 	) (dockerClient.ContainerRenameResult, error)
+	ImageInspect(
+		ctx context.Context,
+		imageID string,
+		inspectOpts ...dockerClient.ImageInspectOption,
+	) (dockerClient.ImageInspectResult, error)
 }
 
 // nopLog returns a fresh discarded logger for optional construction and fallbacks.
@@ -702,15 +707,18 @@ func filterSelfReferences(links []string, containerName string) []string {
 
 // Links returns a list of container names this container depends on.
 //
-// It retrieves dependencies from multiple sources in priority order:
+// Label dependencies come from one label, in priority order:
 //  1. com.centurylinklabs.watchtower.depends-on label (Watchtower's native dependency format)
 //  2. com.docker.compose.depends_on label (Docker Compose dependencies via v5 API)
-//  3. HostConfig.Links (legacy Docker links)
-//  4. NetworkMode.ConnectedContainer() (container network mode dependencies)
 //
-// HostConfig.VolumesFrom identities are always appended after those sources.
-// Duplicates are skipped. Label selection does not hide volumes-from, because
-// recreate must still order the volume source before this container.
+// The host config dependencies are always appended after them, because the
+// container cannot run without their targets:
+//  1. HostConfig.Links (legacy Docker links)
+//  2. NetworkMode.ConnectedContainer() (container network mode dependencies)
+//  3. HostConfig.VolumesFrom identities
+//
+// Duplicates are skipped, so a target named by a label and by the host config
+// appears once, in the label's position.
 //
 // Self-references are filtered out from all link sources to prevent circular
 // dependencies where a container would depend on itself. This ensures the
@@ -722,30 +730,22 @@ func filterSelfReferences(links []string, containerName string) []string {
 // Returns:
 //   - []string: List of linked container names with self-references removed.
 func (c *Container) Links(useComposeDependsOn bool) []string {
-	clogVal := c.logger().With().
-		Str("container", c.Name()).
-		Logger()
-	clog := &clogVal
-
 	var links []string
 
 	// Check Watchtower's depends-on label first.
-	if labelLinks := GetLinksFromWatchtowerLabel(c, clog); labelLinks != nil {
+	if labelLinks := GetLinksFromWatchtowerLabel(c); labelLinks != nil {
 		links = labelLinks
 	} else if useComposeDependsOn {
 		// Use Compose depends_on only when the Watchtower label is absent.
-		if composeLinks := getLinksFromComposeLabel(c, clog); composeLinks != nil {
+		if composeLinks := getLinksFromComposeLabel(c); composeLinks != nil {
 			links = composeLinks
 		}
 	}
 
-	if links == nil {
-		// No label dependencies. Use HostConfig links and network mode.
-		links = getLinksFromHostConfig(c, clog)
-	}
-
-	// Always append volumes-from identities. Label selection must not hide the
-	// volume source, or recreate can still target a removed container ID.
+	// Always append the host config dependencies. A label must not hide the
+	// container whose network or volumes this container uses, or the target
+	// can be recreated while this container still uses it.
+	links = appendUniqueLinks(links, getLinksFromHostConfig(c))
 	links = appendUniqueLinks(links, volumesFromLinks(c))
 
 	return filterSelfReferences(links, c.Name())
@@ -928,11 +928,10 @@ func nameOrID(c types.Container) string {
 //
 // Parameters:
 //   - c: Container instance
-//   - clog: Logger instance for debug output
 //
 // Returns:
 //   - []string: List of all normalized links, including potential self-references, or nil if label not present
-func GetLinksFromWatchtowerLabel(c *Container, clog *zerolog.Logger) []string {
+func GetLinksFromWatchtowerLabel(c *Container) []string {
 	// Get the depends-on label value or empty string if not present
 	dependsOnLabelValue := c.getLabelValueOrEmpty(dependsOnLabel)
 
@@ -940,11 +939,6 @@ func GetLinksFromWatchtowerLabel(c *Container, clog *zerolog.Logger) []string {
 	if dependsOnLabelValue == "" {
 		return nil
 	}
-
-	clog.Debug().
-		Str("depends_on_label_value", dependsOnLabelValue).
-		Str("container_name", c.Name()).
-		Msg("Processing watchtower depends-on label")
 
 	// Split the comma-separated values
 	links := strings.Split(dependsOnLabelValue, ",")
@@ -964,11 +958,6 @@ func GetLinksFromWatchtowerLabel(c *Container, clog *zerolog.Logger) []string {
 		normalizedLinks = append(normalizedLinks, normalizedLink)
 	}
 
-	clog.Debug().
-		Str("depends_on", dependsOnLabelValue).
-		Strs("normalized_links", normalizedLinks).
-		Msg("Retrieved links from watchtower depends-on label")
-
 	return normalizedLinks
 }
 
@@ -980,28 +969,18 @@ func GetLinksFromWatchtowerLabel(c *Container, clog *zerolog.Logger) []string {
 //
 // Parameters:
 //   - c: Container instance
-//   - clog: Logger instance for debug output
 //
 // Returns:
 //   - []string: List of linked container names, empty if label not present
-func getLinksFromComposeLabel(c *Container, clog *zerolog.Logger) []string {
+func getLinksFromComposeLabel(c *Container) []string {
 	info := c.ContainerInfo()
 
 	composeDependsOnLabelValue := c.getLabelValueOrEmpty(compose.ComposeDependsOnLabel)
-	clog.Debug().
-		Str("label", compose.ComposeDependsOnLabel).
-		Str("value", composeDependsOnLabelValue).
-		Msg("Checked compose depends-on label")
-
 	if composeDependsOnLabelValue == "" {
 		return nil
 	}
 
-	clog.Debug().
-		Str("raw_label_value", composeDependsOnLabelValue).
-		Msg("Parsing compose depends-on label")
-
-	services := compose.ParseDependsOnLabel(clog, composeDependsOnLabelValue)
+	services := compose.ParseDependsOnLabel(c.logger(), composeDependsOnLabelValue)
 
 	projectName := compose.GetProjectName(info.Config.Labels)
 
@@ -1021,11 +1000,6 @@ func getLinksFromComposeLabel(c *Container, clog *zerolog.Logger) []string {
 		return nil
 	}
 
-	clog.Debug().
-		Str("compose_depends_on", composeDependsOnLabelValue).
-		Strs("parsed_links", normalizedLinks).
-		Msg("Retrieved links from compose depends-on label")
-
 	return normalizedLinks
 }
 
@@ -1037,20 +1011,28 @@ func getLinksFromComposeLabel(c *Container, clog *zerolog.Logger) []string {
 // mode is a Docker identity, not a Compose service name, and is not
 // project-prefixed. VolumesFrom is merged in Links, not here.
 //
+// A malformed legacy link is skipped with a warning. Docker stores links as
+// /name:/container/alias, so this only happens with inspect data Docker did
+// not write.
+//
 // Parameters:
 //   - c: Container instance
-//   - clog: Logger instance for debug output
 //
 // Returns:
 //   - []string: List of linked container names
-func getLinksFromHostConfig(c *Container, clog *zerolog.Logger) []string {
+func getLinksFromHostConfig(c *Container) []string {
 	info := c.ContainerInfo()
 
 	if info == nil || info.HostConfig == nil {
 		return nil
 	}
 
-	projectName := compose.GetProjectName(info.Config.Labels)
+	var labels map[string]string
+	if info.Config != nil {
+		labels = info.Config.Labels
+	}
+
+	projectName := compose.GetProjectName(labels)
 
 	hostConfig := info.HostConfig
 
@@ -1066,7 +1048,8 @@ func getLinksFromHostConfig(c *Container, clog *zerolog.Logger) []string {
 
 	for _, link := range hostConfig.Links {
 		if !strings.Contains(link, ":") {
-			clog.Warn().
+			c.logger().Warn().
+				Str("container", c.Name()).
 				Str("link", link).
 				Msg("Invalid link format in host config, expected 'name:alias'")
 
@@ -1075,7 +1058,8 @@ func getLinksFromHostConfig(c *Container, clog *zerolog.Logger) []string {
 
 		parts := strings.SplitN(link, ":", linkPartsCount)
 		if len(parts) < 1 || parts[0] == "" {
-			clog.Warn().
+			c.logger().Warn().
+				Str("container", c.Name()).
 				Str("link", link).
 				Msg("Invalid link format in host config, missing container name")
 
@@ -1100,10 +1084,6 @@ func getLinksFromHostConfig(c *Container, clog *zerolog.Logger) []string {
 		normalizedName := util.NormalizeContainerName(networkMode.ConnectedContainer())
 		normalizedLinks = append(normalizedLinks, normalizedName)
 	}
-
-	clog.Debug().
-		Strs("links", normalizedLinks).
-		Msg("Retrieved links from host config")
 
 	return normalizedLinks
 }

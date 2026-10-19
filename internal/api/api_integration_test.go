@@ -84,7 +84,7 @@ func runServerAndShutdown(t *testing.T, opts config.Options) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- api.SetupAndStartAPI(ctx, opts)
+		errCh <- apiStartErr(api.SetupAndStartAPI(ctx, opts))
 	}()
 
 	select {
@@ -155,7 +155,7 @@ func TestIntegration_SetupAndStartAPI_NoAPIs(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	err := api.SetupAndStartAPI(ctx, withTestLogger(config.Options{Token: "test"}))
+	_, err := api.SetupAndStartAPI(ctx, withTestLogger(config.Options{Token: "test"}))
 	assert.NoError(t, err)
 }
 
@@ -182,6 +182,7 @@ func TestIntegration_SetupAndStartAPI_AllAPIs(t *testing.T) {
 	runServerAndShutdown(t, config.Options{
 		Token:               "test-token",
 		EnableUpdateAPI:     true,
+		UpdateLock:          scheduling.NewUpdateLock(),
 		EnableMetricsAPI:    true,
 		EnableContainersAPI: true,
 		RateLimit:           60,
@@ -210,6 +211,7 @@ func TestIntegration_SetupAndStartAPI_MissingUpdateDependencies(t *testing.T) {
 			opts: config.Options{
 				Token:                       "test",
 				EnableUpdateAPI:             true,
+				UpdateLock:                  scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: nil,
 				FilterByImage:               func(_ []string, f types.Filter) types.Filter { return f },
 				DefaultMetrics:              func() *metrics.Metrics { return helperMetrics },
@@ -221,6 +223,7 @@ func TestIntegration_SetupAndStartAPI_MissingUpdateDependencies(t *testing.T) {
 			opts: config.Options{
 				Token:           "test",
 				EnableUpdateAPI: true,
+				UpdateLock:      scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 					return &metrics.Metric{}
 				},
@@ -234,6 +237,7 @@ func TestIntegration_SetupAndStartAPI_MissingUpdateDependencies(t *testing.T) {
 			opts: config.Options{
 				Token:           "test",
 				EnableUpdateAPI: true,
+				UpdateLock:      scheduling.NewUpdateLock(),
 				RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 					return &metrics.Metric{}
 				},
@@ -246,7 +250,7 @@ func TestIntegration_SetupAndStartAPI_MissingUpdateDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := api.SetupAndStartAPI(ctx, withTestLogger(tt.opts))
+			_, err := api.SetupAndStartAPI(ctx, withTestLogger(tt.opts))
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.errMsg)
 		})
@@ -262,12 +266,12 @@ func TestIntegration_GracefulShutdown_MetricsAPI(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- api.SetupAndStartAPI(ctx, withTestLogger(config.Options{
+		errCh <- apiStartErr(api.SetupAndStartAPI(ctx, withTestLogger(config.Options{
 			Token:            "test-token",
 			EnableMetricsAPI: true,
 			RateLimit:        60,
 			DefaultMetrics:   func() *metrics.Metrics { return helperMetrics },
-		}))
+		})))
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -286,9 +290,10 @@ func TestIntegration_GracefulShutdown_AllAPIs(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- api.SetupAndStartAPI(ctx, withTestLogger(config.Options{
+		errCh <- apiStartErr(api.SetupAndStartAPI(ctx, withTestLogger(config.Options{
 			Token:               "test-token",
 			EnableUpdateAPI:     true,
+			UpdateLock:          scheduling.NewUpdateLock(),
 			EnableMetricsAPI:    true,
 			EnableContainersAPI: true,
 			RateLimit:           60,
@@ -300,7 +305,7 @@ func TestIntegration_GracefulShutdown_AllAPIs(t *testing.T) {
 			FilterByImage:  func(_ []string, f types.Filter) types.Filter { return f },
 			DefaultMetrics: func() *metrics.Metrics { return helperMetrics },
 			UnblockHTTPAPI: true,
-		}))
+		})))
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -320,9 +325,10 @@ func TestIntegration_GracefulShutdownTiming(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- api.SetupAndStartAPI(ctx, withTestLogger(config.Options{
+		errCh <- apiStartErr(api.SetupAndStartAPI(ctx, withTestLogger(config.Options{
 			Token:               "test-token",
 			EnableUpdateAPI:     true,
+			UpdateLock:          scheduling.NewUpdateLock(),
 			EnableMetricsAPI:    true,
 			EnableContainersAPI: true,
 			RateLimit:           60,
@@ -334,7 +340,7 @@ func TestIntegration_GracefulShutdownTiming(t *testing.T) {
 			FilterByImage:  func(_ []string, f types.Filter) types.Filter { return f },
 			DefaultMetrics: func() *metrics.Metrics { return helperMetrics },
 			UnblockHTTPAPI: true,
-		}))
+		})))
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -445,6 +451,7 @@ func TestIntegration_EnablementCombinations(t *testing.T) {
 				Token:               "test-token",
 				EventsToken:         "events-token",
 				EnableUpdateAPI:     c.enableUpdateAPI,
+				UpdateLock:          scheduling.NewUpdateLock(),
 				EnableMetricsAPI:    c.enableMetricsAPI,
 				EnableContainersAPI: c.enableContainersAPI,
 				EnableHistoryAPI:    c.enableHistoryAPI,
@@ -557,6 +564,7 @@ func TestIntegration_CheckDuringUpdate(t *testing.T) {
 	opts := config.Options{
 		Token:           "test-token",
 		EnableUpdateAPI: true,
+		UpdateLock:      scheduling.NewUpdateLock(),
 		EnableCheckAPI:  true,
 		UnblockHTTPAPI:  true,
 		Client:          mc,
@@ -630,9 +638,13 @@ func TestIntegration_APIAndScheduling_ConcurrentWithUnblockHTTPAPI(t *testing.T)
 	testCtx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
+	// The API and the scheduler share one update lock, as in production.
+	lock := scheduling.NewUpdateLock()
+
 	opts := withTestListenAddr(config.Options{
 		Token:            "test-token",
 		EnableUpdateAPI:  true,
+		UpdateLock:       lock,
 		EnableMetricsAPI: true,
 		RateLimit:        60,
 		Client:           makeListContainersMock(t),
@@ -647,7 +659,7 @@ func TestIntegration_APIAndScheduling_ConcurrentWithUnblockHTTPAPI(t *testing.T)
 
 	apiDone := make(chan error, 1)
 	go func() {
-		apiDone <- api.SetupAndStartAPI(testCtx, opts)
+		apiDone <- apiStartErr(api.SetupAndStartAPI(testCtx, opts))
 	}()
 
 	select {
@@ -659,11 +671,6 @@ func TestIntegration_APIAndScheduling_ConcurrentWithUnblockHTTPAPI(t *testing.T)
 
 	schedCtx, schedCancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer schedCancel()
-
-	// Seed the lock token the same way production does when creating a new lock.
-	// An empty channel is treated as "update in progress" by WaitForRunningUpdate.
-	lock := make(chan bool, 1)
-	lock <- true
 
 	err := scheduling.RunUpgradesOnSchedule(schedCtx, scheduling.ScheduleDeps{
 		Logger:              testLogger(),
@@ -706,6 +713,7 @@ func TestIntegration_UpdateHonorsReviveStoppedAndComposeDependsOn(t *testing.T) 
 	opts := config.Options{
 		Token:           "test-token",
 		EnableUpdateAPI: true,
+		UpdateLock:      scheduling.NewUpdateLock(),
 		UnblockHTTPAPI:  true,
 		BaseParams: types.UpdateParams{
 			ReviveStopped:       true,
@@ -738,4 +746,10 @@ func TestIntegration_UpdateHonorsReviveStoppedAndComposeDependsOn(t *testing.T) 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.True(t, captured.ReviveStopped, "HTTP update should propagate ReviveStopped")
 	assert.True(t, captured.UseComposeDependsOn, "HTTP update should propagate UseComposeDependsOn")
+}
+
+// apiStartErr returns the error from a SetupAndStartAPI call, for use where
+// only the error matters.
+func apiStartErr(_ <-chan struct{}, err error) error {
+	return err
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	dockerContainer "github.com/moby/moby/api/types/container"
 
@@ -22,7 +21,6 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/api/config"
 	"github.com/nicholas-fedor/watchtower/internal/api/handlers/events"
 	appConfig "github.com/nicholas-fedor/watchtower/internal/config"
-	registryConfig "github.com/nicholas-fedor/watchtower/internal/config/registry"
 	"github.com/nicholas-fedor/watchtower/internal/flags"
 	"github.com/nicholas-fedor/watchtower/internal/git"
 	"github.com/nicholas-fedor/watchtower/internal/logging"
@@ -250,8 +248,6 @@ func (p *process) preRun(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		p.log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
-
-	exportRegistrySettings(appCfg.Registry)
 
 	p.log.Debug().
 		Str("scheduleSpec", appCfg.Schedule.Spec).
@@ -731,9 +727,9 @@ func (p *process) runMain(cfg types.RunConfig) int {
 		}
 	}
 
-	// Initialize a lock channel to prevent concurrent updates.
-	updateLock := make(chan bool, 1)
-	updateLock <- true
+	// Share one update lock between the scheduler and the HTTP API, so their
+	// updates never run at the same time.
+	updateLock := scheduling.NewUpdateLock()
 
 	baseParams := appCfg.UpdateParams(appConfig.RunOverrides{
 		Filter:             cfg.Filter,
@@ -861,7 +857,7 @@ func (p *process) runMain(cfg types.RunConfig) int {
 	// API request/auth logs must not fan into notification hooks.
 	apiLog := p.log.With().Str("notify", "no").Logger()
 
-	err = api.SetupAndStartAPI(
+	apiStopped, err := api.SetupAndStartAPI(
 		ctx,
 		config.Options{
 			Logger:                       &apiLog,
@@ -967,6 +963,12 @@ func (p *process) runMain(cfg types.RunConfig) int {
 		StartupMessageSent:         startupMessageSent,
 		BaseParams:                 sharedBase,
 	})
+
+	// Stop the HTTP API and give it its shutdown grace period to finish the
+	// requests it is serving before the process exits.
+	stop()
+	<-apiStopped
+
 	if err != nil {
 		p.logNotify("Scheduled upgrades failed", err)
 
@@ -1005,19 +1007,6 @@ func (p *process) logNotify(msg string, err error) {
 	notifier.StartNotification(false)
 	notifier.SendNotification(nil)
 	notifier.Close()
-}
-
-// exportRegistrySettings makes the loaded registry TLS settings visible to the
-// registry client, which reads them from the process-wide Viper instance by
-// their environment variable names. This lets the registry-tls-skip and
-// registry-tls-min-version configuration options take effect, with flags
-// taking precedence over environment variables as for every other setting.
-//
-// Parameters:
-//   - settings: Registry TLS settings from the loaded configuration.
-func exportRegistrySettings(settings registryConfig.Registry) {
-	viper.Set("WATCHTOWER_REGISTRY_TLS_SKIP", settings.TLSSkip)
-	viper.Set("WATCHTOWER_REGISTRY_TLS_MIN_VERSION", settings.TLSMinVersion)
 }
 
 // awaitDockerClient introduces a brief delay to ensure the Docker client is fully initialized.

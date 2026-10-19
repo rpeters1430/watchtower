@@ -95,7 +95,14 @@ func NewDependencyGraph(
 		}
 	}
 
-	return newDependencyGraph(log, members, watchtowers, unmonitored, useComposeDependsOn)
+	return newDependencyGraph(
+		log,
+		members,
+		watchtowers,
+		unmonitored,
+		useComposeDependsOn,
+		true,
+	)
 }
 
 // newDependencyGraph builds the dependency graph of members.
@@ -107,6 +114,8 @@ func NewDependencyGraph(
 //   - unmonitored: Containers that links may name exactly but that are
 //     outside the graph.
 //   - useComposeDependsOn: Whether to include Compose depends_on labels as links.
+//   - logDependencies: Whether to log each container's dependencies. Only the
+//     scan's graph logs them, so sorting a subset on its own does not repeat them.
 //
 // Returns:
 //   - *DependencyGraph: The graph.
@@ -114,7 +123,7 @@ func NewDependencyGraph(
 func newDependencyGraph(
 	log *zerolog.Logger,
 	members, watchtowers, unmonitored []types.Container,
-	useComposeDependsOn bool,
+	useComposeDependsOn, logDependencies bool,
 ) (*DependencyGraph, error) {
 	containerMap, err := identifierIndex(log, members)
 	if err != nil {
@@ -135,7 +144,7 @@ func newDependencyGraph(
 	watchtowerExact := exactNames(watchtowers)
 
 	resolver := &linkResolver{
-		matchIDSet:        matchIDSet,
+		matchIDSet:        newMatchSet(matchIDSet),
 		aliasToCanonical:  aliasToCanonical,
 		projects:          memberProjects(containerMap),
 		services:          memberServices(containerMap),
@@ -155,7 +164,15 @@ func newDependencyGraph(
 	for _, c := range slices.Concat(members, watchtowers) {
 		self, isMember := identifiers[c]
 
-		for _, normalizedLink := range c.Links(useComposeDependsOn) {
+		links := c.Links(useComposeDependsOn)
+		if logDependencies && len(links) > 0 {
+			log.Debug().
+				Str("container", c.Name()).
+				Strs("links", links).
+				Msg("Found container dependencies")
+		}
+
+		for _, normalizedLink := range links {
 			keys, watchtower, _ := resolver.resolve(c, normalizedLink)
 			if watchtower != nil && watchtower != c {
 				graph.addDependent(watchtower, c)
@@ -167,7 +184,9 @@ func newDependencyGraph(
 					continue
 				}
 
-				if isMember {
+				// Several links can name the same container, such as a Compose
+				// depends_on entry and the network mode of the same service.
+				if isMember && !slices.Contains(graph.dependencies[c], key) {
 					graph.dependencies[c] = append(graph.dependencies[c], key)
 				}
 
@@ -175,7 +194,7 @@ func newDependencyGraph(
 			}
 		}
 
-		graph.unresolved = append(graph.unresolved, resolver.unresolvedDependsOn(log, c, self)...)
+		graph.unresolved = append(graph.unresolved, resolver.unresolvedDependsOn(c, self)...)
 	}
 
 	return graph, nil

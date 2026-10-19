@@ -19,6 +19,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/api/config"
 	"github.com/nicholas-fedor/watchtower/internal/api/routes"
 	"github.com/nicholas-fedor/watchtower/internal/metrics"
+	"github.com/nicholas-fedor/watchtower/internal/scheduling"
 	"github.com/nicholas-fedor/watchtower/internal/settings"
 	"github.com/nicholas-fedor/watchtower/internal/testutil/golden"
 	mockContainer "github.com/nicholas-fedor/watchtower/pkg/container/mocks"
@@ -47,6 +48,7 @@ func newFullSurfaceApp(t *testing.T) *fiber.App {
 		EventsToken:         "events-token",
 		RateLimit:           1000,
 		EnableUpdateAPI:     true,
+		UpdateLock:          scheduling.NewUpdateLock(),
 		EnableMetricsAPI:    true,
 		EnableContainersAPI: true,
 		EnableCheckAPI:      true,

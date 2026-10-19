@@ -1,8 +1,10 @@
 package container
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/netip"
@@ -15,8 +17,10 @@ import (
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/ghttp"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cerrdefs "github.com/containerd/errdefs"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	dockerContainer "github.com/moby/moby/api/types/container"
 	dockerImage "github.com/moby/moby/api/types/image"
@@ -2777,7 +2781,7 @@ var _ = ginkgo.Describe("StopSourceContainer", func() {
 	})
 
 	ginkgo.When("stopping a container that was removed between check and stop", func() {
-		ginkgo.It("should return nil when Docker returns 404 NotFound", func() {
+		ginkgo.It("should return a not-found error when Docker returns 404 NotFound", func() {
 			container := MockContainer(
 				WithContainerState(dockerContainer.State{Running: true}),
 			)
@@ -2798,7 +2802,8 @@ var _ = ginkgo.Describe("StopSourceContainer", func() {
 				container,
 				10*time.Second,
 			)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(err).To(gomega.HaveOccurred())
+			gomega.Expect(cerrdefs.IsNotFound(err)).To(gomega.BeTrue())
 		})
 	})
 })
@@ -3231,4 +3236,220 @@ func TestCloneImageInspect_IsolatesMutations(t *testing.T) {
 	require.Equal(t, []string{"CMD", "true"}, src.Config.Healthcheck.Test)
 	require.Equal(t, "/var/lib/docker/overlay2/abc", src.GraphDriver.Data["MergedDir"])
 	require.Nil(t, cloneImageInspect(nil))
+}
+
+// imageInspectFailAPI is a Docker API client that lists one running container
+// and fails the inspect of its image. Methods it does not override panic.
+type imageInspectFailAPI struct {
+	dockerClient.APIClient
+
+	// err is the error ImageInspect returns.
+	err error
+}
+
+// ClientVersion returns a fixed API version for diagnostic logs.
+func (imageInspectFailAPI) ClientVersion() string {
+	return "1.44"
+}
+
+// ContainerList returns one container.
+func (imageInspectFailAPI) ContainerList(
+	context.Context,
+	dockerClient.ContainerListOptions,
+) (dockerClient.ContainerListResult, error) {
+	return dockerClient.ContainerListResult{Items: []dockerContainer.Summary{{ID: testContainerID}}}, nil
+}
+
+// ContainerInspect returns a running container without links or shared namespaces.
+func (imageInspectFailAPI) ContainerInspect(
+	context.Context,
+	string,
+	dockerClient.ContainerInspectOptions,
+) (dockerClient.ContainerInspectResult, error) {
+	return dockerClient.ContainerInspectResult{Container: dockerContainer.InspectResponse{
+		ID:         testContainerID,
+		Name:       "/app",
+		Image:      "sha256:image",
+		State:      &dockerContainer.State{Running: true},
+		Config:     &dockerContainer.Config{Image: "app:latest"},
+		HostConfig: &dockerContainer.HostConfig{},
+	}}, nil
+}
+
+// ImageInspect fails with the configured error.
+func (a imageInspectFailAPI) ImageInspect(
+	context.Context,
+	string,
+	...dockerClient.ImageInspectOption,
+) (dockerClient.ImageInspectResult, error) {
+	return dockerClient.ImageInspectResult{}, a.err
+}
+
+// TestListSourceContainers_ImageInspectFailure verifies that a canceled or
+// timed-out image inspect ends the listing, while other failures leave the
+// container without image info. Ending the listing keeps an interrupted scan
+// from warning about every remaining container.
+func TestListSourceContainers_ImageInspectFailure(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// inspectErr is the error the image inspect fails with.
+		inspectErr error
+		// wantErr is the error the listing returns. Nil expects the container
+		// without image info.
+		wantErr error
+	}{
+		{
+			name:       "canceled",
+			inspectErr: fmt.Errorf("request canceled: %w", context.Canceled),
+			wantErr:    context.Canceled,
+		},
+		{
+			name:       "timed out",
+			inspectErr: fmt.Errorf("request timed out: %w", context.DeadlineExceeded),
+			wantErr:    context.DeadlineExceeded,
+		},
+		{
+			name:       "image not found",
+			inspectErr: fmt.Errorf("no such image: %w", cerrdefs.ErrNotFound),
+		},
+		{
+			name:       "daemon error",
+			inspectErr: errors.New("daemon error"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var out bytes.Buffer
+
+			log := zerolog.New(&out).Level(zerolog.WarnLevel)
+			api := imageInspectFailAPI{err: tt.inspectErr}
+
+			containers, err := ListSourceContainers(&log, t.Context(), api, ClientOptions{}, nil)
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Empty(t, containers)
+				assert.NotContains(t, out.String(), "Failed to retrieve image info")
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, containers, 1)
+			assert.False(t, containers[0].HasImageInfo())
+			assert.Contains(t, out.String(), "Failed to retrieve image info")
+		})
+	}
+}
+
+// stopRemoveAPI is a Docker API client whose stop and remove calls return the
+// configured errors and record whether they were called. Methods it does not
+// override panic.
+type stopRemoveAPI struct {
+	dockerClient.APIClient
+
+	// stopErr is the error ContainerStop returns.
+	stopErr error
+	// removeErr is the error ContainerRemove returns.
+	removeErr error
+	// removed records whether ContainerRemove was called.
+	removed bool
+}
+
+// ContainerStop returns the configured stop error.
+func (a *stopRemoveAPI) ContainerStop(
+	context.Context,
+	string,
+	dockerClient.ContainerStopOptions,
+) (dockerClient.ContainerStopResult, error) {
+	return dockerClient.ContainerStopResult{}, a.stopErr
+}
+
+// ContainerRemove records the call and returns the configured remove error.
+func (a *stopRemoveAPI) ContainerRemove(
+	context.Context,
+	string,
+	dockerClient.ContainerRemoveOptions,
+) (dockerClient.ContainerRemoveResult, error) {
+	a.removed = true
+
+	return dockerClient.ContainerRemoveResult{}, a.removeErr
+}
+
+// stopRemoveContainer returns a container in the given state for the stop and
+// remove tests.
+func stopRemoveContainer(running, autoRemove bool) *Container {
+	return NewContainer(nil, &dockerContainer.InspectResponse{
+		ID:         testContainerID,
+		Name:       "/app",
+		State:      &dockerContainer.State{Running: running},
+		Config:     &dockerContainer.Config{Image: "app:latest"},
+		HostConfig: &dockerContainer.HostConfig{AutoRemove: autoRemove},
+	}, nil)
+}
+
+// TestStopAndRemoveSourceContainer_NotFound verifies that a container which no
+// longer exists before Watchtower stops or removes it is reported as not
+// found, while a container that disappears only after Watchtower stopped it,
+// such as one Docker removes on exit, counts as stopped and removed.
+func TestStopAndRemoveSourceContainer_NotFound(t *testing.T) {
+	t.Parallel()
+
+	notFound := fmt.Errorf("no such container: %w", cerrdefs.ErrNotFound)
+
+	tests := []struct {
+		name       string
+		running    bool
+		autoRemove bool
+		stopErr    error
+		removeErr  error
+		// wantNotFound expects a not-found error. Otherwise no error is expected.
+		wantNotFound bool
+		wantRemoved  bool
+	}{
+		{name: "running container gone before stop", running: true, stopErr: notFound, wantNotFound: true},
+		{name: "running container removed after stop", running: true, removeErr: notFound, wantRemoved: true},
+		{name: "stopped container gone before remove", removeErr: notFound, wantNotFound: true, wantRemoved: true},
+		{name: "stopped container removed", wantRemoved: true},
+		{name: "running auto-remove container", running: true, autoRemove: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			log := zerolog.Nop()
+			api := &stopRemoveAPI{stopErr: tt.stopErr, removeErr: tt.removeErr}
+
+			err := StopAndRemoveSourceContainer(&log, t.Context(), api,
+				stopRemoveContainer(tt.running, tt.autoRemove), time.Second, false)
+
+			if tt.wantNotFound {
+				require.Error(t, err)
+				assert.True(t, cerrdefs.IsNotFound(err), "error: %v", err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.wantRemoved, api.removed)
+		})
+	}
+}
+
+// TestStopSourceContainer_NotFound verifies that stopping a container which no
+// longer exists reports it as not found.
+func TestStopSourceContainer_NotFound(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	api := &stopRemoveAPI{stopErr: fmt.Errorf("no such container: %w", cerrdefs.ErrNotFound)}
+
+	err := StopSourceContainer(&log, t.Context(), api, stopRemoveContainer(true, false), time.Second)
+	require.Error(t, err)
+	assert.True(t, cerrdefs.IsNotFound(err), "error: %v", err)
 }

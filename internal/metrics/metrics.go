@@ -34,6 +34,9 @@ type Metric struct {
 	Containers []HistoryContainer `json:"containers,omitempty"`
 	// Statuses is the update state of each container the scan looked at.
 	Statuses []ContainerStatus `json:"-"`
+	// ScanFailed reports that the scan ended in an error. The counts are then
+	// those the scan reached before it failed.
+	ScanFailed bool `json:"scan_failed,omitempty"`
 }
 
 // Metrics handles processing and exposing scan metrics.
@@ -47,6 +50,7 @@ type Metrics struct {
 	restartedTotal     prometheus.Counter         // Counter for total restarted containers.
 	total              prometheus.Counter         // Counter for total scans.
 	skippedScans       prometheus.Counter         // Counter for skipped scans.
+	failedScans        prometheus.Counter         // Counter for failed scans.
 	dropped            prometheus.Counter         // Counter for dropped metrics.
 	imageBytes         prometheus.Gauge           // Gauge for Docker image usage bytes.
 	imageReclaimable   prometheus.Gauge           // Gauge for reclaimable Docker image bytes.
@@ -121,6 +125,10 @@ func NewWithRegistry(registry prometheus.Registerer) (*Metrics, error) {
 			Name: "watchtower_scans_skipped_total",
 			Help: "Number of skipped scans since watchtower started",
 		}),
+		failedScans: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "watchtower_scans_failed_total",
+			Help: "Number of scans that ended in an error since watchtower started",
+		}),
 		dropped: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "watchtower_metrics_dropped_total",
 			Help: "Number of metrics dropped due to full channel",
@@ -158,6 +166,7 @@ func NewWithRegistry(registry prometheus.Registerer) (*Metrics, error) {
 		metrics.restartedTotal,
 		metrics.total,
 		metrics.skippedScans,
+		metrics.failedScans,
 		metrics.dropped,
 		metrics.imageBytes,
 		metrics.imageReclaimable,
@@ -416,6 +425,8 @@ type HistoryEntry struct {
 	// Containers lists the containers that were updated, failed, restarted,
 	// or (for a check) have an update waiting.
 	Containers []HistoryContainer `json:"containers,omitempty"`
+	// ScanFailed reports that the scan ended in an error.
+	ScanFailed bool `json:"scan_failed,omitempty"`
 }
 
 // RecordHistory stores a scan result in the ring buffer.
@@ -430,6 +441,7 @@ func (m *Metrics) RecordHistory(metric *Metric) {
 		Restarted:  metric.Restarted,
 		Skipped:    metric.Skipped,
 		Containers: slices.Clone(metric.Containers),
+		ScanFailed: metric.ScanFailed,
 	})
 }
 
@@ -561,8 +573,14 @@ func (m *Metrics) HandleUpdate() {
 
 				continue
 			}
-			// Update metrics with scan results.
+			// Update metrics with scan results. A failed scan still counts as a
+			// scan, with the counts it reached.
 			m.total.Inc()
+
+			if change.ScanFailed {
+				m.failedScans.Inc()
+			}
+
 			m.scanned.Set(float64(change.Scanned))
 			m.updated.Set(float64(change.Updated))
 			m.failed.Set(float64(change.Failed))

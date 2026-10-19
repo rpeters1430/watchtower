@@ -13,6 +13,7 @@ import (
 	"github.com/nicholas-fedor/watchtower/internal/api/config"
 	"github.com/nicholas-fedor/watchtower/internal/logging"
 	"github.com/nicholas-fedor/watchtower/internal/metrics"
+	"github.com/nicholas-fedor/watchtower/internal/scheduling"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -22,6 +23,7 @@ func TestRegisterUpdateRoute(t *testing.T) {
 
 	opts := config.Options{
 		EnableUpdateAPI: true,
+		UpdateLock:      scheduling.NewUpdateLock(),
 		UnblockHTTPAPI:  true,
 		RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 			return &metrics.Metric{}
@@ -74,7 +76,7 @@ func TestRegisterUpdateRoute_BuildsFullUpdateParams(t *testing.T) {
 		},
 		FilterByImage:  func(_ []string, f types.Filter) types.Filter { return f },
 		DefaultMetrics: func() *metrics.Metrics { return testMetrics },
-		UpdateLock:     make(chan bool, 1),
+		UpdateLock:     scheduling.NewUpdateLock(),
 	}
 
 	registerUpdateRoute(context.Background(), app, auth, opts)
@@ -102,6 +104,7 @@ func TestRegisterUpdateRoute_NilWriteStartupMessage(t *testing.T) {
 
 	opts := config.Options{
 		EnableUpdateAPI: true,
+		UpdateLock:      scheduling.NewUpdateLock(),
 		UnblockHTTPAPI:  false,
 		RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 			return &metrics.Metric{}
@@ -116,13 +119,17 @@ func TestRegisterUpdateRoute_NilWriteStartupMessage(t *testing.T) {
 	})
 }
 
-func TestRegisterUpdateRoute_WriteStartupMessageCalledWhenBlocking(t *testing.T) {
+// TestRegisterUpdateRoute_DoesNotWriteStartupMessage verifies that registering
+// the update route does not write the startup message, which the server
+// writes once its socket is bound.
+func TestRegisterUpdateRoute_DoesNotWriteStartupMessage(t *testing.T) {
 	app := testApp()
 	auth := testAuthMiddleware()
 
 	called := false
 	opts := config.Options{
 		EnableUpdateAPI: true,
+		UpdateLock:      scheduling.NewUpdateLock(),
 		UnblockHTTPAPI:  false,
 		RunUpdatesWithNotifications: func(_ context.Context, _ types.Filter, _ types.UpdateParams) *metrics.Metric {
 			return &metrics.Metric{}
@@ -135,7 +142,7 @@ func TestRegisterUpdateRoute_WriteStartupMessageCalledWhenBlocking(t *testing.T)
 	}
 
 	registerUpdateRoute(context.Background(), app, auth, opts)
-	assert.True(t, called)
+	assert.False(t, called)
 }
 
 // TestRegisterUpdateRoute_TimeoutIsServiceUnavailable verifies that an update
@@ -145,8 +152,7 @@ func TestRegisterUpdateRoute_TimeoutIsServiceUnavailable(t *testing.T) {
 	app := testApp()
 	auth := testAuthMiddleware()
 
-	lock := make(chan bool, 1)
-	lock <- true
+	lock := scheduling.NewUpdateLock()
 
 	// The update runs until the test ends, so only the timeout can answer.
 	release := make(chan struct{})

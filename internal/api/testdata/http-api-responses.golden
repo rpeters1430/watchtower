@@ -123,7 +123,7 @@ header: Content-Type: application/json; charset=utf-8
 body:
 {
   "api_version": "v1",
-  "containers": null,
+  "containers": [],
   "count": 0,
   "timestamp": "<timestamp>"
 }
@@ -167,7 +167,7 @@ body:
       "name": "worker",
       "image": "ghcr.io/org/worker:latest",
       "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "running": true,
       "watchtower": false,
       "monitor_only": true,
@@ -247,7 +247,7 @@ body:
     {
       "name": "ghcr.io/org/worker:latest",
       "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "containers": 1
     },
     {
@@ -279,7 +279,7 @@ body:
 {
   "api_version": "v1",
   "count": 0,
-  "images": null,
+  "images": [],
   "timestamp": "<timestamp>"
 }
 
@@ -450,3 +450,63 @@ status: 202
 header: Content-Type: text/plain; charset=utf-8
 body:
 Accepted
+
+=== POST /v1/update
+status: 200
+header: Content-Type: application/json; charset=utf-8
+body:
+{
+  "api_version": "v1",
+  "summary": {
+    "failed": 0,
+    "restarted": 0,
+    "scan_failed": true,
+    "scanned": 5,
+    "skipped": 0,
+    "updated": 1
+  },
+  "timestamp": "<timestamp>",
+  "timing": {
+    "duration": "<duration>",
+    "duration_ms": 0
+  }
+}
+
+=== GET /v1/status
+status: 200
+header: Content-Type: application/json; charset=utf-8
+body:
+{
+  "api_version": "v1",
+  "summary": {
+    "failed": 0,
+    "restarted": 0,
+    "scan_failed": true,
+    "scanned": 5,
+    "skipped": 0,
+    "updated": 1
+  },
+  "timestamp": "<timestamp>"
+}
+
+=== GET /v1/history
+status: 200
+header: Content-Type: application/json; charset=utf-8
+body:
+{
+  "api_version": "v1",
+  "count": 1,
+  "entries": [
+    {
+      "timestamp": "<timestamp>",
+      "kind": "scan",
+      "scanned": 5,
+      "updated": 1,
+      "failed": 0,
+      "restarted": 0,
+      "skipped": 0,
+      "scan_failed": true
+    }
+  ],
+  "timestamp": "<timestamp>"
+}

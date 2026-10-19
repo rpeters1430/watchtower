@@ -1,8 +1,12 @@
 package sorter
 
 import (
+	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -221,8 +225,8 @@ func TestDependencyGraph_CycleMembersLinkSources(t *testing.T) {
 			want: []string{"app", "data"},
 		},
 		{
-			// A depends-on label replaces the other link sources, except
-			// volumes-from, which is always a dependency.
+			// A depends-on label does not hide volumes-from, which is always
+			// a dependency.
 			name: "volumes-from beside a depends-on label",
 			containers: deploy(
 				deployed{name: "app", dependsOn: "db", volumesFrom: []string{"data"}},
@@ -872,4 +876,115 @@ func TestDependencyGraph_UnresolvedDependsOn(t *testing.T) {
 	}
 
 	assert.ElementsMatch(t, []string{"app:missing", "watchtower:gone"}, got)
+}
+
+// TestNewDependencyGraph_LogsDependenciesOnce verifies that building the graph
+// logs each container's dependencies in a single debug entry, and logs nothing
+// for a container without dependencies.
+func TestNewDependencyGraph_LogsDependenciesOnce(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+
+	log := zerolog.New(&out).Level(zerolog.DebugLevel)
+	containers := []types.Container{
+		dependsOn("db", ""),
+		dependsOn("cache", ""),
+		dependsOn("app", "db,cache"),
+	}
+
+	_, err := NewDependencyGraph(&log, containers, nil, false)
+	require.NoError(t, err)
+
+	links := map[string][]string{}
+
+	for line := range strings.Lines(out.String()) {
+		var record struct {
+			Message   string   `json:"message"`
+			Container string   `json:"container"`
+			Links     []string `json:"links"`
+		}
+
+		require.NoError(t, json.Unmarshal([]byte(line), &record))
+
+		if record.Message == "Found container dependencies" {
+			require.NotContains(t, links, record.Container, "one entry per container")
+
+			links[record.Container] = record.Links
+		}
+	}
+
+	assert.Equal(t, map[string][]string{"app": {"db", "cache"}}, links)
+}
+
+// TestSortByDependencies_DoesNotLogDependencies verifies that sorting a set of
+// containers on its own does not log their dependencies again, since the
+// scan's dependency graph already logs them.
+func TestSortByDependencies_DoesNotLogDependencies(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+
+	log := zerolog.New(&out).Level(zerolog.DebugLevel)
+	containers := []types.Container{dependsOn("app", "db"), dependsOn("db", "")}
+
+	require.NoError(t, SortByDependencies(&log, containers, false))
+	assert.NotContains(t, out.String(), "Found container dependencies")
+}
+
+// TestDependencyGraph_HostConfigBesideLabels verifies that a container is
+// ordered after its network-mode and legacy-link targets even when a label
+// names other dependencies, and that a target named by two link sources is a
+// single dependency.
+func TestDependencyGraph_HostConfigBesideLabels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		containers []types.Container
+		// useComposeDependsOn includes Compose depends_on labels as links.
+		useComposeDependsOn bool
+		// want lists the edges as dependent->dependency.
+		want []string
+	}{
+		{
+			name: "depends-on label beside network mode",
+			containers: deploy(
+				deployed{name: "app", dependsOn: "db", networkMode: "container:vpn"},
+				deployed{name: "db"},
+				deployed{name: "vpn"},
+			),
+			want: []string{"app->db", "app->vpn"},
+		},
+		{
+			name: "depends-on label beside a legacy link",
+			containers: deploy(
+				deployed{name: "app", dependsOn: "db", links: []string{"cache:cache"}},
+				deployed{name: "db"},
+				deployed{name: "cache"},
+			),
+			want: []string{"app->db", "app->cache"},
+		},
+		{
+			// Compose adds a depends_on for a service whose network it uses.
+			name: "Compose depends_on and network mode naming the same container",
+			containers: deploy(
+				deployed{
+					name: "shop-app-1", project: "shop", service: "app", number: "1",
+					composeDependsOn: "vpn:service_started:false", networkMode: "container:shop-vpn-1",
+				},
+				deployed{name: "shop-vpn-1", project: "shop", service: "vpn", number: "1"},
+			),
+			useComposeDependsOn: true,
+			want:                []string{"shop-app-1->shop-vpn-1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.ElementsMatch(t, tt.want, graphEdges(t, tt.containers, nil, tt.useComposeDependsOn))
+		})
+	}
 }

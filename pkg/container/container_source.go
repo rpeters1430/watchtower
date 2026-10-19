@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"net/netip"
@@ -186,8 +187,8 @@ func GetSourceContainer(log *zerolog.Logger,
 //   - imageCache: Optional per-list cache of ImageInspect results keyed by image ID.
 //
 // Returns:
-//   - types.Container: Container object if successful.
-//   - error: Non-nil if inspection fails, nil on success.
+//   - types.Container: Container object if successful. It has no image info when only the image inspect fails.
+//   - error: Non-nil if the container inspect fails or the image inspect is canceled or times out.
 func getSourceContainer(log *zerolog.Logger,
 	ctx context.Context,
 	api dockerClient.APIClient,
@@ -256,6 +257,12 @@ func getSourceContainer(log *zerolog.Logger,
 
 	imageInfo, err := resolveImageInspect(ctx, api, containerInfo.Image, imageCache)
 	if err != nil {
+		// A canceled or timed-out inspect ends the listing. Other failures, such
+		// as a removed image, leave the container without image info.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+
 		clog.Debug().
 			Err(err).
 			Str("container", util.NormalizeContainerName(containerInfo.Name)).
@@ -443,7 +450,8 @@ func cloneImageInspect(src *dockerImage.InspectResponse) *dockerImage.InspectRes
 //   - timeout: Duration to wait for graceful shutdown before forcing termination with SIGKILL.
 //
 // Returns:
-//   - error: Non-nil if stopping the container fails, nil on successful completion.
+//   - error: Non-nil if stopping the container fails, including a not-found error when the container no
+//     longer exists. Nil on successful completion.
 func StopSourceContainer(log *zerolog.Logger,
 	ctx context.Context,
 	api dockerClient.APIClient,
@@ -512,14 +520,14 @@ func StopSourceContainer(log *zerolog.Logger,
 		},
 	)
 	if err != nil {
-		// Check if the container was already removed by another process before
-		// the stop call completed, treating it as already stopped.
+		// The container was removed before it could be stopped. Report that
+		// so callers can tell it apart from a container this call stopped.
 		if cerrdefs.IsNotFound(err) {
 			clog.Debug().
 				Dur("elapsed", time.Since(startTime)).
-				Msg("Container not found during stop, treating as already stopped")
+				Msg("Container not found during stop")
 
-			return nil
+			return fmt.Errorf("%w: %w", errStopContainerFailed, err)
 		}
 
 		// Log the failure with elapsed time and error details for debugging.
@@ -555,7 +563,9 @@ func StopSourceContainer(log *zerolog.Logger,
 //   - removeVolumes: Boolean indicating whether to remove associated volumes during container removal.
 //
 // Returns:
-//   - error: Non-nil if stopping or removing the container fails, nil on successful completion.
+//   - error: Non-nil if stopping or removing the container fails. A not-found error means the container was
+//     gone before this call stopped or removed it. Nil on successful completion, including a container that
+//     disappeared after this call stopped it.
 func StopAndRemoveSourceContainer(log *zerolog.Logger,
 	ctx context.Context,
 	api dockerClient.APIClient,
@@ -626,12 +636,22 @@ func StopAndRemoveSourceContainer(log *zerolog.Logger,
 	}
 
 	if cerrdefs.IsNotFound(err) {
-		// Log that the container was already removed, likely by another process or AutoRemove.
+		// A container this call stopped may already be gone, removed by another
+		// process. A container that was not running was gone before this call
+		// acted on it, so report that.
+		if !wasRunning {
+			clog.Debug().
+				Dur("elapsed", time.Since(startTime)).
+				Msg("Container not found during removal")
+
+			return fmt.Errorf("%w: %w", errRemoveContainerFailed, err)
+		}
+
 		clog.Debug().
 			Dur("elapsed", time.Since(startTime)).
 			Msg("Container already removed by another process")
 
-		return nil // Container already gone.
+		return nil
 	}
 
 	// Log successful removal with elapsed time to confirm the operation's duration.

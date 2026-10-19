@@ -17,6 +17,7 @@ import (
 	dockerClient "github.com/moby/moby/client"
 
 	"github.com/nicholas-fedor/watchtower/internal/activity"
+	registryConfig "github.com/nicholas-fedor/watchtower/internal/config/registry"
 	"github.com/nicholas-fedor/watchtower/pkg/container/oci"
 	"github.com/nicholas-fedor/watchtower/pkg/registry"
 	"github.com/nicholas-fedor/watchtower/pkg/registry/auth"
@@ -100,6 +101,8 @@ type imageClient struct {
 	log *zerolog.Logger
 	// daemonInfo shares Docker Info and mirrors across check and pull paths.
 	daemonInfo *daemonInfoCache
+	// registrySettings holds the settings for registry requests.
+	registrySettings registryConfig.Registry
 }
 
 // IsContainerStale determines if a container's image is outdated.
@@ -227,6 +230,7 @@ func (c imageClient) CheckContainerUpdate(
 		ctx,
 		sourceContainer,
 		opts.RegistryAuth,
+		c.registrySettings,
 		endpoints...,
 	)
 	if err != nil {
@@ -651,11 +655,21 @@ func (c imageClient) logger() *zerolog.Logger {
 // Parameters:
 //   - api: Docker API client.
 //   - log: Logger for debug output.
+//   - registrySettings: Settings for registry requests.
 //
 // Returns:
 //   - imageClient: Initialized client for image operations.
-func newImageClient(api dockerClient.APIClient, log *zerolog.Logger) imageClient {
-	return imageClient{api: api, log: log, daemonInfo: sharedDaemonInfoCache}
+func newImageClient(
+	api dockerClient.APIClient,
+	log *zerolog.Logger,
+	registrySettings registryConfig.Registry,
+) imageClient {
+	return imageClient{
+		api:              api,
+		log:              log,
+		daemonInfo:       sharedDaemonInfoCache,
+		registrySettings: registrySettings,
+	}
 }
 
 // shouldSkipPull determines if an image pull can be skipped.
@@ -695,7 +709,7 @@ func (c imageClient) shouldSkipPull(
 
 	// Compare current and remote digests, trying each endpoint.
 	// Local-only images are handled inside CompareDigest (match=true, err=nil).
-	match, err := digest.CompareDigest(c.logger(), ctx, sourceContainer, registryAuth, endpoints...)
+	match, err := digest.CompareDigest(c.logger(), ctx, sourceContainer, registryAuth, c.registrySettings, endpoints...)
 	if err != nil {
 		clog.Debug().
 			Bool("match", match).
@@ -716,6 +730,8 @@ func (c imageClient) shouldSkipPull(
 		return false, fmt.Errorf("digest check rate limited: %w", err)
 	case err != nil:
 		// Digest retrieval failed. Log based on warning strategy and proceed with pull.
+		// The entry stays out of notifications because the pull decides the outcome
+		// and reports its own failures.
 		headLevel := zerolog.DebugLevel
 		if warn {
 			headLevel = zerolog.WarnLevel
@@ -723,6 +739,7 @@ func (c imageClient) shouldSkipPull(
 
 		clog.WithLevel(headLevel).
 			Err(err).
+			Str("notify", "no").
 			Msg("Digest retrieval failed, falling back to full pull")
 
 		return false, nil
