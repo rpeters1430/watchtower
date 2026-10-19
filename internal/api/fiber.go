@@ -9,11 +9,11 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/helmet"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
-	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/rs/zerolog"
 
 	fiberzerolog "github.com/gofiber/contrib/v3/zerolog"
+	fiberRecover "github.com/gofiber/fiber/v3/middleware/recover"
 )
 
 const (
@@ -124,7 +124,7 @@ func New(
 	}
 
 	middlewares := []any{
-		recover.New(),
+		fiberRecover.New(),
 		helmet.New(),
 	}
 
