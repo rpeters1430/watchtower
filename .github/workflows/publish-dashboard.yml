@@ -193,7 +193,7 @@ jobs:
               -e WATCHTOWER_API_TOKEN=smoke-token -e DASHBOARD_USER=smoke-user \
               -e DASHBOARD_PASSWORD=smoke-password "$image"
             trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
-            for attempt in $(seq 1 30); do
+            for _ in $(seq 1 30); do
               if curl -fsS http://localhost:18096/healthz >/dev/null; then break; fi
               sleep 2
             done
