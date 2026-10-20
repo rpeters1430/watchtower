@@ -861,7 +861,7 @@ const docTemplate = `{
                 ]
             },
             "patch": {
-                "description": "Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan, scan_secrets (booleans), scan_gate (off, low, medium, high, or critical), scanner (trivy or",
+                "description": "Changes the named settings: booleans monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan, scan_secrets; strings scan_gate, scanner, schedule\n(cron); and container_overrides (map). JSON null resets one.",
                 "consumes": [
                     "application/json"
                 ],
