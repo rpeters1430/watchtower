@@ -802,6 +802,17 @@
         markUpdated(names);
       }
     } catch (problem) {
+      // The request timed out, but the update carries on in Watchtower. Leave
+      // it to the progress poll, which reports it when it finishes.
+      if (problem.status === 503) {
+        notify(`Still updating ${label}. The result shows here when Watchtower finishes.`);
+        names.forEach((name) => state.updating.delete(name));
+        scheduleActivity(1_000);
+        render();
+
+        return;
+      }
+
       const reason = problem.status === 429 ? "Another update is already running." : problem.message;
 
       notify(`Couldn't update ${label}. ${reason}`, true);

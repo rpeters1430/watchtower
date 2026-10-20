@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -24,6 +25,10 @@ var ErrSecurityHold = errors.New("update held by scan gate")
 // on. An update whose new image introduces findings at or above the gate is
 // held: the container is no longer stale and is reported as skipped with the
 // findings that held it. A failed scan never holds an update.
+//
+// Scans are bounded by the reviewer's own timeout, not by ctx's deadline, so a
+// slow scan cannot use up the time an update request has to restart its
+// containers. See extendDeadline for how the caller gives that time back.
 //
 // Parameters:
 //   - log: Process logger.
@@ -45,6 +50,9 @@ func reviewSecurity(
 	if reviewer == nil {
 		return nil
 	}
+
+	ctx, cancel := withoutDeadline(ctx)
+	defer cancel()
 
 	reviews := make(map[types.ContainerID]*scanner.Review)
 	tracker := activity.Default()
@@ -139,6 +147,78 @@ func reviewSecurity(
 	progress.UpdateSkipped(log, held)
 
 	return reviews
+}
+
+// withoutDeadline returns a context that keeps parent's values and is canceled
+// when parent is canceled, but outlives parent's deadline.
+//
+// Parameters:
+//   - parent: Context to detach from its deadline.
+//
+// Returns:
+//   - context.Context: Context without parent's deadline.
+//   - context.CancelFunc: Releases the context. Always non-nil.
+func withoutDeadline(parent context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := parent.Deadline(); !ok {
+		return parent, func() {}
+	}
+
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
+
+	return followCancel(parent, ctx, cancel)
+}
+
+// extendDeadline returns a context like parent whose deadline is extra later,
+// so time spent scanning images is given back to the rest of the update. It is
+// still canceled when parent is canceled for any reason other than its
+// deadline.
+//
+// Parameters:
+//   - parent: Context whose deadline to move.
+//   - extra: How much later the deadline falls.
+//
+// Returns:
+//   - context.Context: Context with the later deadline, or parent when it has
+//     no deadline or extra is not positive.
+//   - context.CancelFunc: Releases the context. Always non-nil.
+func extendDeadline(parent context.Context, extra time.Duration) (context.Context, context.CancelFunc) {
+	deadline, ok := parent.Deadline()
+	if !ok || extra <= 0 {
+		return parent, func() {}
+	}
+
+	ctx, cancel := context.WithDeadline(context.WithoutCancel(parent), deadline.Add(extra))
+
+	return followCancel(parent, ctx, cancel)
+}
+
+// followCancel cancels ctx when parent is canceled, but not when parent only
+// reached its deadline. Once parent's deadline has passed, a later
+// cancellation of its own parent no longer reaches ctx; ctx's own deadline or
+// the reviewer's timeout still bounds it.
+//
+// Parameters:
+//   - parent: Context whose cancellation ctx follows.
+//   - ctx: Context detached from parent.
+//   - cancel: Cancels ctx.
+//
+// Returns:
+//   - context.Context: ctx.
+//   - context.CancelFunc: Stops following parent and cancels ctx.
+func followCancel(
+	parent, ctx context.Context,
+	cancel context.CancelFunc,
+) (context.Context, context.CancelFunc) {
+	stop := context.AfterFunc(parent, func() {
+		if !errors.Is(parent.Err(), context.DeadlineExceeded) {
+			cancel()
+		}
+	})
+
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 // logSecurityFixes logs the findings each completed update fixed, so
