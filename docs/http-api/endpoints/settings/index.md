@@ -41,6 +41,8 @@ The same directory holds `history.json`, the scan history returned by [`/v1/hist
 !!! Note
     Saved settings are ignored for `--run-once`, which always follows its flags.
 
+    Rolling restarts depend on the containers running when Watchtower starts. If a saved `rolling_restart` is no longer possible, for example because a container now depends on another, Watchtower logs a warning and goes back to the startup value for that setting only. The other saved settings still apply.
+
 ## Reading Settings
 
 ```bash
