@@ -121,7 +121,9 @@ func (h *Handler) Get(c fiber.Ctx) error {
 // Patch changes one or more runtime settings.
 //
 //	@Summary		Change runtime settings
-//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan, scan_secrets (booleans), scan_gate (off, low, medium, high, or critical), scanner (trivy or
+//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan, scan_secrets (booleans), scan_gate (off, low, medium, high, or critical),
+//
+// scanner (trivy or
 //
 // grype), schedule (cron)
 //

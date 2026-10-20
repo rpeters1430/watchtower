@@ -10,9 +10,9 @@ import (
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
-// trivyWithoutSecretsSelection names the selection that runs Trivy without
-// its secret check. It is never shown: the backend's name stays "trivy".
-const trivyWithoutSecretsSelection = "trivy-without-secrets"
+// trivyVulnOnlySelection names the selection that runs Trivy without its
+// secret check. It is never shown: the backend's name stays "trivy".
+const trivyVulnOnlySelection = "trivy-vuln-only"
 
 // newSecurityService builds the image scanner. It is built whether or not
 // update scanning is on, so the setting can be switched at run time and the
@@ -54,7 +54,7 @@ func newSecurityService(
 	trivy := scanner.NewTrivy(log, runner, trivyOptions)
 
 	trivyOptions.SkipSecrets = true
-	trivyWithoutSecrets := scanner.NewTrivy(log, runner, trivyOptions)
+	trivyVulnOnly := scanner.NewTrivy(log, runner, trivyOptions)
 	grype := scanner.NewGrype(log, runner, scanner.GrypeOptions{
 		Image:         cfg.GrypeImage,
 		IgnoreUnfixed: cfg.IgnoreUnfixed,
@@ -68,7 +68,7 @@ func newSecurityService(
 		func() string {
 			values := runtimeSettings.Effective()
 			if values.Scanner == scanner.TrivyName && !values.ScanSecrets {
-				return trivyWithoutSecretsSelection
+				return trivyVulnOnlySelection
 			}
 
 			return values.Scanner
@@ -78,8 +78,8 @@ func newSecurityService(
 				Reviewer: scanner.NewReviewer(trivy, cfg.Gate, cfg.Timeout),
 				Image:    cfg.Image,
 			},
-			trivyWithoutSecretsSelection: {
-				Reviewer: scanner.NewReviewer(trivyWithoutSecrets, cfg.Gate, cfg.Timeout),
+			trivyVulnOnlySelection: {
+				Reviewer: scanner.NewReviewer(trivyVulnOnly, cfg.Gate, cfg.Timeout),
 				Image:    cfg.Image,
 			},
 			scanner.GrypeName: {

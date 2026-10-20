@@ -523,41 +523,9 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 	case KeyScanSecrets:
 		return decode(key, raw, &o.ScanSecrets)
 	case KeyScanGate:
-		var name *string
-
-		err := decode(key, raw, &name)
-		if err != nil || name == nil {
-			o.ScanGate = nil
-
-			return err
-		}
-
-		gate, err := scanner.ParseGate(*name)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidValue, err)
-		}
-
-		o.ScanGate = &gate
-
-		return nil
+		return o.setScanGate(key, raw)
 	case KeyScanner:
-		var name *string
-
-		err := decode(key, raw, &name)
-		if err != nil || name == nil {
-			o.Scanner = nil
-
-			return err
-		}
-
-		backend, err := scanner.ParseBackend(*name)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidValue, err)
-		}
-
-		o.Scanner = &backend
-
-		return nil
+		return o.setScanner(key, raw)
 	case KeySchedule:
 		err := decode(key, raw, &o.Schedule)
 		if err == nil && o.Schedule != nil {
@@ -596,6 +564,48 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 	default:
 		return fmt.Errorf("%w: %s", ErrUnknownSetting, key)
 	}
+}
+
+// setScanGate records a scan gate change. JSON null clears the override.
+func (o *overrides) setScanGate(key string, raw json.RawMessage) error {
+	var name *string
+
+	err := decode(key, raw, &name)
+	if err != nil || name == nil {
+		o.ScanGate = nil
+
+		return err
+	}
+
+	gate, err := scanner.ParseGate(*name)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidValue, err)
+	}
+
+	o.ScanGate = &gate
+
+	return nil
+}
+
+// setScanner records a scanner change. JSON null clears the override.
+func (o *overrides) setScanner(key string, raw json.RawMessage) error {
+	var name *string
+
+	err := decode(key, raw, &name)
+	if err != nil || name == nil {
+		o.Scanner = nil
+
+		return err
+	}
+
+	backend, err := scanner.ParseBackend(*name)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidValue, err)
+	}
+
+	o.Scanner = &backend
+
+	return nil
 }
 
 // decode parses raw into target, leaving target nil for JSON null.
