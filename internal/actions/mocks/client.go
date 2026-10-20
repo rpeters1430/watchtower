@@ -54,6 +54,7 @@ type TestData struct {
 	Containers                   []types.Container                     // List of mock containers.
 	ContainersByID               map[types.ContainerID]types.Container // Map of containers by ID.
 	Staleness                    map[string]bool                       // Map of container names to staleness status.
+	LatestImages                 map[string]types.ImageID              // Map of container names to the latest image a staleness check reports.
 	IsContainerStaleError        error                                 // Error to return from IsContainerStale (for testing).
 	ListContainersError          error                                 // Error to return from ListContainers (for testing).
 	ListContainersFailCount      int                                   // Number of times ListContainers should fail before succeeding.
@@ -518,7 +519,7 @@ func (client MockClient) IsContainerStale(
 		stale = true // Default to stale if not specified.
 	}
 
-	return stale, "", "", nil
+	return stale, client.TestData.LatestImages[container.Name()], "", nil
 }
 
 // CheckContainerUpdate reports update availability using the same staleness map as IsContainerStale.

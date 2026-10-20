@@ -218,3 +218,147 @@ func TestFindingList(t *testing.T) {
 	assert.Contains(t, list, "and 3 more")
 	assert.Empty(t, findingList(nil))
 }
+
+// slowReviewer records the context of each review and waits until its
+// deadline would have passed.
+type slowReviewer struct {
+	wait time.Duration
+	errs []error
+}
+
+func (s *slowReviewer) ReviewUpdate(ctx context.Context, _, _ string) (*scanner.Review, error) {
+	time.Sleep(s.wait)
+	s.errs = append(s.errs, ctx.Err())
+
+	clean, _ := securityFixture()
+
+	return clean, nil
+}
+
+func TestReviewSecurityOutlivesUpdateDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+
+	reviewer := &slowReviewer{wait: 50 * time.Millisecond}
+	progress := &session.Progress{}
+	web := staleContainer(t, progress, "web-id", "/web", "sha256:web-old", "sha256:web-new")
+
+	reviews := reviewSecurity(
+		logging.NopLogger(),
+		ctx,
+		[]types.Container{web},
+		progress,
+		types.UpdateParams{SecurityReviewer: reviewer},
+	)
+
+	require.Len(t, reviews, 1)
+	assert.Equal(t, []error{nil}, reviewer.errs)
+	assert.True(t, web.IsStale())
+}
+
+func TestWithoutDeadline(t *testing.T) {
+	t.Parallel()
+
+	t.Run("outlives the deadline", func(t *testing.T) {
+		t.Parallel()
+
+		parent, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+		defer cancel()
+
+		ctx, release := withoutDeadline(parent)
+		defer release()
+
+		<-parent.Done()
+
+		_, hasDeadline := ctx.Deadline()
+		assert.False(t, hasDeadline)
+		require.NoError(t, ctx.Err())
+	})
+
+	t.Run("follows cancellation", func(t *testing.T) {
+		t.Parallel()
+
+		parent, cancel := context.WithTimeout(t.Context(), time.Hour)
+
+		ctx, release := withoutDeadline(parent)
+		defer release()
+
+		cancel()
+
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+			t.Fatal("context was not canceled with its parent")
+		}
+
+		require.ErrorIs(t, ctx.Err(), context.Canceled)
+	})
+
+	t.Run("no deadline", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, release := withoutDeadline(t.Context())
+		defer release()
+
+		assert.Equal(t, t.Context(), ctx)
+	})
+}
+
+func TestExtendDeadline(t *testing.T) {
+	t.Parallel()
+
+	t.Run("moves the deadline", func(t *testing.T) {
+		t.Parallel()
+
+		parent, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+		defer cancel()
+
+		deadline, _ := parent.Deadline()
+
+		ctx, release := extendDeadline(parent, time.Hour)
+		defer release()
+
+		<-parent.Done()
+
+		extended, ok := ctx.Deadline()
+		require.True(t, ok)
+		assert.Equal(t, deadline.Add(time.Hour), extended)
+		require.NoError(t, ctx.Err())
+	})
+
+	t.Run("follows cancellation", func(t *testing.T) {
+		t.Parallel()
+
+		parent, cancel := context.WithTimeout(t.Context(), time.Hour)
+
+		ctx, release := extendDeadline(parent, time.Hour)
+		defer release()
+
+		cancel()
+
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+			t.Fatal("context was not canceled with its parent")
+		}
+	})
+
+	t.Run("no deadline or no extra time", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, release := extendDeadline(t.Context(), time.Hour)
+		defer release()
+
+		assert.Equal(t, t.Context(), ctx)
+
+		parent, cancel := context.WithTimeout(t.Context(), time.Hour)
+		defer cancel()
+
+		same, releaseSame := extendDeadline(parent, 0)
+		defer releaseSame()
+
+		assert.Equal(t, parent, same)
+	})
+}

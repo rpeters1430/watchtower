@@ -35,6 +35,9 @@ type TrivyOptions struct {
 	CacheVolume string
 	// IgnoreUnfixed leaves out vulnerabilities with no published fix.
 	IgnoreUnfixed bool
+	// SkipSecrets leaves out the check for secrets in the image's files,
+	// which reads every file of every layer and is often most of a scan.
+	SkipSecrets bool
 }
 
 // Trivy scans images by running the Trivy CLI in a short-lived container.
@@ -128,6 +131,11 @@ func (t *Trivy) Scan(ctx context.Context, ref string) (*Result, error) {
 // Returns:
 //   - []string: Arguments after the image entrypoint.
 func (t *Trivy) args(ref string) []string {
+	scanners := "vuln,secret"
+	if t.options.SkipSecrets {
+		scanners = "vuln"
+	}
+
 	args := []string{
 		"image",
 		// Log lines on standard error say what the scan is doing; the
@@ -135,7 +143,7 @@ func (t *Trivy) args(ref string) []string {
 		"--no-progress",
 		"--format", "json",
 		"--cache-dir", trivyCacheDir,
-		"--scanners", "vuln,secret",
+		"--scanners", scanners,
 		"--image-config-scanners", "misconfig",
 	}
 

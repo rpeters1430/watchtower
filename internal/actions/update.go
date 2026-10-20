@@ -775,8 +775,18 @@ func Update(
 		Msg("Completed container staleness check")
 
 	// Scan the new image of each pending update, and hold updates the scan
-	// gate rejects, before any container is stopped.
+	// gate rejects, before any container is stopped. Scanning can take longer
+	// than an API update's whole deadline, so the time it took is added back;
+	// otherwise every approved update would be skipped as canceled.
+	scanStarted := time.Now()
 	securityReviews := reviewSecurity(log, ctx, filteredContainers, progress, config)
+
+	if config.SecurityReviewer != nil {
+		var cancelAfterScan context.CancelFunc
+
+		ctx, cancelAfterScan = extendDeadline(ctx, time.Since(scanStarted))
+		defer cancelAfterScan()
+	}
 
 	// Build a map for a lookup of containers by ID.
 	containerByID := make(map[types.ContainerID]types.Container, len(allContainers))

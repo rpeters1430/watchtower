@@ -121,6 +121,7 @@ Flags:
       --scan-grype-image string                     Grype image used to scan images (default "anchore/grype:latest")
       --scan-ignore-unfixed                         Leave out vulnerabilities that have no published fix
       --scan-image string                           Trivy image used to scan images (default "aquasec/trivy:latest")
+      --scan-secrets                                Check images for secrets, such as keys and passwords, left in their files (Trivy only) (default true)
       --scan-timeout duration                       Timeout for scanning one image, including the first vulnerability database download (default 15m0s)
       --scanner string                              Vulnerability scanner to run (trivy, grype) (default "trivy")
   -s, --schedule string                             The cron expression which defines when to update

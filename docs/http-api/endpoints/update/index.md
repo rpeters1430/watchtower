@@ -90,6 +90,8 @@ curl -X POST -H "Authorization: Bearer mytoken" "localhost:8080/v1/update?timeou
 !!! Note
     For synchronous updates, this bounds the time the HTTP response is held. For asynchronous updates (`?async=true`), this bounds how long the background update runs before being cancelled.
 
+    Time spent [scanning new images](../../../advanced-features/image-scanning/index.md) does not count toward the timeout. Each scan is bounded by `--scan-timeout` instead, so a slow scan cannot leave the update with no time to restart its containers. A synchronous request can still return `503` while the update finishes in the background.
+
 ### Asynchronous Updates
 
 The `/v1/update` endpoint supports an `async` query parameter to trigger updates without waiting for completion. This is useful for CI environments or automation that needs to fire-and-forget without maintaining a long-lived connection.

@@ -121,11 +121,8 @@ func (h *Handler) Get(c fiber.Ctx) error {
 // Patch changes one or more runtime settings.
 //
 //	@Summary		Change runtime settings
-//	@Description	Changes the named settings: monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan (booleans), scan_gate (off, low, medium, high, or critical), scanner (trivy or
-//
-// grype), schedule (cron)
-//
-// and container_overrides (map). JSON null resets one.
+//	@Description	Changes the named settings: booleans monitor_only, cleanup, rolling_restart, auto_rollback, include_stopped, scan, scan_secrets; strings scan_gate, scanner, schedule
+//	@Description	(cron); and container_overrides (map). JSON null resets one.
 //
 //	@Tags			settings
 //	@Accept			json
@@ -287,6 +284,11 @@ func (h *Handler) send(c fiber.Ctx) error {
 				Value:   backendName(values.Scanner),
 				Default: backendName(defaults.Scanner),
 				Changed: changed[runtime.KeyScanner],
+			},
+			runtime.KeyScanSecrets: {
+				Value:   values.ScanSecrets,
+				Default: defaults.ScanSecrets,
+				Changed: changed[runtime.KeyScanSecrets],
 			},
 		},
 		Saved:          snapshot.Persistent,

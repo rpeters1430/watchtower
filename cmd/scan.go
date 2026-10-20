@@ -10,6 +10,10 @@ import (
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
+// trivyVulnOnlySelection names the selection that runs Trivy without its
+// secret check. It is never shown: the backend's name stays "trivy".
+const trivyVulnOnlySelection = "trivy-vuln-only"
+
 // newSecurityService builds the image scanner. It is built whether or not
 // update scanning is on, so the setting can be switched at run time and the
 // HTTP API can scan running images on request.
@@ -42,21 +46,40 @@ func newSecurityService(
 	// Both scanners are set up so the choice can change at run time. Neither
 	// runs, or downloads anything, until it scans an image.
 	runner := scanner.NewDockerRunner(log, api, cfg.DockerSocket)
-	trivy := scanner.NewTrivy(log, runner, scanner.TrivyOptions{
+	trivyOptions := scanner.TrivyOptions{
 		Image:         cfg.Image,
 		CacheVolume:   cfg.CacheVolume,
 		IgnoreUnfixed: cfg.IgnoreUnfixed,
-	})
+	}
+	trivy := scanner.NewTrivy(log, runner, trivyOptions)
+
+	trivyOptions.SkipSecrets = true
+	trivyVulnOnly := scanner.NewTrivy(log, runner, trivyOptions)
 	grype := scanner.NewGrype(log, runner, scanner.GrypeOptions{
 		Image:         cfg.GrypeImage,
 		IgnoreUnfixed: cfg.IgnoreUnfixed,
 	})
 
+	// Trivy with and without the secret check are separate selections, so
+	// each keeps its own cached results. A review never compares a scan that
+	// checked for secrets with one that did not, which would report every
+	// secret in the running image as fixed.
 	selector := scanner.NewSelector(
-		func() string { return runtimeSettings.Effective().Scanner },
+		func() string {
+			values := runtimeSettings.Effective()
+			if values.Scanner == scanner.TrivyName && !values.ScanSecrets {
+				return trivyVulnOnlySelection
+			}
+
+			return values.Scanner
+		},
 		map[string]scanner.Selection{
 			scanner.TrivyName: {
 				Reviewer: scanner.NewReviewer(trivy, cfg.Gate, cfg.Timeout),
+				Image:    cfg.Image,
+			},
+			trivyVulnOnlySelection: {
+				Reviewer: scanner.NewReviewer(trivyVulnOnly, cfg.Gate, cfg.Timeout),
 				Image:    cfg.Image,
 			},
 			scanner.GrypeName: {

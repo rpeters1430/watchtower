@@ -23,6 +23,8 @@ type Scan struct {
 	Timeout time.Duration
 	// IgnoreUnfixed leaves out vulnerabilities with no published fix.
 	IgnoreUnfixed bool
+	// Secrets checks images for secrets left in their files. Trivy only.
+	Secrets bool
 	// CacheVolume keeps Trivy's vulnerability database between scans.
 	CacheVolume string
 	// DockerSocket is the host path of the Docker socket mounted into the scanner.

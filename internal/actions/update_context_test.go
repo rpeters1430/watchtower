@@ -15,6 +15,7 @@ import (
 
 	"github.com/nicholas-fedor/watchtower/internal/actions"
 	mockActions "github.com/nicholas-fedor/watchtower/internal/actions/mocks"
+	"github.com/nicholas-fedor/watchtower/pkg/scanner"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -90,6 +91,34 @@ var _ = ginkgo.Describe("the update action", func() {
 				gomega.Expect(cleanupImageInfos).To(gomega.HaveLen(2))
 			},
 		)
+	})
+
+	ginkgo.When("scanning new images takes longer than the update's deadline", func() {
+		ginkgo.It("should still update the containers whose scans passed", func() {
+			testData := getCommonTestData()
+			testData.LatestImages = map[string]types.ImageID{
+				"test-container-01": "sha256:new-01",
+				"test-container-02": "sha256:new-02",
+				"test-container-03": "sha256:new-03",
+			}
+			client := mockActions.CreateMockClient(testData, false, false)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+			defer cancel()
+
+			report, _, err := actions.Update(testLogger(),
+				ctx,
+				client,
+				types.UpdateParams{
+					CPUCopyMode:      "auto",
+					SecurityReviewer: slowCleanReviewer{wait: 40 * time.Millisecond},
+				},
+			)
+
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(report.Skipped()).To(gomega.BeEmpty())
+			gomega.Expect(report.Updated()).To(gomega.HaveLen(3))
+		})
 	})
 
 	ginkgo.When("the current container is an old Watchtower container", func() {
@@ -836,4 +865,19 @@ func TestEarlyCancellationRestartContainers(t *testing.T) {
 
 		_ = cleanupImageInfos
 	})
+}
+
+// slowCleanReviewer approves every update after a delay.
+type slowCleanReviewer struct {
+	wait time.Duration
+}
+
+func (s slowCleanReviewer) ReviewUpdate(ctx context.Context, _, _ string) (*scanner.Review, error) {
+	select {
+	case <-time.After(s.wait):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	return &scanner.Review{Latest: &scanner.Result{}, Gate: scanner.GateCritical}, nil
 }

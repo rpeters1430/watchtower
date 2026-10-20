@@ -41,6 +41,8 @@ const (
 	KeyScanGate = "scan_gate"
 	// KeyScanner is the vulnerability scanner that scans images: trivy or grype.
 	KeyScanner = "scanner"
+	// KeyScanSecrets is the setting that checks images for secrets left in their files.
+	KeyScanSecrets = "scan_secrets"
 	// KeyContainerOverrides maps container names to policy overrides (auto, monitor_only, pinned, update).
 	KeyContainerOverrides = "container_overrides"
 )
@@ -78,6 +80,9 @@ type Values struct {
 	ScanGate scanner.Gate
 	// Scanner is the vulnerability scanner backend, such as "trivy".
 	Scanner string
+	// ScanSecrets checks images for secrets left in their files. Only Trivy
+	// checks for secrets.
+	ScanSecrets bool
 }
 
 // Snapshot contains a consistent view of the effective settings and their
@@ -109,6 +114,7 @@ type overrides struct {
 	Scan               *bool             `json:"scan,omitempty"`
 	ScanGate           *scanner.Gate     `json:"scan_gate,omitempty"`
 	Scanner            *string           `json:"scanner,omitempty"`
+	ScanSecrets        *bool             `json:"scan_secrets,omitempty"`
 	// NotificationServices are notification destinations added at run time.
 	// They add to the URLs from flags rather than replacing them.
 	NotificationServices []NotificationService `json:"notification_services,omitempty"`
@@ -206,6 +212,7 @@ func (s *Store) Overridden() map[string]bool {
 		KeyScan:               s.overrides.Scan != nil,
 		KeyScanGate:           s.overrides.ScanGate != nil,
 		KeyScanner:            s.overrides.Scanner != nil,
+		KeyScanSecrets:        s.overrides.ScanSecrets != nil,
 	}
 }
 
@@ -228,6 +235,7 @@ func (s *Store) Snapshot() Snapshot {
 			KeyScan:               s.overrides.Scan != nil,
 			KeyScanGate:           s.overrides.ScanGate != nil,
 			KeyScanner:            s.overrides.Scanner != nil,
+			KeyScanSecrets:        s.overrides.ScanSecrets != nil,
 		},
 		Persistent: s.path != "",
 	}
@@ -490,6 +498,10 @@ func (o *overrides) apply(defaults Values) Values {
 		values.Scanner = *o.Scanner
 	}
 
+	if o.ScanSecrets != nil {
+		values.ScanSecrets = *o.ScanSecrets
+	}
+
 	return values
 }
 
@@ -508,42 +520,12 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 		return decode(key, raw, &o.IncludeStopped)
 	case KeyScan:
 		return decode(key, raw, &o.Scan)
+	case KeyScanSecrets:
+		return decode(key, raw, &o.ScanSecrets)
 	case KeyScanGate:
-		var name *string
-
-		err := decode(key, raw, &name)
-		if err != nil || name == nil {
-			o.ScanGate = nil
-
-			return err
-		}
-
-		gate, err := scanner.ParseGate(*name)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidValue, err)
-		}
-
-		o.ScanGate = &gate
-
-		return nil
+		return o.setScanGate(key, raw)
 	case KeyScanner:
-		var name *string
-
-		err := decode(key, raw, &name)
-		if err != nil || name == nil {
-			o.Scanner = nil
-
-			return err
-		}
-
-		backend, err := scanner.ParseBackend(*name)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidValue, err)
-		}
-
-		o.Scanner = &backend
-
-		return nil
+		return o.setScanner(key, raw)
 	case KeySchedule:
 		err := decode(key, raw, &o.Schedule)
 		if err == nil && o.Schedule != nil {
@@ -582,6 +564,48 @@ func (o *overrides) set(key string, raw json.RawMessage) error {
 	default:
 		return fmt.Errorf("%w: %s", ErrUnknownSetting, key)
 	}
+}
+
+// setScanGate records a scan gate change. JSON null clears the override.
+func (o *overrides) setScanGate(key string, raw json.RawMessage) error {
+	var name *string
+
+	err := decode(key, raw, &name)
+	if err != nil || name == nil {
+		o.ScanGate = nil
+
+		return err
+	}
+
+	gate, err := scanner.ParseGate(*name)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidValue, err)
+	}
+
+	o.ScanGate = &gate
+
+	return nil
+}
+
+// setScanner records a scanner change. JSON null clears the override.
+func (o *overrides) setScanner(key string, raw json.RawMessage) error {
+	var name *string
+
+	err := decode(key, raw, &name)
+	if err != nil || name == nil {
+		o.Scanner = nil
+
+		return err
+	}
+
+	backend, err := scanner.ParseBackend(*name)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidValue, err)
+	}
+
+	o.Scanner = &backend
+
+	return nil
 }
 
 // decode parses raw into target, leaving target nil for JSON null.

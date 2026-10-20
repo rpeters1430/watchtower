@@ -942,6 +942,14 @@
   list-parse: none
   hidden: false
   deprecated: ""
+--scan-secrets
+  shorthand: ""
+  kind: bool
+  default: true
+  env: WATCHTOWER_SCAN_SECRETS
+  list-parse: none
+  hidden: false
+  deprecated: ""
 --scan-cache-volume
   shorthand: ""
   kind: string

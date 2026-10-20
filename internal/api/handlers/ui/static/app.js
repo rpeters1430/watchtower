@@ -802,6 +802,17 @@
         markUpdated(names);
       }
     } catch (problem) {
+      // The request timed out, but the update carries on in Watchtower. Leave
+      // it to the progress poll, which reports it when it finishes.
+      if (problem.status === 503) {
+        notify(`Still updating ${label}. The result shows here when Watchtower finishes.`);
+        names.forEach((name) => state.updating.delete(name));
+        scheduleActivity(1_000);
+        render();
+
+        return;
+      }
+
       const reason = problem.status === 429 ? "Another update is already running." : problem.message;
 
       notify(`Couldn't update ${label}. ${reason}`, true);
@@ -2846,7 +2857,7 @@
         await loadContainers();
       }
 
-      if ("scan" in changes || "scan_gate" in changes || "scanner" in changes) {
+      if ("scan" in changes || "scan_gate" in changes || "scanner" in changes || "scan_secrets" in changes) {
         await loadSecurity();
       }
 
@@ -3092,6 +3103,17 @@
 
     if (security && security.available) {
       rows.push(scannerSetting(security));
+
+      // Only Trivy checks for secrets.
+      if (state.settings.settings.scanner.value === "trivy" && state.settings.settings.scan_secrets) {
+        rows.push(
+          switchSetting(
+            "scan_secrets",
+            "Check for secrets",
+            "Also look through every file in the image for keys, passwords and tokens left behind. This is often most of a scan's time, so turning it off makes scans much faster. Vulnerabilities are still checked.",
+          ),
+        );
+      }
     } else if (security) {
       rows.push(el("li", { class: "setting" }, el("p", { class: "problem" }, security.reason || "The image scanner isn't available.")));
     }
