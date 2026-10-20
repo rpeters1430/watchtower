@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -65,6 +67,11 @@ func Test_initTokenCache(t *testing.T) {
 func Test_computeTokenExpiry(t *testing.T) {
 	now := time.Now()
 	truncatedToSeconds := now.Truncate(time.Second)
+	issuedAt := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	// longestLifetime is the lifetime of the longest expires_in an int holds,
+	// capped at the longest whole number of seconds a duration holds.
+	longestLifetime := time.Duration(min(int64(math.MaxInt), int64(math.MaxInt64)/int64(time.Second))) * time.Second
 
 	tests := []struct {
 		name string
@@ -111,6 +118,16 @@ func Test_computeTokenExpiry(t *testing.T) {
 				IssuedAt: "not-a-date",
 			},
 			want: truncatedToSeconds.Add(defaultTokenTTL),
+		},
+		{
+			name: "caps an expires_in too long for a duration",
+			args: &types.TokenResponse{ExpiresIn: math.MaxInt},
+			want: truncatedToSeconds.Add(longestLifetime),
+		},
+		{
+			name: "caps an expires_in too long for a duration after issued_at",
+			args: &types.TokenResponse{ExpiresIn: math.MaxInt, IssuedAt: issuedAt.Format(time.RFC3339)},
+			want: issuedAt.Add(longestLifetime),
 		},
 	}
 
@@ -608,6 +625,29 @@ func Test_executeBearerTokenRequest_cacheHit(t *testing.T) {
 	got, err := executeBearerTokenRequest(testLog(), ctx, authURL, imageName, "", mockClient, registryConfig.Registry{})
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer cached-token", got)
+}
+
+// Test_executeBearerTokenRequest_cachesLongLivedToken verifies that a token
+// whose expires_in is too long for a duration is cached and reused rather than
+// fetched again.
+func Test_executeBearerTokenRequest_cachesLongLivedToken(t *testing.T) {
+	resetTokenCache(t)
+
+	body := fmt.Sprintf(`{"token":"long-lived-token","expires_in":%d}`, math.MaxInt)
+
+	mockClient := mockAuth.NewMockClient(t)
+	mockClient.On("Do", mock.Anything).Return(&http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}, nil).Once()
+
+	authURL := mustParseURL("https://long-lived.test.com/token?service=long-lived.test.com")
+
+	for range 2 {
+		got, err := executeBearerTokenRequest(testLog(), context.Background(), authURL, "test/image", "", mockClient, registryConfig.Registry{})
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer long-lived-token", got)
+	}
 }
 
 func resetTokenCache(t *testing.T) {
