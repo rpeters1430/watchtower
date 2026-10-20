@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add a setting to skip Trivy's secret check by @claude
 - Show security scan steps and time left during updates, and prune unused images by @claude
 - Add Grype as a selectable scanner and keep scanner images current by @claude
 - Scan updates by default, show ETA and queue, and show each update's CVE diff live by @claude
@@ -213,6 +214,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stop slow image scans from skipping API updates by @claude
 - Update the compose image label when recreating containers by @nicholas-fedor
 - Wait for the HTTP API to drain before exiting by @nicholas-fedor
 - Replace the update lock channel with a lock type by @nicholas-fedor
@@ -604,6 +606,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Fix lint findings from the scan_secrets setting by @claude
 - Satisfy golangci-lint on the scan progress changes by @claude
 - Refactor Renovate configuration settings by @rpeters1430
 - Replace SetNoRestartPolicy with SetRestartPolicy by @nicholas-fedor
@@ -1003,6 +1006,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Keep the settings PATCH description on lines swag reads by @claude
 - Enable ephemeral self-update in the Compose sample by @claude
 - Rewrite README for this fork with a Docker Compose guide by @claude
 - Document settings persistence errors by @Copilot
@@ -3003,10 +3007,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#44](https://github.com/rpeters1430/watchtower/pull/44)
+- @rpeters1430 made their first contribution in [#46](https://github.com/rpeters1430/watchtower/pull/46)
 - @claude made their first contribution
+- @github-actions[bot] made their first contribution in [#45](https://github.com/rpeters1430/watchtower/pull/45)
 - @nicholas-fedor made their first contribution
-- @github-actions[bot] made their first contribution in [#43](https://github.com/rpeters1430/watchtower/pull/43)
 - @renovate[bot] made their first contribution
 - @Copilot made their first contribution
 - @allcontributors[bot] made their first contribution
