@@ -1114,6 +1114,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#scan_secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scan Secrets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#scan_cache_volume" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3058,6 +3069,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#scan_secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scan Secrets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#scan_cache_volume" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3168,20 +3190,28 @@ Large images, such as ones bundling machine learning models, can take longer tha
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>                Type: Boolean
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>             Default: false
 </code></pre></div>
+<h2 id="scan_secrets">Scan Secrets<a class="headerlink" href="#scan_secrets" title="Permanent link">&para;</a></h2>
+<p>Checks each image for secrets, such as private keys, passwords, and API tokens, left in its files. Only Trivy checks for secrets. The check reads every file of every layer, which is often most of a scan's time on large images, so turning it off makes Trivy scans much faster. Vulnerabilities and image configuration problems are still checked.</p>
+<p>The setting can also be changed while Watchtower runs, from the web UI's Settings page or through <a href="../../http-api/endpoints/settings/"><code>/v1/settings</code></a>. Results with and without the check are cached separately, so a scan of one kind is never compared with the other.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>            Argument: --scan-secrets
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Environment Variable: WATCHTOWER_SCAN_SECRETS
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>                Type: Boolean
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>             Default: true
+</code></pre></div>
 <h2 id="scan_cache_volume">Scan Cache Volume<a class="headerlink" href="#scan_cache_volume" title="Permanent link">&para;</a></h2>
 <p>The Docker volume that keeps Trivy's vulnerability database between scans. Docker creates it on first use. Grype always uses <code>watchtower-grype-cache</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>            Argument: --scan-cache-volume
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Environment Variable: WATCHTOWER_SCAN_CACHE_VOLUME
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>                Type: String
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>             Default: watchtower-trivy-cache
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>            Argument: --scan-cache-volume
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>Environment Variable: WATCHTOWER_SCAN_CACHE_VOLUME
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>                Type: String
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>             Default: watchtower-trivy-cache
 </code></pre></div>
 <h2 id="scan_docker_socket">Scan Docker Socket<a class="headerlink" href="#scan_docker_socket" title="Permanent link">&para;</a></h2>
 <p>The host path of the Docker socket mounted into the scanner container, so the scanner reads images from the local daemon.
 Change it when the daemon's socket lives elsewhere on the host, for example with rootless Docker.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>            Argument: --scan-docker-socket
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>Environment Variable: WATCHTOWER_SCAN_DOCKER_SOCKET
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>                Type: String
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>             Default: /var/run/docker.sock
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>            Argument: --scan-docker-socket
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>Environment Variable: WATCHTOWER_SCAN_DOCKER_SOCKET
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>                Type: String
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>             Default: /var/run/docker.sock
 </code></pre></div>
 
 
@@ -3205,7 +3235,7 @@ Change it when the daemon's socket lives elsewhere on the host, for example with
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 17, 2026 06:01:00 UTC"><span class="timeago" datetime="2026-10-17T06:01:00+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 17, 2026 06:01:00 UTC">2026-10-17</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 20, 2026 15:55:11 UTC"><span class="timeago" datetime="2026-10-20T15:55:11+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 20, 2026 15:55:11 UTC">2026-10-20</span>
   </span>
 
     
