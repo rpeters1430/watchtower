@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Publish Watchtower dashboard with release notes by @rpeters1430
 - Add a setting to skip Trivy's secret check by @claude
 - Show security scan steps and time left during updates, and prune unused images by @claude
 - Add Grype as a selectable scanner and keep scanner images current by @claude
@@ -214,6 +215,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Satisfy workflow lint checks by @rpeters1430
 - Stop a rolling restart change from deadlocking the API by @claude
 - Stop slow image scans from skipping API updates by @claude
 - Update the compose image label when recreating containers by @nicholas-fedor
@@ -3011,9 +3013,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#53](https://github.com/rpeters1430/watchtower/pull/53)
+- @rpeters1430 made their first contribution in [#55](https://github.com/rpeters1430/watchtower/pull/55)
+- @github-actions[bot] made their first contribution in [#54](https://github.com/rpeters1430/watchtower/pull/54)
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#52](https://github.com/rpeters1430/watchtower/pull/52)
 - @renovate[bot] made their first contribution
 - @nicholas-fedor made their first contribution
 - @Copilot made their first contribution
