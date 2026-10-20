@@ -1,0 +1,237 @@
+name: Build and publish Watchtower dashboard
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dashboard-publish-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PUBLISH: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+
+jobs:
+  test:
+    name: Test dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: dashboard/go.mod
+      - name: Test dashboard handlers
+        working-directory: dashboard
+        run: go test ./...
+      - name: Build dashboard
+        working-directory: dashboard
+        run: go build ./...
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+      - name: Test release notes renderer
+        run: node --test dashboard/static/release_notes.test.cjs
+
+  build-and-publish:
+    name: Validate and publish dashboard image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build versioned release notes
+        id: release-notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: mikepenz/release-changelog-builder-action@aa013739bbc8e7067dbbecd4525ff11aeb51a84b # v6.4.0
+        with:
+          mode: COMMIT
+          failOnError: true
+          configurationJson: |
+            {
+              "template": "#{{CHANGELOG}}",
+              "categories": [
+                { "title": "## Features", "labels": ["feat", "feature"] },
+                { "title": "## Fixes", "labels": ["fix", "bug"] },
+                { "title": "## Other changes", "labels": [] }
+              ],
+              "label_extractor": [
+                { "pattern": "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\\([\\w\\-\\.]+\\))?(!)?: ([\\w ])+([\\s\\S]*)", "on_property": "title", "target": "$1" }
+              ]
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Embed changelog and image revision
+        working-directory: dashboard
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_CHANGELOG: ${{ steps.release-notes.outputs.changelog }}
+          TAG_NAME: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          set -eu
+          if [ -n "$TAG_NAME" ]; then
+            VERSION="${TAG_NAME#v}"
+            NOTES="$RELEASE_CHANGELOG"
+          elif [ -n "$EVENT_BEFORE" ] && [ "$EVENT_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            VERSION="build-${GITHUB_SHA::12}"
+            NOTES=$(git -C .. log --format='- %s (%h)' "$EVENT_BEFORE..$GITHUB_SHA" -- dashboard)
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="build-${GITHUB_SHA::12}"
+            NOTES=$(git -C .. log -1 --format='- %s (%h)' "$GITHUB_SHA" -- dashboard)
+          else
+            VERSION="build-${GITHUB_SHA::12}"
+            NOTES="- Initial image build (${GITHUB_SHA::12})"
+          fi
+          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            NOTES="- Dashboard image updated (${GITHUB_SHA::12})"
+          fi
+          BUILD_VERSION="$VERSION" BUILD_REVISION="$GITHUB_SHA" RELEASE_NOTES="$NOTES" python3 - <<'PY'
+          import json, os
+          with open('build-info.json', 'w', encoding='utf-8') as output:
+              json.dump({
+                  'version': os.environ['BUILD_VERSION'],
+                  'revision': os.environ['BUILD_REVISION'],
+                  'notes': os.environ['RELEASE_NOTES'],
+              }, output, ensure_ascii=False, indent=2)
+              output.write('\n')
+          PY
+
+      - name: Compute image references
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          image="ghcr.io/${REPOSITORY,,}-dashboard"
+          echo "name=$image" >> "$GITHUB_OUTPUT"
+          echo "candidate=$image:ci-staging-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+
+      - name: Build candidate image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: dashboard
+          file: dashboard/Dockerfile
+          platforms: ${{ env.PUBLISH == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ env.PUBLISH == 'true' }}
+          load: ${{ env.PUBLISH != 'true' }}
+          tags: ${{ steps.image.outputs.candidate }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: ${{ env.PUBLISH == 'true' && 'mode=max' || 'false' }}
+          sbom: ${{ env.PUBLISH == 'true' }}
+
+      - name: Select exact candidate image
+        id: candidate
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          LOCAL_TAG: ${{ steps.image.outputs.candidate }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          if [ "$PUBLISH" = true ]; then
+            test -n "$DIGEST"
+            echo "ref=$IMAGE_NAME@$DIGEST" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$LOCAL_TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Smoke test dashboard on each platform
+        env:
+          CANDIDATE: ${{ steps.candidate.outputs.ref }}
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+        run: |
+          set -eu
+          platforms="linux/amd64"
+          if [ "$PUBLISH" = true ]; then platforms="$platforms linux/arm64"; fi
+          for platform in $platforms; do
+            image="$CANDIDATE"
+            if [ "$PUBLISH" = true ]; then
+              architecture="${platform#linux/}"
+              digest=$(docker buildx imagetools inspect --raw "$CANDIDATE" | jq -er --arg architecture "$architecture" '
+                [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $architecture) | .digest]
+                | if length == 1 then .[0] else error("expected one platform manifest") end')
+              image="$IMAGE_NAME@$digest"
+            fi
+            name="dashboard-smoke-${platform#linux/}"
+            docker run -d --platform "$platform" --name "$name" -p 18096:8080 \
+              -e WATCHTOWER_API_TOKEN=smoke-token -e DASHBOARD_USER=smoke-user \
+              -e DASHBOARD_PASSWORD=smoke-password "$image"
+            trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+            for attempt in $(seq 1 30); do
+              if curl -fsS http://localhost:18096/healthz >/dev/null; then break; fi
+              sleep 2
+            done
+            curl -fsS -u smoke-user:smoke-password http://localhost:18096/ | grep -q 'release-notes-dialog'
+            curl -fsS -u smoke-user:smoke-password http://localhost:18096/api/release-notes | jq -e '.version and .revision and (.notes | type == "string")' >/dev/null
+            docker rm -f "$name" >/dev/null
+            trap - EXIT
+          done
+
+      - name: Scan amd64 candidate for fixable vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
+        with:
+          image-ref: ${{ steps.candidate.outputs.ref }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Scan arm64 candidate for fixable vulnerabilities
+        if: env.PUBLISH == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ${{ steps.candidate.outputs.ref }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Promote validated digest to release tags
+        if: env.PUBLISH == 'true'
+        env:
+          SOURCE: ${{ steps.candidate.outputs.ref }}
+          RELEASE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -eu
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            docker buildx imagetools create -t "$tag" "$SOURCE"
+          done <<< "$RELEASE_TAGS"
