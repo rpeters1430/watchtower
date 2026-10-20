@@ -487,6 +487,50 @@ func TestCompareDigestWithRemote_HeadRejectedFallsBackToGet(t *testing.T) {
 	assert.Equal(t, remote, remoteDigest)
 }
 
+// TestCompareDigestWithRemote_SkipsInvalidEndpoint verifies that a registry
+// endpoint override that is not a host is skipped for the next endpoint
+// without a request to it.
+func TestCompareDigestWithRemote_SkipsInvalidEndpoint(t *testing.T) {
+	ratelimit.ResetForTest()
+	t.Cleanup(ratelimit.ResetForTest)
+
+	settings := registryConfig.Registry{TLSSkip: true}
+
+	const remote = "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+
+	var requests atomic.Int32
+
+	registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+
+		switch {
+		case r.URL.Path == "/v2/" || r.URL.Path == "/v2":
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodHead && r.URL.Path == "/v2/myapp/manifests/latest":
+			w.Header().Set("Docker-Content-Digest", remote)
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer registry.Close()
+
+	host := strings.TrimPrefix(registry.URL, "http://")
+
+	mc := mockTypes.NewMockContainer(t)
+	mc.On("Name").Return("myapp").Maybe()
+	mc.On("HasImageInfo").Return(true).Maybe()
+	mc.On("ImageName").Return(host + "/myapp:latest")
+	mc.On("ImageInfo").Return(&dockerImage.InspectResponse{
+		RepoDigests: []string{"registry.example.com/myapp@" + remote},
+	})
+
+	match, _, err := CompareDigestWithRemote(testLog(), context.Background(), mc, "", settings, "bad host", registry.URL)
+	require.NoError(t, err)
+	assert.True(t, match)
+	assert.Equal(t, int32(2), requests.Load())
+}
+
 // TestCompareDigestWithRemote_LocalOnly404 is a regression test for locally built
 // images (e.g. atlas-badgerdb) that have non-empty registry-less RepoDigests.
 // A HEAD 404 must be treated as up-to-date with no error so callers skip the pull
@@ -1063,6 +1107,34 @@ func TestBuildManifestURL(t *testing.T) {
 			wantErr:      false,
 		},
 		{
+			name: "overrides host with a bare host and port",
+			container: func(t *testing.T) *mockTypes.MockContainer {
+				t.Helper()
+				mc := mockTypes.NewMockContainer(t)
+				mc.On("Name").Return("bare-host-port-override").Maybe()
+				mc.On("ImageName").Return("nginx:latest")
+
+				return mc
+			},
+			hostOverride: "127.0.0.1:5000",
+			expectedURL:  "https://127.0.0.1:5000/v2/library/nginx/manifests/latest",
+			expectedHost: "index.docker.io",
+			wantErr:      false,
+		},
+		{
+			name: "rejects a host override that is not a host",
+			container: func(t *testing.T) *mockTypes.MockContainer {
+				t.Helper()
+				mc := mockTypes.NewMockContainer(t)
+				mc.On("Name").Return("invalid-host-override").Maybe()
+				mc.On("ImageName").Return("nginx:latest")
+
+				return mc
+			},
+			hostOverride: "bad host",
+			wantErr:      true,
+		},
+		{
 			name: "redirects lscr.io to ghcr.io",
 			container: func(t *testing.T) *mockTypes.MockContainer {
 				t.Helper()
@@ -1085,7 +1157,8 @@ func TestBuildManifestURL(t *testing.T) {
 
 			gotURL, gotHost, _, err := BuildManifestURL(testLog(), tt.container(t), settings, tt.hostOverride)
 			if tt.wantErr {
-				require.Error(t, err)
+				require.ErrorIs(t, err, errFailedBuildManifestURL)
+				assert.Empty(t, gotURL)
 
 				return
 			}
