@@ -16,6 +16,7 @@ Flags and environment variables still provide the starting values. A change made
 | `scan`            | Boolean  | [`scan`](../../../configuration/image-scanning/index.md#scan)                       | Scan the new image of each pending update before applying it            |
 | `scan_gate`       | String   | [`scan-gate`](../../../configuration/image-scanning/index.md#scan-gate)            | Hold updates whose new image adds findings at or above this severity: `off`, `low`, `medium`, `high`, or `critical` |
 | `scanner`         | String   | [`scanner`](../../../configuration/image-scanning/index.md#scanner)                | Scanner that scans images: `trivy` or `grype`                           |
+| `scan_secrets`    | Boolean  | [`scan-secrets`](../../../configuration/image-scanning/index.md#scan-secrets)      | Check images for secrets left in their files. Trivy only                |
 | `schedule`        | String   | [`schedule`](../../../configuration/scheduling/index.md) or the poll interval      | Cron expression for scheduled updates. An empty string turns them off   |
 
 Everything else, including the API token, the listen address, the Docker connection, and registry credentials, can only be set with flags and environment variables.

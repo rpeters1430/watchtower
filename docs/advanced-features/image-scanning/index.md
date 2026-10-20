@@ -15,7 +15,7 @@ Enable the [`security`](../../http-api/endpoints/security/index.md) HTTP API end
     - fixed by a waiting update, with a button to apply it,
     - fixed in a newer package that the image doesn't include yet, which needs a rebuilt image from its maintainer (or from you, if you build it),
     - not fixed anywhere yet, which waits on the package's own project,
-    - secrets stored in the image, which should be rotated and passed in at run time (Trivy only),
+    - secrets stored in the image, which should be rotated and passed in at run time (Trivy only, and only while [`scan-secrets`](../../configuration/image-scanning/index.md#scan-secrets) is on),
     - risky image settings, such as running as root, each with its fix (Trivy only).
 - The Containers page marks images with critical or high findings, and the Settings page switches update scanning, the scan gate, and the scanner without a restart.
 

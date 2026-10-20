@@ -64,6 +64,13 @@ func Specs() []spec.FlagSpec {
 			Help:    "Leave out vulnerabilities that have no published fix",
 		},
 		{
+			Name:    "scan-secrets",
+			Kind:    spec.KindBool,
+			Default: true,
+			EnvKeys: []string{"WATCHTOWER_SCAN_SECRETS"},
+			Help:    "Check images for secrets, such as keys and passwords, left in their files (Trivy only)",
+		},
+		{
 			Name:    "scan-cache-volume",
 			Kind:    spec.KindString,
 			Default: scanner.DefaultTrivyCacheVolume,

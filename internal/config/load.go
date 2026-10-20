@@ -676,6 +676,7 @@ func loadScan(vCfg *viper.Viper) (scan.Scan, error) {
 		GrypeImage:    strings.TrimSpace(vCfg.GetString("scan-grype-image")),
 		Timeout:       vCfg.GetDuration("scan-timeout"),
 		IgnoreUnfixed: vCfg.GetBool("scan-ignore-unfixed"),
+		Secrets:       vCfg.GetBool("scan-secrets"),
 		CacheVolume:   strings.TrimSpace(vCfg.GetString("scan-cache-volume")),
 		DockerSocket:  strings.TrimSpace(vCfg.GetString("scan-docker-socket")),
 	}, nil

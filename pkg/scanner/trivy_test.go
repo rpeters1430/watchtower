@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -44,6 +45,7 @@ func TestTrivyScan(t *testing.T) {
 	assert.Equal(t, "sha256:abc", runner.spec.Args[len(runner.spec.Args)-1])
 	assert.Contains(t, runner.spec.Args, "json")
 	assert.NotContains(t, runner.spec.Args, "--ignore-unfixed")
+	assert.Contains(t, runner.spec.Args, "vuln,secret")
 }
 
 func TestTrivyScanOptions(t *testing.T) {
@@ -65,6 +67,23 @@ func TestTrivyScanOptions(t *testing.T) {
 	assert.Equal(t, "mirror.local/trivy:0.67.0", runner.spec.Image)
 	assert.Contains(t, runner.spec.Volumes, "my-cache")
 	assert.Contains(t, runner.spec.Args, "--ignore-unfixed")
+}
+
+func TestTrivySkipSecrets(t *testing.T) {
+	t.Parallel()
+
+	logger := zerolog.Nop()
+	runner := &fakeRunner{output: []byte(`{"SchemaVersion":2}`)}
+	trivy := NewTrivy(&logger, runner, TrivyOptions{SkipSecrets: true})
+
+	_, err := trivy.Scan(t.Context(), "nginx:latest")
+	require.NoError(t, err)
+
+	scanners := slices.Index(runner.spec.Args, "--scanners")
+	require.GreaterOrEqual(t, scanners, 0)
+	assert.Equal(t, "vuln", runner.spec.Args[scanners+1])
+	// Image configuration checks are cheap and stay on.
+	assert.Contains(t, runner.spec.Args, "--image-config-scanners")
 }
 
 func TestTrivyScanErrors(t *testing.T) {

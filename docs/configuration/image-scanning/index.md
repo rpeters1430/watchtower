@@ -96,6 +96,19 @@ Environment Variable: WATCHTOWER_SCAN_IGNORE_UNFIXED
              Default: false
 ```
 
+## Scan Secrets
+
+Checks each image for secrets, such as private keys, passwords, and API tokens, left in its files. Only Trivy checks for secrets. The check reads every file of every layer, which is often most of a scan's time on large images, so turning it off makes Trivy scans much faster. Vulnerabilities and image configuration problems are still checked.
+
+The setting can also be changed while Watchtower runs, from the web UI's Settings page or through [`/v1/settings`](../../http-api/endpoints/settings/index.md). Results with and without the check are cached separately, so a scan of one kind is never compared with the other.
+
+```text
+            Argument: --scan-secrets
+Environment Variable: WATCHTOWER_SCAN_SECRETS
+                Type: Boolean
+             Default: true
+```
+
 ## Scan Cache Volume
 
 The Docker volume that keeps Trivy's vulnerability database between scans. Docker creates it on first use. Grype always uses `watchtower-grype-cache`.

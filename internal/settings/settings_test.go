@@ -79,6 +79,7 @@ func TestUpdateAppliesAndPersists(t *testing.T) {
 		KeyScan:               false,
 		KeyScanGate:           false,
 		KeyScanner:            false,
+		KeyScanSecrets:        false,
 	}, store.Overridden())
 	assert.Equal(t, Snapshot{
 		Effective:  want,
@@ -341,6 +342,28 @@ func TestScannerSetting(t *testing.T) {
 	require.NoError(t, reopened.Update(changes(t, `{"scanner":null}`)))
 	assert.Equal(t, scanner.TrivyName, reopened.Effective().Scanner)
 	assert.False(t, reopened.Overridden()[KeyScanner])
+}
+
+func TestScanSecretsSetting(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	store := Open(nil, dir, Values{ScanSecrets: true}, Validators{})
+
+	require.NoError(t, store.Update(changes(t, `{"scan_secrets":false}`)))
+	assert.False(t, store.Effective().ScanSecrets)
+	assert.True(t, store.Overridden()[KeyScanSecrets])
+
+	err := store.Update(changes(t, `{"scan_secrets":"no"}`))
+	require.ErrorIs(t, err, ErrInvalidValue)
+
+	// The choice survives a restart.
+	reopened := Open(nil, dir, Values{ScanSecrets: true}, Validators{})
+	assert.False(t, reopened.Effective().ScanSecrets)
+
+	require.NoError(t, reopened.Update(changes(t, `{"scan_secrets":null}`)))
+	assert.True(t, reopened.Effective().ScanSecrets)
+	assert.False(t, reopened.Overridden()[KeyScanSecrets])
 }
 
 func TestUnknownSavedScannerIsDropped(t *testing.T) {
