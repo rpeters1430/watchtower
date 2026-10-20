@@ -99,8 +99,8 @@ func (s *Store) NotificationServices() []NotificationService {
 // Returns:
 //   - error: Non-nil if the saved URLs could not be applied. They stay saved.
 func (s *Store) OnNotificationChange(apply func(urls []string) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 
 	s.applyNotifications = apply
 
@@ -136,8 +136,8 @@ func (s *Store) AddNotificationService(name, rawURL string) (NotificationService
 		return NotificationService{}, fmt.Errorf("%w: the name is longer than %d characters", ErrInvalidValue, maxNotificationNameLength)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 
 	if slices.ContainsFunc(s.overrides.NotificationServices, func(saved NotificationService) bool {
 		return saved.URL == service.URL
@@ -165,8 +165,8 @@ func (s *Store) AddNotificationService(name, rawURL string) (NotificationService
 //   - error: ErrNotificationNotFound when no saved service has the ID, or a
 //     save problem.
 func (s *Store) RemoveNotificationService(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 
 	index := slices.IndexFunc(s.overrides.NotificationServices, func(saved NotificationService) bool {
 		return saved.ID == id
@@ -182,7 +182,7 @@ func (s *Store) RemoveNotificationService(id string) error {
 }
 
 // changeNotifications applies and saves a new set of notification services.
-// The caller holds s.mu.
+// The caller holds s.writeMu.
 func (s *Store) changeNotifications(next overrides) error {
 	if s.applyNotifications != nil {
 		err := s.applyNotifications(notificationURLs(next.NotificationServices))
@@ -201,7 +201,9 @@ func (s *Store) changeNotifications(next overrides) error {
 		return err
 	}
 
+	s.mu.Lock()
 	s.overrides = next
+	s.mu.Unlock()
 
 	return nil
 }

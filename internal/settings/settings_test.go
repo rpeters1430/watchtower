@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -223,6 +224,107 @@ func TestRollingRestartValidator(t *testing.T) {
 	assert.Equal(t, 1, calls)
 }
 
+// A validator can read the store it validates for. The rolling restart
+// validator lists containers, and the Docker client reads include_stopped
+// from the store while it does.
+func TestValidatorCanReadStore(t *testing.T) {
+	t.Parallel()
+
+	var store *Store
+
+	store = Open(nil, "", Values{}, Validators{RollingRestart: func() error {
+		_ = store.Effective()
+
+		return nil
+	}})
+
+	change := changes(t, `{"rolling_restart":true}`)
+	done := make(chan error, 1)
+
+	go func() { done <- store.Update(change) }()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Update deadlocked while its validator read the store")
+	}
+
+	assert.True(t, store.Effective().RollingRestart)
+}
+
+// Readers run while a change is validated, so a change must not edit maps
+// they can see.
+func TestUpdateContainerOverridesWhileReading(t *testing.T) {
+	t.Parallel()
+
+	store := Open(nil, "", Values{}, Validators{})
+	require.NoError(t, store.Update(changes(t, `{"container_overrides":{"web":"pinned"}}`)))
+
+	stop := make(chan struct{})
+	readerDone := make(chan struct{})
+
+	go func() {
+		defer close(readerDone)
+
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = store.Effective().ContainerOverrides["web"]
+			}
+		}
+	}()
+
+	for range 100 {
+		require.NoError(t, store.Update(changes(t, `{"container_overrides":{"db":"monitor_only"}}`)))
+		require.NoError(t, store.Update(changes(t, `{"container_overrides":{"db":"auto"}}`)))
+	}
+
+	close(stop)
+	<-readerDone
+
+	assert.Equal(t, map[string]string{"web": "pinned"}, store.Effective().ContainerOverrides)
+}
+
+func TestLoadKeepsOtherSettingsWhenRollingRestartNoLongerApplies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		saved     string
+		validator func() error
+		want      Values
+	}{
+		{
+			name:      "dependencies",
+			saved:     `{"rolling_restart":true,"cleanup":true,"scan_secrets":false}`,
+			validator: func() error { return errLinked },
+			want:      Values{Cleanup: true, ScanSecrets: false},
+		},
+		{
+			name:  "incompatible with monitor only",
+			saved: `{"monitor_only":true,"rolling_restart":true}`,
+			want:  Values{MonitorOnly: true, ScanSecrets: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, FileName), []byte(tt.saved), 0o600))
+
+			store := Open(nil, dir, Values{ScanSecrets: true}, Validators{RollingRestart: tt.validator})
+
+			assert.Equal(t, tt.want, store.Effective())
+			assert.False(t, store.Overridden()[KeyRollingRestart])
+		})
+	}
+}
+
 func TestScheduleChangesDeliversLatest(t *testing.T) {
 	t.Parallel()
 
@@ -256,7 +358,6 @@ func TestLoadDropsSettingsThatNoLongerApply(t *testing.T) {
 	}{
 		{name: "not JSON", saved: `{`},
 		{name: "invalid schedule", saved: `{"schedule":"never"}`},
-		{name: "incompatible", saved: `{"monitor_only":true,"rolling_restart":true}`},
 	}
 
 	for _, tt := range tests {

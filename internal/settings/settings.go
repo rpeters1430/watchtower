@@ -126,6 +126,12 @@ type Store struct {
 	log        *zerolog.Logger
 	validators Validators
 
+	// writeMu serializes changes. A change holds it while it validates and
+	// saves, and takes mu only to swap in the result, so validators can read
+	// the settings. Validators that list containers do, through the Docker
+	// client's include-stopped setting.
+	writeMu sync.Mutex
+	// mu guards overrides and nextRun. Only a holder of writeMu writes overrides.
 	mu        sync.RWMutex
 	defaults  Values
 	overrides overrides
@@ -134,7 +140,7 @@ type Store struct {
 	scheduleChanges chan string
 	// nextRun reports when the scheduler runs next. Protected by mu.
 	nextRun func() time.Time
-	// applyNotifications puts the saved notification services into effect. Protected by mu.
+	// applyNotifications puts the saved notification services into effect. Protected by writeMu.
 	applyNotifications func(urls []string) error
 }
 
@@ -309,10 +315,13 @@ func (s *Store) ScheduleChanges() <-chan string {
 //   - error: Non-nil if a name is unknown, a value has the wrong type, the
 //     resulting settings fail validation, or the change cannot be persisted.
 func (s *Store) Update(changes map[string]json.RawMessage) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 
+	// Readers keep reading s.overrides while this change is checked, so the
+	// map a change edits in place must be a copy.
 	next := s.overrides
+	next.ContainerOverrides = maps.Clone(s.overrides.ContainerOverrides)
 
 	for key, raw := range changes {
 		err := next.set(key, raw)
@@ -334,7 +343,9 @@ func (s *Store) Update(changes map[string]json.RawMessage) error {
 		return err
 	}
 
+	s.mu.Lock()
 	s.overrides = next
+	s.mu.Unlock()
 
 	if after.Schedule != before.Schedule {
 		s.announceSchedule(after.Schedule)
@@ -415,6 +426,15 @@ func (s *Store) load() {
 	}
 
 	err = s.validate(s.defaults, saved.apply(s.defaults))
+	if err != nil && saved.RollingRestart != nil {
+		// Rolling restarts depend on the containers running now, which can
+		// change between runs. Drop only that setting and keep the others.
+		s.log.Warn().Err(err).Str("path", s.path).Msg("Saved rolling restart setting no longer applies, using the default")
+
+		saved.RollingRestart = nil
+		err = s.validate(s.defaults, saved.apply(s.defaults))
+	}
+
 	if err != nil {
 		s.log.Warn().Err(err).Str("path", s.path).Msg("Saved settings no longer apply, using defaults")
 
