@@ -67,8 +67,6 @@ jobs:
         run: |
           image="ghcr.io/${REPOSITORY,,}"
           short_sha="${COMMIT_SHA::7}"
-          branch_tag="$(printf '%s' "${REF_NAME}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9._-' '-')"
-
           # Only main publishes. "latest" is the tag to run; sha-<short> pins
           # a specific build for rollback.
           tags=(--tag "${image}:latest" --tag "${image}:sha-${short_sha}")

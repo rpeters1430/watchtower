@@ -1,0 +1,6 @@
+# Combine with compose.example.yml when building the dashboard image locally:
+# docker compose -f compose.example.yml -f compose.local.yml up -d --build
+services:
+  watchtower-dashboard:
+    build: .
+    image: ghcr.io/rpeters1430/watchtower-dashboard:local

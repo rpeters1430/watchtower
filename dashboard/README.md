@@ -1,6 +1,6 @@
 # Watchtower web dashboard (initial foundation)
 
-Standalone, dependency-free Go HTTP dashboard built against the existing Watchtower v1 API. This deliberately does **not** mount the Docker socket or modify Watchtower's updater.
+Standalone, dependency-free Go HTTP dashboard built against the existing Watchtower v1 API. This deliberately does **not** mount the Docker socket or modify Watchtower's updater. The dashboard image is published separately as `ghcr.io/rpeters1430/watchtower-dashboard`.
 
 ## What works
 - List watched containers with current image and status returned by Watchtower
@@ -13,7 +13,8 @@ Standalone, dependency-free Go HTTP dashboard built against the existing Watchto
 ## Setup
 1. Enable Watchtower's HTTP API and the **containers, check, history, and update** endpoints through the upstream documented settings. Set an API token. The API must be reachable from the dashboard's network; do not expose it publicly.
 2. Create a Docker network shared by Watchtower and this dashboard, for example `docker network create watchtower`, and attach Watchtower to it with the hostname `watchtower` (or set `WATCHTOWER_URL` to its reachable internal address).
-3. Copy `compose.example.yml` to `compose.yml`, create a local `.env` containing `WATCHTOWER_API_TOKEN` and `DASHBOARD_PASSWORD`, then run `docker compose up -d --build` from this directory.
+3. Copy `compose.example.yml` to `compose.yml`, create a local `.env` containing `WATCHTOWER_API_TOKEN` and `DASHBOARD_PASSWORD`, then run `docker compose up -d` from this directory. Compose pulls the published dashboard image by default.
+   To build the dashboard from the checked-out source instead, run `docker compose -f compose.example.yml -f compose.local.yml up -d --build`.
 4. Access it through a localhost tunnel or authenticated HTTPS reverse proxy. The example binds port 8096 only on loopback. Do **not** expose Basic auth over plain HTTP on a network.
 5. Set `DASHBOARD_ENABLE_UPDATES=true` only after testing the read-only features. The Update button requires explicit confirmation.
 

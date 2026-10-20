@@ -321,10 +321,3 @@ docker_signs:
       - "${artifact}@${digest}"
       - "--yes"
     output: true
-
-################################################################################
-# Changelog Configuration
-# https://goreleaser.com/customization/changelog/
-################################################################################
-changelog:
-  disable: true
