@@ -214,6 +214,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stop a rolling restart change from deadlocking the API by @claude
 - Stop slow image scans from skipping API updates by @claude
 - Update the compose image label when recreating containers by @nicholas-fedor
 - Wait for the HTTP API to drain before exiting by @nicholas-fedor
@@ -3010,10 +3011,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @github-actions[bot] made their first contribution in [#51](https://github.com/rpeters1430/watchtower/pull/51)
-- @rpeters1430 made their first contribution in [#48](https://github.com/rpeters1430/watchtower/pull/48)
-- @renovate[bot] made their first contribution
+- @rpeters1430 made their first contribution in [#53](https://github.com/rpeters1430/watchtower/pull/53)
 - @claude made their first contribution
+- @github-actions[bot] made their first contribution in [#52](https://github.com/rpeters1430/watchtower/pull/52)
+- @renovate[bot] made their first contribution
 - @nicholas-fedor made their first contribution
 - @Copilot made their first contribution
 - @allcontributors[bot] made their first contribution
