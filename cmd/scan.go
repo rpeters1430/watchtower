@@ -50,6 +50,7 @@ func newSecurityService(
 		Image:         cfg.Image,
 		CacheVolume:   cfg.CacheVolume,
 		IgnoreUnfixed: cfg.IgnoreUnfixed,
+		Timeout:       cfg.Timeout,
 	}
 	trivy := scanner.NewTrivy(log, runner, trivyOptions)
 

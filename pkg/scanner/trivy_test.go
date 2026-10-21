@@ -46,6 +46,9 @@ func TestTrivyScan(t *testing.T) {
 	assert.Contains(t, runner.spec.Args, "json")
 	assert.NotContains(t, runner.spec.Args, "--ignore-unfixed")
 	assert.Contains(t, runner.spec.Args, "vuln,secret")
+	timeoutIdx := slices.Index(runner.spec.Args, "--timeout")
+	require.GreaterOrEqual(t, timeoutIdx, 0)
+	assert.Equal(t, "15m0s", runner.spec.Args[timeoutIdx+1])
 }
 
 func TestTrivyScanOptions(t *testing.T) {
@@ -57,6 +60,7 @@ func TestTrivyScanOptions(t *testing.T) {
 		Image:         "mirror.local/trivy:0.67.0",
 		CacheVolume:   "my-cache",
 		IgnoreUnfixed: true,
+		Timeout:       20 * time.Minute,
 	})
 
 	result, err := trivy.Scan(t.Context(), "nginx:latest")
@@ -67,6 +71,9 @@ func TestTrivyScanOptions(t *testing.T) {
 	assert.Equal(t, "mirror.local/trivy:0.67.0", runner.spec.Image)
 	assert.Contains(t, runner.spec.Volumes, "my-cache")
 	assert.Contains(t, runner.spec.Args, "--ignore-unfixed")
+	timeoutIdx := slices.Index(runner.spec.Args, "--timeout")
+	require.GreaterOrEqual(t, timeoutIdx, 0)
+	assert.Equal(t, "20m0s", runner.spec.Args[timeoutIdx+1])
 }
 
 func TestTrivySkipSecrets(t *testing.T) {

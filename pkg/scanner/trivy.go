@@ -38,6 +38,9 @@ type TrivyOptions struct {
 	// SkipSecrets leaves out the check for secrets in the image's files,
 	// which reads every file of every layer and is often most of a scan.
 	SkipSecrets bool
+	// Timeout bounds how long Trivy itself runs before canceling the scan.
+	// Non-positive means DefaultTimeout.
+	Timeout time.Duration
 }
 
 // Trivy scans images by running the Trivy CLI in a short-lived container.
@@ -64,6 +67,10 @@ func NewTrivy(logger *zerolog.Logger, runner Runner, options TrivyOptions) *Triv
 
 	if options.CacheVolume == "" {
 		options.CacheVolume = DefaultTrivyCacheVolume
+	}
+
+	if options.Timeout <= 0 {
+		options.Timeout = DefaultTimeout
 	}
 
 	return &Trivy{
@@ -143,6 +150,7 @@ func (t *Trivy) args(ref string) []string {
 		"--no-progress",
 		"--format", "json",
 		"--cache-dir", trivyCacheDir,
+		"--timeout", t.options.Timeout.String(),
 		"--scanners", scanners,
 		"--image-config-scanners", "misconfig",
 	}
