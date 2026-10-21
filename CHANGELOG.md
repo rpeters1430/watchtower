@@ -215,6 +215,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cap bearer token lifetimes that overflow a duration by @nicholas-fedor
+- Reject bearer token realms without a host name by @nicholas-fedor
+- Reject manifest and challenge URLs without a registry host by @nicholas-fedor
+- Reject registry endpoints that are not hosts by @nicholas-fedor
+- Reject empty digests from registry GET responses by @nicholas-fedor
+- Reject control characters in changelog release tags by @nicholas-fedor
+- Reject build remotes without a hostname when embedding credentials by @nicholas-fedor
 - Satisfy workflow lint checks by @rpeters1430
 - Stop a rolling restart change from deadlocking the API by @claude
 - Stop slow image scans from skipping API updates by @claude
@@ -609,6 +616,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Unexport package-internal identifiers by @nicholas-fedor
 - Fix lint findings from the scan_secrets setting by @claude
 - Satisfy golangci-lint on the scan progress changes by @claude
 - Refactor Renovate configuration settings by @rpeters1430
@@ -1009,6 +1017,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Describe the update lock type by @rpeters1430
 - Keep the settings PATCH description on lines swag reads by @claude
 - Enable ephemeral self-update in the Compose sample by @claude
 - Rewrite README for this fork with a Docker Compose guide by @claude
@@ -3015,11 +3024,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#59](https://github.com/rpeters1430/watchtower/pull/59)
-- @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#58](https://github.com/rpeters1430/watchtower/pull/58)
-- @claude made their first contribution
+- @rpeters1430 made their first contribution in [#62](https://github.com/rpeters1430/watchtower/pull/62)
 - @nicholas-fedor made their first contribution
+- @github-actions[bot] made their first contribution in [#60](https://github.com/rpeters1430/watchtower/pull/60)
+- @renovate[bot] made their first contribution
+- @claude made their first contribution
 - @Copilot made their first contribution
 - @allcontributors[bot] made their first contribution
 - @rooty0 made their first contribution
