@@ -1412,6 +1412,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to dbb3bb8 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 6dd49c6 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to d01284e by @renovate[bot]
 - Pin ghcr.io/rpeters1430/watchtower-dashboard docker tag to a7b0435 by @renovate[bot]
@@ -3027,10 +3028,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution
-- @github-actions[bot] made their first contribution in [#66](https://github.com/rpeters1430/watchtower/pull/66)
-- @nicholas-fedor made their first contribution
+- @rpeters1430 made their first contribution in [#67](https://github.com/rpeters1430/watchtower/pull/67)
+- @github-actions[bot] made their first contribution in [#68](https://github.com/rpeters1430/watchtower/pull/68)
 - @renovate[bot] made their first contribution
+- @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
 - @allcontributors[bot] made their first contribution
