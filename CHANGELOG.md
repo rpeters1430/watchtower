@@ -215,6 +215,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Forward scan timeout to trivy CLI by @rpeters1430
 - Cap bearer token lifetimes that overflow a duration by @nicholas-fedor
 - Reject bearer token realms without a host name by @nicholas-fedor
 - Reject manifest and challenge URLs without a registry host by @nicholas-fedor
@@ -3026,8 +3027,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#65](https://github.com/rpeters1430/watchtower/pull/65)
-- @github-actions[bot] made their first contribution in [#64](https://github.com/rpeters1430/watchtower/pull/64)
+- @rpeters1430 made their first contribution
+- @github-actions[bot] made their first contribution in [#66](https://github.com/rpeters1430/watchtower/pull/66)
 - @nicholas-fedor made their first contribution
 - @renovate[bot] made their first contribution
 - @claude made their first contribution
