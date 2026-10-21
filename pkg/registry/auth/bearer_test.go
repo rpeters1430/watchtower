@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -65,6 +67,11 @@ func Test_initTokenCache(t *testing.T) {
 func Test_computeTokenExpiry(t *testing.T) {
 	now := time.Now()
 	truncatedToSeconds := now.Truncate(time.Second)
+	issuedAt := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	// longestLifetime is the lifetime of the longest expires_in an int holds,
+	// capped at the longest whole number of seconds a duration holds.
+	longestLifetime := time.Duration(min(int64(math.MaxInt), int64(math.MaxInt64)/int64(time.Second))) * time.Second
 
 	tests := []struct {
 		name string
@@ -111,6 +118,16 @@ func Test_computeTokenExpiry(t *testing.T) {
 				IssuedAt: "not-a-date",
 			},
 			want: truncatedToSeconds.Add(defaultTokenTTL),
+		},
+		{
+			name: "caps an expires_in too long for a duration",
+			args: &types.TokenResponse{ExpiresIn: math.MaxInt},
+			want: truncatedToSeconds.Add(longestLifetime),
+		},
+		{
+			name: "caps an expires_in too long for a duration after issued_at",
+			args: &types.TokenResponse{ExpiresIn: math.MaxInt, IssuedAt: issuedAt.Format(time.RFC3339)},
+			want: issuedAt.Add(longestLifetime),
 		},
 	}
 
@@ -476,6 +493,25 @@ func TestGetAuthURL(t *testing.T) {
 			wantQuery:    "scope=repository%3Auser%2Frepo%3Apull&service=insecure-registry.local",
 		},
 		{
+			name:      "realm with a port but no host name returns error",
+			challenge: `bearer realm="https://:5000/token",service="ghcr.io"`,
+			imageRef:  imageRef,
+			wantErr:   true,
+		},
+		{
+			name:      "realm with an empty authority returns error",
+			challenge: `bearer realm="http://:",service="ghcr.io"`,
+			imageRef:  imageRef,
+			wantErr:   true,
+		},
+		{
+			name:      "realm with an IPv6 host is allowed",
+			challenge: `bearer realm="https://[::1]:5000/token",service="registry"`,
+			imageRef:  imageRef,
+			wantHost:  "[::1]:5000",
+			wantQuery: "scope=repository%3Auser%2Frepo%3Apull&service=registry",
+		},
+		{
 			name:         "http realm with registry auth is rejected without TLS skip",
 			challenge:    `bearer realm="http://insecure-registry.local/token",service="insecure-registry.local"`,
 			imageRef:     imageRef,
@@ -486,7 +522,7 @@ func TestGetAuthURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetAuthURL(testLog(), tt.challenge, tt.imageRef, tt.registryAuth, registryConfig.Registry{})
+			got, err := getAuthURL(testLog(), tt.challenge, tt.imageRef, tt.registryAuth, registryConfig.Registry{})
 			if tt.wantErr {
 				assert.Error(t, err)
 
@@ -543,7 +579,7 @@ func TestGetBearerToken(t *testing.T) {
 				mockClient.On("Do", mock.Anything).Return(tt.onDo, tt.doErr).Once()
 			}
 
-			got, err := GetBearerToken(testLog(), ctx, tt.challenge, tt.imageRef, tt.registryAuth, mockClient, registryConfig.Registry{})
+			got, err := getBearerToken(testLog(), ctx, tt.challenge, tt.imageRef, tt.registryAuth, mockClient, registryConfig.Registry{})
 			if tt.wantErr {
 				assert.Error(t, err)
 
@@ -589,6 +625,29 @@ func Test_executeBearerTokenRequest_cacheHit(t *testing.T) {
 	got, err := executeBearerTokenRequest(testLog(), ctx, authURL, imageName, "", mockClient, registryConfig.Registry{})
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer cached-token", got)
+}
+
+// Test_executeBearerTokenRequest_cachesLongLivedToken verifies that a token
+// whose expires_in is too long for a duration is cached and reused rather than
+// fetched again.
+func Test_executeBearerTokenRequest_cachesLongLivedToken(t *testing.T) {
+	resetTokenCache(t)
+
+	body := fmt.Sprintf(`{"token":"long-lived-token","expires_in":%d}`, math.MaxInt)
+
+	mockClient := mockAuth.NewMockClient(t)
+	mockClient.On("Do", mock.Anything).Return(&http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}, nil).Once()
+
+	authURL := mustParseURL("https://long-lived.test.com/token?service=long-lived.test.com")
+
+	for range 2 {
+		got, err := executeBearerTokenRequest(testLog(), context.Background(), authURL, "test/image", "", mockClient, registryConfig.Registry{})
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer long-lived-token", got)
+	}
 }
 
 func resetTokenCache(t *testing.T) {
@@ -756,7 +815,7 @@ func TestGetBearerToken_anonymousGHCRSharesAcrossImages(t *testing.T) {
 	}, nil).Once()
 
 	for _, image := range []reference.Named{prowlarr, sonarr, watchtower} {
-		got, getErr := GetBearerToken(testLog(), ctx, challenge, image, "", mockClient, registryConfig.Registry{})
+		got, getErr := getBearerToken(testLog(), ctx, challenge, image, "", mockClient, registryConfig.Registry{})
 		require.NoError(t, getErr)
 		assert.Equal(t, "Bearer shared-anon-token", got)
 	}

@@ -12,8 +12,8 @@ import (
 	"github.com/nicholas-fedor/watchtower/pkg/registry/hosts"
 )
 
-// ChallengeHeader is the HTTP Header containing challenge instructions.
-const ChallengeHeader = "WWW-Authenticate"
+// challengeHeaderName is the HTTP Header containing challenge instructions.
+const challengeHeaderName = "WWW-Authenticate"
 
 // Errors for registry operations.
 var (
@@ -124,7 +124,8 @@ func splitQuoted(input string, delim rune) []string {
 //
 // For example, "https://ghcr.io/token" yields "ghcr.io". It parses the trimmed
 // realm with the URL parser and returns the parsed URL's Host for valid http or
-// https URLs. Invalid or unsupported realms return an empty string.
+// https URLs that name a host. Invalid or unsupported realms, and realms with a
+// port but no host name, return an empty string.
 //
 // Parameters:
 //   - log: Contextual logger.
@@ -139,7 +140,7 @@ func extractChallengeHost(log *zerolog.Logger, realm string) string {
 		Msg("Trimmed realm for host extraction")
 
 	parsed, err := url.Parse(realm)
-	if err != nil || parsed.Host == "" {
+	if err != nil || parsed.Hostname() == "" {
 		log.Debug().
 			Str("realm", realm).
 			Msg("Failed to extract challenge host from realm")
@@ -199,7 +200,7 @@ func GetRegistryAddress(log *zerolog.Logger, imageRef string) (string, error) {
 	}
 
 	// lscr.io images are hosted on GitHub Container Registry (ghcr.io).
-	// Map here so all callers benefit, including GetChallengeURL and GetAuthURL.
+	// Map here so all callers benefit, including getChallengeURL and getAuthURL.
 	if domain == hosts.LSCRRegistryDomain {
 		domain = hosts.GitHubRegistryDomain
 

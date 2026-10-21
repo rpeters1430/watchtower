@@ -21,6 +21,7 @@ import (
 
 	registryConfig "github.com/nicholas-fedor/watchtower/internal/config/registry"
 	"github.com/nicholas-fedor/watchtower/internal/logging"
+	"github.com/nicholas-fedor/watchtower/pkg/registry/auth"
 	"github.com/nicholas-fedor/watchtower/pkg/registry/ratelimit"
 	mockTypes "github.com/nicholas-fedor/watchtower/pkg/types/mocks"
 )
@@ -543,6 +544,8 @@ func TestBuildManifestURLForContainer(t *testing.T) {
 		scheme    string
 		want      string
 		wantErr   bool
+		// errIs is the sentinel the error must wrap, nil to skip the check.
+		errIs error
 	}{
 		{
 			name:      "Docker Hub image with tag",
@@ -580,6 +583,13 @@ func TestBuildManifestURLForContainer(t *testing.T) {
 			scheme:    "https",
 			wantErr:   true,
 		},
+		{
+			name:      "image name without a registry host returns error",
+			imageName: "a_b.example.com/repo:tag",
+			scheme:    "https",
+			wantErr:   true,
+			errIs:     auth.ErrMissingRegistryHost,
+		},
 	}
 
 	for _, tc := range tests {
@@ -591,6 +601,10 @@ func TestBuildManifestURLForContainer(t *testing.T) {
 			got, err := buildManifestURLForContainer(testLog(), container, tc.scheme)
 			if tc.wantErr {
 				require.Error(t, err)
+
+				if tc.errIs != nil {
+					require.ErrorIs(t, err, tc.errIs)
+				}
 
 				return
 			}

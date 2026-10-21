@@ -24,6 +24,7 @@ import (
 
 	registryConfig "github.com/nicholas-fedor/watchtower/internal/config/registry"
 	"github.com/nicholas-fedor/watchtower/internal/logging"
+	"github.com/nicholas-fedor/watchtower/pkg/registry/auth"
 	mockAuth "github.com/nicholas-fedor/watchtower/pkg/registry/auth/mocks"
 	"github.com/nicholas-fedor/watchtower/pkg/registry/ratelimit"
 	mockTypes "github.com/nicholas-fedor/watchtower/pkg/types/mocks"
@@ -159,6 +160,18 @@ func TestDigestsMatch(t *testing.T) {
 			remoteDigest: "",
 			expected:     false,
 		},
+		{
+			name:         "empty remote digest does not match a local digest without a hash",
+			localDigests: []string{"repo@sha256:"},
+			remoteDigest: "sha256:",
+			expected:     false,
+		},
+		{
+			name:         "empty remote digest does not match a local digest with nothing after @",
+			localDigests: []string{"repo@"},
+			remoteDigest: "",
+			expected:     false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -183,7 +196,7 @@ func TestFormatDigest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, FormatDigest(tt.input))
+			assert.Equal(t, tt.want, formatDigest(tt.input))
 		})
 	}
 }
@@ -475,13 +488,57 @@ func TestCompareDigestWithRemote_HeadRejectedFallsBackToGet(t *testing.T) {
 	assert.Equal(t, remote, remoteDigest)
 }
 
+// TestCompareDigestWithRemote_SkipsInvalidEndpoint verifies that a registry
+// endpoint override that is not a host is skipped for the next endpoint
+// without a request to it.
+func TestCompareDigestWithRemote_SkipsInvalidEndpoint(t *testing.T) {
+	ratelimit.ResetForTest()
+	t.Cleanup(ratelimit.ResetForTest)
+
+	settings := registryConfig.Registry{TLSSkip: true}
+
+	const remote = "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+
+	var requests atomic.Int32
+
+	registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+
+		switch {
+		case r.URL.Path == "/v2/" || r.URL.Path == "/v2":
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodHead && r.URL.Path == "/v2/myapp/manifests/latest":
+			w.Header().Set("Docker-Content-Digest", remote)
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer registry.Close()
+
+	host := strings.TrimPrefix(registry.URL, "http://")
+
+	mc := mockTypes.NewMockContainer(t)
+	mc.On("Name").Return("myapp").Maybe()
+	mc.On("HasImageInfo").Return(true).Maybe()
+	mc.On("ImageName").Return(host + "/myapp:latest")
+	mc.On("ImageInfo").Return(&dockerImage.InspectResponse{
+		RepoDigests: []string{"registry.example.com/myapp@" + remote},
+	})
+
+	match, _, err := CompareDigestWithRemote(testLog(), context.Background(), mc, "", settings, "bad host", registry.URL)
+	require.NoError(t, err)
+	assert.True(t, match)
+	assert.Equal(t, int32(2), requests.Load())
+}
+
 // TestCompareDigestWithRemote_LocalOnly404 is a regression test for locally built
 // images (e.g. atlas-badgerdb) that have non-empty registry-less RepoDigests.
 // A HEAD 404 must be treated as up-to-date with no error so callers skip the pull
 // without logging "Digest retrieval failed, falling back to full pull".
 func TestCompareDigestWithRemote_LocalOnly404(t *testing.T) {
-	ClearLocalOnlyImageCache()
-	t.Cleanup(ClearLocalOnlyImageCache)
+	clearLocalOnlyImageCache()
+	t.Cleanup(clearLocalOnlyImageCache)
 
 	settings := registryConfig.Registry{TLSSkip: true}
 
@@ -545,10 +602,10 @@ func TestCompareDigestWithRemote_LocalOnly404(t *testing.T) {
 	assert.GreaterOrEqual(t, headManifestCalls, 1)
 }
 
-// TestIsLocalImageNotFound verifies domain-less Config.Image + ErrManifestNotFound
+// TestIsLocalImageNotFound verifies domain-less Config.Image + errManifestNotFound
 // identity matching (a prior dual-sentinel bug broke errors.Is).
 func TestIsLocalImageNotFound(t *testing.T) {
-	t.Run("true for domain-less Config.Image with wrapped ErrManifestNotFound", func(t *testing.T) {
+	t.Run("true for domain-less Config.Image with wrapped errManifestNotFound", func(t *testing.T) {
 		mc := mockTypes.NewMockContainer(t)
 		mc.On("HasImageInfo").Return(true)
 		mc.On("ImageInfo").Return(&dockerImage.InspectResponse{
@@ -560,7 +617,7 @@ func TestIsLocalImageNotFound(t *testing.T) {
 			Config: &dockerContainer.Config{Image: "atlas-badgerdb"},
 		})
 
-		err := fmt.Errorf("%w: %w: status 404 Not Found", ErrManifestNotFound, errInvalidRegistryResponse)
+		err := fmt.Errorf("%w: %w: status 404 Not Found", errManifestNotFound, errInvalidRegistryResponse)
 		assert.True(t, isLocalImageNotFound(mc, err))
 	})
 
@@ -576,7 +633,7 @@ func TestIsLocalImageNotFound(t *testing.T) {
 			Config: &dockerContainer.Config{Image: "my-app:1.0"},
 		})
 
-		err := fmt.Errorf("%w: status 404 Not Found", ErrManifestNotFound)
+		err := fmt.Errorf("%w: status 404 Not Found", errManifestNotFound)
 		assert.True(t, isLocalImageNotFound(mc, err))
 	})
 
@@ -587,7 +644,7 @@ func TestIsLocalImageNotFound(t *testing.T) {
 			Config: &dockerContainer.Config{Image: "registry.example.com/app:latest"},
 		})
 
-		err := fmt.Errorf("%w: status 404 Not Found", ErrManifestNotFound)
+		err := fmt.Errorf("%w: status 404 Not Found", errManifestNotFound)
 		assert.False(t, isLocalImageNotFound(mc, err))
 	})
 
@@ -606,7 +663,7 @@ func TestIsLocalImageNotFound(t *testing.T) {
 			Config: &dockerContainer.Config{Image: "nginx:latest"},
 		})
 
-		err := fmt.Errorf("%w: status 404 Not Found", ErrManifestNotFound)
+		err := fmt.Errorf("%w: status 404 Not Found", errManifestNotFound)
 		assert.False(t, isLocalImageNotFound(mc, err))
 	})
 
@@ -620,8 +677,8 @@ func TestIsLocalImageNotFound(t *testing.T) {
 // TestLocalOnlyImageCache ensures a confirmed local-only image skips subsequent
 // registry probes for the same image name+ID.
 func TestLocalOnlyImageCache(t *testing.T) {
-	ClearLocalOnlyImageCache()
-	t.Cleanup(ClearLocalOnlyImageCache)
+	clearLocalOnlyImageCache()
+	t.Cleanup(clearLocalOnlyImageCache)
 
 	settings := registryConfig.Registry{TLSSkip: true}
 
@@ -988,6 +1045,8 @@ func TestBuildManifestURL(t *testing.T) {
 		expectedURL  string
 		expectedHost string
 		wantErr      bool
+		// errIs is the cause the build error must also wrap, nil to skip the check.
+		errIs error
 	}{
 		{
 			name: "builds HTTPS manifest URL with empty override",
@@ -1051,6 +1110,47 @@ func TestBuildManifestURL(t *testing.T) {
 			wantErr:      false,
 		},
 		{
+			name: "overrides host with a bare host and port",
+			container: func(t *testing.T) *mockTypes.MockContainer {
+				t.Helper()
+				mc := mockTypes.NewMockContainer(t)
+				mc.On("Name").Return("bare-host-port-override").Maybe()
+				mc.On("ImageName").Return("nginx:latest")
+
+				return mc
+			},
+			hostOverride: "127.0.0.1:5000",
+			expectedURL:  "https://127.0.0.1:5000/v2/library/nginx/manifests/latest",
+			expectedHost: "index.docker.io",
+			wantErr:      false,
+		},
+		{
+			name: "rejects a host override that is not a host",
+			container: func(t *testing.T) *mockTypes.MockContainer {
+				t.Helper()
+				mc := mockTypes.NewMockContainer(t)
+				mc.On("Name").Return("invalid-host-override").Maybe()
+				mc.On("ImageName").Return("nginx:latest")
+
+				return mc
+			},
+			hostOverride: "bad host",
+			wantErr:      true,
+		},
+		{
+			name: "rejects an image reference without a registry host",
+			container: func(t *testing.T) *mockTypes.MockContainer {
+				t.Helper()
+				mc := mockTypes.NewMockContainer(t)
+				mc.On("Name").Return("missing-host").Maybe()
+				mc.On("ImageName").Return("a_b.example.com/repo:tag")
+
+				return mc
+			},
+			wantErr: true,
+			errIs:   auth.ErrMissingRegistryHost,
+		},
+		{
 			name: "redirects lscr.io to ghcr.io",
 			container: func(t *testing.T) *mockTypes.MockContainer {
 				t.Helper()
@@ -1073,7 +1173,12 @@ func TestBuildManifestURL(t *testing.T) {
 
 			gotURL, gotHost, _, err := BuildManifestURL(testLog(), tt.container(t), settings, tt.hostOverride)
 			if tt.wantErr {
-				require.Error(t, err)
+				require.ErrorIs(t, err, errFailedBuildManifestURL)
+				assert.Empty(t, gotURL)
+
+				if tt.errIs != nil {
+					require.ErrorIs(t, err, tt.errIs)
+				}
 
 				return
 			}
@@ -1378,6 +1483,19 @@ func TestExtractHeadDigest(t *testing.T) {
 			expected: "abc",
 			wantErr:  false,
 		},
+		{
+			name: "returns an empty digest for a GET fallback when Docker-Content-Digest has no hash",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     http.Header{"Docker-Content-Digest": []string{"sha256:"}},
+					Body:       http.NoBody,
+				}
+			},
+			expected: "",
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1548,6 +1666,45 @@ func TestExtractGetDigest(t *testing.T) {
 					Status:     "200 OK",
 					Header:     http.Header{},
 					Body:       &errReadCloser{},
+				}
+			},
+			expected: "",
+			wantErr:  true,
+		},
+		{
+			name: "falls back to the body when the digest header has no hash",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     http.Header{"Docker-Content-Digest": []string{"sha256:"}},
+					Body:       io.NopCloser(strings.NewReader("sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")),
+				}
+			},
+			expected: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+			wantErr:  false,
+		},
+		{
+			name: "returns error when the digest header has no hash and the body is empty",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     http.Header{"Docker-Content-Digest": []string{"sha256:"}},
+					Body:       http.NoBody,
+				}
+			},
+			expected: "",
+			wantErr:  true,
+		},
+		{
+			name: "returns error when JSON body digest has no hash",
+			setupResp: func() *http.Response {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"digest": "sha256:"}`)),
 				}
 			},
 			expected: "",

@@ -18,8 +18,8 @@ import (
 
 // Errors for manifest operations.
 var (
-	// ErrMissingTag indicates the parsed image reference lacks both a tag and a digest.
-	ErrMissingTag = errors.New("parsed container image reference has no tag")
+	// errMissingTag indicates the parsed image reference lacks both a tag and a digest.
+	errMissingTag = errors.New("parsed container image reference has no tag")
 	// errFailedParseImageName indicates a failure to parse the container's image name.
 	errFailedParseImageName = errors.New("failed to parse image name")
 )
@@ -199,7 +199,8 @@ func BuildManifestURL(log *zerolog.Logger, container types.Container, scheme str
 //
 // Returns:
 //   - string: Manifest URL using the canonical registry host from the image reference.
-//   - error: Non-nil if parsing or tagging fails, nil on success.
+//   - error: Non-nil if parsing or tagging fails, or if the reference names no
+//     registry host, nil on success.
 func BuildManifestURLForImage(
 	log *zerolog.Logger,
 	imageName,
@@ -238,7 +239,7 @@ func BuildManifestURLForImage(
 		Str("ref", normalizedRef.String()).
 		Msg("Missing tag/digest in image reference")
 
-	return "", fmt.Errorf("%w: %s", ErrMissingTag, normalizedRef.String())
+	return "", fmt.Errorf("%w: %s", errMissingTag, normalizedRef.String())
 }
 
 // buildTaggedManifestURL constructs a manifest URL for a tag-based image reference.
@@ -253,9 +254,14 @@ func BuildManifestURLForImage(
 //
 // Returns:
 //   - string: Fully qualified manifest URL (e.g., "https://registry.example.com/v2/org/image/manifests/latest").
-//   - error: Non-nil if URL construction fails, nil on success.
+//   - error: Wraps [auth.ErrMissingRegistryHost] when the reference names no
+//     registry host, nil on success.
 func buildTaggedManifestURL(log *zerolog.Logger, fields map[string]any, tagged reference.NamedTagged, scheme string) (string, error) {
 	host := resolveRegistryHost(log, tagged.Name())
+	if host == "" {
+		return "", fmt.Errorf("%w: %s", auth.ErrMissingRegistryHost, tagged.Name())
+	}
+
 	components := tagComponents(tagged)
 	setManifestURLFields(log, fields, host, components.imagePath, scheme, components.specifier, "")
 
@@ -275,7 +281,9 @@ func buildTaggedManifestURL(log *zerolog.Logger, fields map[string]any, tagged r
 //
 // Returns:
 //   - string: Fully qualified manifest URL (e.g., "https://registry.example.com/v2/org/image/manifests/sha256:abc...").
-//   - error: Non-nil if component extraction fails, nil on success.
+//   - error: Non-nil if component extraction fails, wraps
+//     [auth.ErrMissingRegistryHost] when the reference names no registry host,
+//     nil on success.
 func buildDigestedManifestURL(log *zerolog.Logger, fields map[string]any, digested reference.Digested, scheme string) (string, error) {
 	components, err := digestComponents(digested)
 	if err != nil {
@@ -288,7 +296,12 @@ func buildDigestedManifestURL(log *zerolog.Logger, fields map[string]any, digest
 	}
 
 	namePart, _, _ := strings.Cut(digested.String(), "@")
+
 	host := resolveRegistryHost(log, namePart)
+	if host == "" {
+		return "", fmt.Errorf("%w: %s", auth.ErrMissingRegistryHost, namePart)
+	}
+
 	setManifestURLFields(log, fields, host, components.imagePath, scheme, "", components.specifier)
 
 	return manifestURLString(host, scheme, manifestURLPath(components.imagePath, components.specifier)), nil

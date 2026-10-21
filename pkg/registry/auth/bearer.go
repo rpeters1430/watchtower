@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"sync"
@@ -35,6 +36,10 @@ var (
 
 // Default token TTL when the registry does not provide expires_in.
 const defaultTokenTTL = 60 * time.Second
+
+// maxTokenLifetimeSeconds is the longest token lifetime, in seconds, that fits
+// in a [time.Duration].
+const maxTokenLifetimeSeconds = int64(math.MaxInt64 / time.Second)
 
 // Cache configuration constants.
 const (
@@ -95,7 +100,7 @@ func initTokenCache(log *zerolog.Logger) {
 	})
 }
 
-// GetBearerToken fetches a bearer token based on challenge instructions.
+// getBearerToken fetches a bearer token based on challenge instructions.
 //
 // It parses the challenge header, constructs the auth URL, and retrieves a bearer token.
 // The token is cached to avoid redundant HTTP requests for the same challenge.
@@ -113,7 +118,7 @@ func initTokenCache(log *zerolog.Logger) {
 // Returns:
 //   - string: Bearer token header (e.g., "Bearer ...") if successful.
 //   - error: Non-nil if the operation fails, nil on success.
-func GetBearerToken(log *zerolog.Logger,
+func getBearerToken(log *zerolog.Logger,
 	ctx context.Context,
 	challenge string,
 	imageRef reference.Named,
@@ -125,7 +130,7 @@ func GetBearerToken(log *zerolog.Logger,
 	clog.Debug().Msg("Fetching bearer token from challenge")
 
 	// Construct the auth URL from the challenge details.
-	authURL, err := GetAuthURL(&clog,
+	authURL, err := getAuthURL(&clog,
 		challenge,
 		imageRef,
 		registryAuth,
@@ -571,9 +576,9 @@ func readBearerTokenWithExpiry(log *zerolog.Logger, body io.Reader, imageName st
 
 // computeTokenExpiry calculates the absolute expiry time from a token response.
 //
-// It prefers the registry-provided expires_in combined with issued_at when both
-// are available. It falls back to current time when issued_at is absent or invalid,
-// and finally defaults to defaultTokenTTL.
+// The token lives for its expires_in lifetime, or defaultTokenTTL without one,
+// counted from issued_at when it is a valid time and from the current time
+// otherwise.
 //
 // Parameters:
 //   - tokenResponse: Parsed token response from the registry.
@@ -582,6 +587,7 @@ func readBearerTokenWithExpiry(log *zerolog.Logger, body io.Reader, imageName st
 //   - time.Time: The absolute expiry time for the token.
 func computeTokenExpiry(log *zerolog.Logger, tokenResponse *types.TokenResponse) time.Time {
 	now := time.Now()
+	lifetime := tokenLifetime(tokenResponse.ExpiresIn)
 
 	if tokenResponse.IssuedAt != "" {
 		issuedAt, parseErr := time.Parse(
@@ -589,11 +595,7 @@ func computeTokenExpiry(log *zerolog.Logger, tokenResponse *types.TokenResponse)
 			tokenResponse.IssuedAt,
 		)
 		if parseErr == nil {
-			if tokenResponse.ExpiresIn > 0 {
-				return issuedAt.Add(time.Duration(tokenResponse.ExpiresIn) * time.Second)
-			}
-
-			return issuedAt.Add(defaultTokenTTL)
+			return issuedAt.Add(lifetime)
 		}
 
 		log.Debug().
@@ -602,11 +604,26 @@ func computeTokenExpiry(log *zerolog.Logger, tokenResponse *types.TokenResponse)
 			Msg("Failed to parse issued_at - using current time as base")
 	}
 
-	if tokenResponse.ExpiresIn > 0 {
-		return now.Add(time.Duration(tokenResponse.ExpiresIn) * time.Second)
+	return now.Add(lifetime)
+}
+
+// tokenLifetime returns how long a token lives after it is issued.
+//
+// A lifetime longer than a [time.Duration] can hold is capped, so it cannot
+// overflow into one that has already ended.
+//
+// Parameters:
+//   - expiresIn: The token response's expires_in, in seconds.
+//
+// Returns:
+//   - time.Duration: expiresIn seconds, at most maxTokenLifetimeSeconds, or
+//     defaultTokenTTL when expiresIn is not positive.
+func tokenLifetime(expiresIn int) time.Duration {
+	if expiresIn <= 0 {
+		return defaultTokenTTL
 	}
 
-	return now.Add(defaultTokenTTL)
+	return time.Duration(min(int64(expiresIn), maxTokenLifetimeSeconds)) * time.Second
 }
 
 // resolveService resolves the service identifier from challenge values,
@@ -693,7 +710,7 @@ func buildAuthQuery(log *zerolog.Logger, authURL *url.URL, values challengeValue
 	return authURL
 }
 
-// GetAuthURL constructs an authentication URL from challenge instructions.
+// getAuthURL constructs an authentication URL from challenge instructions.
 //
 // Parameters:
 //   - challenge: Challenge string from the registry.
@@ -704,7 +721,7 @@ func buildAuthQuery(log *zerolog.Logger, authURL *url.URL, values challengeValue
 // Returns:
 //   - *url.URL: Constructed auth URL if successful.
 //   - error: Non-nil if parsing fails, nil on success.
-func GetAuthURL(
+func getAuthURL(
 	log *zerolog.Logger,
 	challenge string,
 	imageRef reference.Named,
@@ -750,8 +767,10 @@ func GetAuthURL(
 		return nil, fmt.Errorf("%w: %s", errInvalidRealmURL, values.realm)
 	}
 
-	// Reject realms without a host or with a non-HTTP(S) scheme.
-	if authURL.Host == "" || (authURL.Scheme != "http" && authURL.Scheme != "https") {
+	// Reject realms without a host name or with a non-HTTP(S) scheme. A realm
+	// with only a port names no server, and its token request would go to the
+	// local machine.
+	if authURL.Hostname() == "" || (authURL.Scheme != "http" && authURL.Scheme != "https") {
 		log.Debug().
 			Str("image", imageRef.Name()).
 			Str("realm", values.realm).

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nicholas-fedor/watchtower/internal/logging"
+	"github.com/nicholas-fedor/watchtower/pkg/registry/auth"
 )
 
 // mockDigested is a test implementation of reference.Digested with an invalid String() method.
@@ -318,4 +319,32 @@ func TestBuildDigestedManifestURLInvalidComponents(t *testing.T) {
 	url, err := buildDigestedManifestURL(testLog(), fields, mock, "https")
 	require.Error(t, err)
 	assert.Empty(t, url)
+}
+
+func TestBuildManifestURLsRejectMissingRegistryHost(t *testing.T) {
+	fields := map[string]any{"container": "test-container"}
+
+	t.Run("tagged reference", func(t *testing.T) {
+		ref, err := reference.ParseDockerRef("a_b.example.com/repo:tag")
+		require.NoError(t, err)
+
+		tagged, ok := ref.(reference.NamedTagged)
+		require.True(t, ok, "Reference should be NamedTagged")
+
+		url, err := buildTaggedManifestURL(testLog(), fields, tagged, "https")
+		require.ErrorIs(t, err, auth.ErrMissingRegistryHost)
+		assert.Empty(t, url)
+	})
+
+	t.Run("digested reference", func(t *testing.T) {
+		ref, err := reference.ParseDockerRef("a_b.example.com/repo@sha256:daf7034c5c89775afe3008393ae033529913548243b84926931d7c84398ecda7")
+		require.NoError(t, err)
+
+		digested, ok := ref.(reference.Digested)
+		require.True(t, ok, "Reference should be Digested")
+
+		url, err := buildDigestedManifestURL(testLog(), fields, digested, "https")
+		require.ErrorIs(t, err, auth.ErrMissingRegistryHost)
+		assert.Empty(t, url)
+	})
 }
