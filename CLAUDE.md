@@ -83,7 +83,7 @@ Watchtower is a single long-running process that polls the Docker daemon, detect
    - `scheduling.RunUpgradesOnSchedule` (interval/cron via `robfig/cron`),
    - HTTP API triggers via `api.SetupAndStartAPI`.
 
-   An update lock (`chan bool`) is shared between the scheduler and the API so scans never overlap.
+   An update lock (`scheduling.UpdateLock`, with `TryLock` and a context-aware `Lock`) is shared between the scheduler and the API so scans never overlap.
 
 ### Configuration pipeline (flags → config → params)
 
