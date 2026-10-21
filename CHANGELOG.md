@@ -1338,6 +1338,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Continuous Integration
 
+- Run the dashboard workflow only on PRs that touch it by @rpeters1430
 - Port upstream fixes for the pre-existing golangci-lint failures by @claude
 - Publish multi-arch images with :latest tag for NAS deployment by @rpeters1430
 - Publish only from main as latest by @claude
@@ -3025,8 +3026,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#61](https://github.com/rpeters1430/watchtower/pull/61)
-- @github-actions[bot] made their first contribution in [#63](https://github.com/rpeters1430/watchtower/pull/63)
+- @rpeters1430 made their first contribution in [#65](https://github.com/rpeters1430/watchtower/pull/65)
+- @github-actions[bot] made their first contribution in [#64](https://github.com/rpeters1430/watchtower/pull/64)
 - @nicholas-fedor made their first contribution
 - @renovate[bot] made their first contribution
 - @claude made their first contribution
