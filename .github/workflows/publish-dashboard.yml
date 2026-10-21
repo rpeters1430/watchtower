@@ -4,8 +4,15 @@ on:
   push:
     branches: [main]
     tags: ['v*.*.*']
+  # Only pull requests that touch the dashboard. Runs for the changelog pull
+  # requests that github-actions[bot] opens were rejected before any job
+  # started, most likely because such runs cannot be granted the
+  # packages: write that build-and-publish declares.
   pull_request:
     branches: [main]
+    paths:
+      - 'dashboard/**'
+      - '.github/workflows/publish-dashboard.yml'
   workflow_dispatch:
 
 permissions:
