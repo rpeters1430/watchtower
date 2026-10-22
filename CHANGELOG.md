@@ -3038,8 +3038,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
+- @github-actions[bot] made their first contribution in [#84](https://github.com/rpeters1430/watchtower/pull/84)
 - @rpeters1430 made their first contribution in [#79](https://github.com/rpeters1430/watchtower/pull/79)
-- @github-actions[bot] made their first contribution in [#83](https://github.com/rpeters1430/watchtower/pull/83)
 - @renovate[bot] made their first contribution
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
