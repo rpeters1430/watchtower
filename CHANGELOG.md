@@ -1412,6 +1412,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 29c7089 by @renovate[bot]
+- Update golang:1.27-alpine docker digest to b8c9b82 by @renovate[bot]
 - Update golang:alpine3.24 docker digest to b8c9b82 by @renovate[bot]
 - Update step-security/harden-runner action to v2.22.2 by @renovate[bot]
 - Update alpine:3.24 docker digest to 71e9b7b by @renovate[bot]
@@ -3036,9 +3038,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#81](https://github.com/rpeters1430/watchtower/pull/81)
+- @rpeters1430 made their first contribution in [#79](https://github.com/rpeters1430/watchtower/pull/79)
+- @github-actions[bot] made their first contribution in [#83](https://github.com/rpeters1430/watchtower/pull/83)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#78](https://github.com/rpeters1430/watchtower/pull/78)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
