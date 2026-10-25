@@ -1412,6 +1412,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to d9e9822 by @renovate[bot]
+- Update patch dependency updates by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to c787da1 by @renovate[bot]
 - Update module github.com/nicholas-fedor/shoutrrr to v0.22.1 by @renovate[bot]
 - Update patch dependency updates by @renovate[bot] in [#105](https://github.com/rpeters1430/watchtower/pull/105)
@@ -3052,9 +3054,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#106](https://github.com/rpeters1430/watchtower/pull/106)
+- @rpeters1430 made their first contribution in [#110](https://github.com/rpeters1430/watchtower/pull/110)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#107](https://github.com/rpeters1430/watchtower/pull/107)
+- @github-actions[bot] made their first contribution in [#109](https://github.com/rpeters1430/watchtower/pull/109)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
