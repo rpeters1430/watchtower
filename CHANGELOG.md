@@ -1412,6 +1412,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update dependency python to v3.15.2 by @renovate[bot] in [#137](https://github.com/rpeters1430/watchtower/pull/137)
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 2066e3d by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to f6ea731 by @renovate[bot]
 - Update dependency node to v26 by @renovate[bot]
@@ -3066,9 +3067,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
+- @renovate[bot] made their first contribution in [#137](https://github.com/rpeters1430/watchtower/pull/137)
+- @github-actions[bot] made their first contribution in [#134](https://github.com/rpeters1430/watchtower/pull/134)
 - @rpeters1430 made their first contribution in [#133](https://github.com/rpeters1430/watchtower/pull/133)
-- @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#132](https://github.com/rpeters1430/watchtower/pull/132)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
