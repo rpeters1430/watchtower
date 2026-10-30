@@ -216,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix auth.GetToken signature and registry TLS scheme resolution by @rpeters1430
 - Forward scan timeout to trivy CLI by @rpeters1430
 - Cap bearer token lifetimes that overflow a duration by @nicholas-fedor
 - Reject bearer token realms without a host name by @nicholas-fedor
@@ -3071,9 +3072,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#142](https://github.com/rpeters1430/watchtower/pull/142)
+- @rpeters1430 made their first contribution
+- @github-actions[bot] made their first contribution in [#143](https://github.com/rpeters1430/watchtower/pull/143)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#141](https://github.com/rpeters1430/watchtower/pull/141)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
