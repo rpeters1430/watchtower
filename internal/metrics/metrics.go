@@ -37,6 +37,8 @@ type Metric struct {
 	// ScanFailed reports that the scan ended in an error. The counts are then
 	// those the scan reached before it failed.
 	ScanFailed bool `json:"scan_failed,omitempty"`
+	// RecordedAt is the timestamp when the scan completed.
+	RecordedAt time.Time `json:"recorded_at,omitempty"`
 }
 
 // Metrics handles processing and exposing scan metrics.
@@ -224,6 +226,8 @@ func NewMetric(report types.Report) *Metric {
 		}
 	}
 
+	now := time.Now().UTC()
+
 	return &Metric{
 		Scanned:    len(report.Scanned()),
 		Updated:    len(report.Updated()), // Only count actually updated containers.
@@ -231,7 +235,8 @@ func NewMetric(report types.Report) *Metric {
 		Restarted:  len(report.Restarted()),
 		Skipped:    len(report.Skipped()),
 		Containers: containers,
-		Statuses:   newScanStatuses(report, time.Now().UTC()),
+		Statuses:   newScanStatuses(report, now),
+		RecordedAt: now,
 	}
 }
 

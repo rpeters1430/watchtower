@@ -182,6 +182,37 @@ func TestGetContainerDetails(t *testing.T) {
 			},
 		},
 		{
+			name: "versioned image flags is_versioned",
+			client: func(t *testing.T) *mockContainer.MockClient {
+				t.Helper()
+				c := mockContainer.NewMockClient(t)
+				container := mockTypes.NewMockContainer(t)
+				setupMockContainer(container)
+				container.EXPECT().Name().Return("postgres-container")
+				container.EXPECT().ImageName().Return("postgres:15.2-alpine")
+				container.EXPECT().ImageID().Return(types.ImageID("sha256:pg15"))
+				container.EXPECT().IsRunning().Return(true)
+				container.EXPECT().IsWatchtower().Return(false)
+				container.EXPECT().IsMonitorOnly(mock.Anything).Return(false)
+				container.EXPECT().IsNoPull(mock.Anything).Return(false)
+				container.EXPECT().Enabled().Return(true, true)
+				container.EXPECT().IsStale().Return(false)
+				container.EXPECT().Scope().Return("", true)
+				container.EXPECT().ImageInfo().Return(nil)
+				c.EXPECT().ListContainers(mock.Anything).Return([]types.Container{container}, nil)
+
+				return c
+			},
+			filter:  nil,
+			params:  types.UpdateParams{},
+			wantErr: false,
+			wantLen: 1,
+			want: func(t *testing.T, details []ContainerDetails) {
+				t.Helper()
+				assert.True(t, details[0].IsVersioned)
+			},
+		},
+		{
 			name: "client error returns wrapped error",
 			client: func(t *testing.T) *mockContainer.MockClient {
 				t.Helper()

@@ -121,9 +121,14 @@ func (h *StatusHandler) Handle(c fiber.Ctx) error {
 		summary["scan_failed"] = true
 	}
 
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	if !last.RecordedAt.IsZero() {
+		timestamp = last.RecordedAt.UTC().Format(time.RFC3339)
+	}
+
 	err := c.Status(http.StatusOK).JSON(fiber.Map{
 		"summary":     summary,
-		"timestamp":   time.Now().UTC().Format(time.RFC3339),
+		"timestamp":   timestamp,
 		"api_version": "v1",
 	})
 	if err != nil {

@@ -850,6 +850,7 @@
       else if (action === "stop") actionDesc = "stopped";
       else if (action === "restart") actionDesc = "restarted";
       else if (action === "set_tag") actionDesc = `recreated with tag ${payload.tag || payload.image}`;
+      else if (action === "upgrade_version") actionDesc = `upgraded to ${payload.tag || "new version"}`;
 
       notify(`Container ${containerName} ${actionDesc}.`);
       state.editingTag.delete(containerName);
@@ -1215,51 +1216,95 @@
           oninput: (e) => state.editingTag.set(container.name, e.target.value),
         });
 
-        imageCell = el(
-          "div",
-          { class: "tag-field-wrapper" },
+        const formChildren = [
+          input,
           el(
-            "div",
-            { class: "tag-edit-form" },
-            input,
+            "button",
+            {
+              class: "button button-primary button-tiny",
+              type: "button",
+              disabled: state.acting.has(container.name),
+              onclick: async () => {
+                const val = input.value.trim();
+                if (!val) {
+                  notify("Image tag or reference cannot be empty.", true);
+                  return;
+                }
+                await containerAction(container.name, "set_tag", { tag: val });
+              },
+            },
+            state.acting.has(container.name) ? "Recreating..." : "Apply & Recreate",
+          ),
+          el(
+            "button",
+            {
+              class: "button button-quiet button-tiny",
+              type: "button",
+              disabled: state.acting.has(container.name),
+              onclick: () => {
+                state.editingTag.delete(container.name);
+                renderManifest();
+              },
+            },
+            "Cancel",
+          ),
+        ];
+
+        const wrapperChildren = [el("div", { class: "tag-edit-form" }, ...formChildren)];
+
+        if (container.available_versions && container.available_versions.length > 0) {
+          wrapperChildren.push(
+            el(
+              "div",
+              { class: "tag-suggestions" },
+              el("span", { class: "tag-suggestions-label" }, "Available newer versions: "),
+              ...container.available_versions.slice(0, 6).map((ver) =>
+                el(
+                  "button",
+                  {
+                    class: "button button-quiet button-tiny tag-pill",
+                    type: "button",
+                    onclick: () => {
+                      input.value = ver;
+                      state.editingTag.set(container.name, ver);
+                    },
+                  },
+                  ver,
+                ),
+              ),
+            ),
+          );
+        }
+
+        wrapperChildren.push(
+          el(
+            "p",
+            { class: "tag-help" },
+            "Pulls the new image/tag, then recreates the container keeping all ports, volumes, and environment variables.",
+          ),
+        );
+
+        imageCell = el("div", { class: "tag-field-wrapper" }, ...wrapperChildren);
+      } else {
+        const rowChildren = [code(container.image)];
+        if (container.newer_version_tag) {
+          rowChildren.push(
             el(
               "button",
               {
                 class: "button button-primary button-tiny",
                 type: "button",
                 disabled: state.acting.has(container.name),
+                "aria-label": `Upgrade ${container.name} to ${container.newer_version_tag}`,
                 onclick: async () => {
-                  const val = input.value.trim();
-                  if (!val) {
-                    notify("Image tag or reference cannot be empty.", true);
-                    return;
-                  }
-                  await containerAction(container.name, "set_tag", { tag: val });
+                  await containerAction(container.name, "set_tag", { tag: container.newer_version_tag });
                 },
               },
-              state.acting.has(container.name) ? "Recreating..." : "Apply & Recreate",
+              state.acting.has(container.name) ? "Upgrading..." : `Upgrade to ${container.newer_version_tag}`,
             ),
-            el(
-              "button",
-              {
-                class: "button button-quiet button-tiny",
-                type: "button",
-                disabled: state.acting.has(container.name),
-                onclick: () => {
-                  state.editingTag.delete(container.name);
-                  renderManifest();
-                },
-              },
-              "Cancel",
-            ),
-          ),
-          el("p", { class: "tag-help" }, "Pulls the new image/tag, then recreates the container keeping all ports, volumes, and environment variables."),
-        );
-      } else {
-        imageCell = el(
-          "div",
-          { class: "tag-field-row" },
-          code(container.image),
+          );
+        }
+        rowChildren.push(
           el(
             "button",
             {
@@ -1275,12 +1320,24 @@
             "Edit tag",
           ),
         );
+        imageCell = el("div", { class: "tag-field-row" }, ...rowChildren);
       }
     } else {
       imageCell = code(container.image);
     }
 
     add("Image", imageCell);
+
+    if (container.newer_version_tag) {
+      add(
+        "New release",
+        el(
+          "span",
+          { class: "status-badge status-update-available" },
+          `${container.newer_version_tag} available`,
+        ),
+      );
+    }
 
     if (check.current_image_version || check.latest_image_version) {
       add(

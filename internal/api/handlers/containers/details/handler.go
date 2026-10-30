@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/distribution/reference"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
 
+	registryConfig "github.com/nicholas-fedor/watchtower/internal/config/registry"
 	"github.com/nicholas-fedor/watchtower/pkg/container"
+	"github.com/nicholas-fedor/watchtower/pkg/registry/auth"
+	"github.com/nicholas-fedor/watchtower/pkg/registry/tags"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
@@ -46,6 +50,12 @@ type ContainerDetails struct {
 	Health string `json:"health,omitempty"`
 	// Source is the OCI source repository URL or release notes link.
 	Source string `json:"source,omitempty"`
+	// IsVersioned indicates whether the container's image uses a versioned tag rather than "latest".
+	IsVersioned bool `json:"is_versioned,omitempty"`
+	// NewerVersionTag is the highest available version tag if a newer version is released.
+	NewerVersionTag string `json:"newer_version_tag,omitempty"`
+	// AvailableVersions lists newer matching version tags for this container.
+	AvailableVersions []string `json:"available_versions,omitempty"`
 }
 
 // GetFunc returns detailed container status for all watched containers.
@@ -235,8 +245,48 @@ func GetContainerDetails(
 			containerDetails.Digest = container.ExtractImageDigest(info.RepoDigests, containerDetails.Image)
 		}
 
+		// Detect versioned tags and check for newer versions if applicable.
+		if tagged, ok := parseTaggedImage(c.ImageName()); ok {
+			currentTag := tagged.Tag()
+			if tags.IsVersioned(currentTag) {
+				containerDetails.IsVersioned = true
+
+				fetchCtx, cancelFetch := context.WithTimeout(ctx, 2*time.Second)
+				nopLog := zerolog.Nop()
+				tagList, err := tags.FetchTags(
+					fetchCtx,
+					&nopLog,
+					c,
+					"",
+					auth.NewAuthClient(nil, registryConfig.Registry{}),
+					registryConfig.Registry{},
+				)
+				cancelFetch()
+
+				if err == nil {
+					newer := tags.FindNewerVersions(currentTag, tagList)
+					if len(newer) > 0 {
+						containerDetails.NewerVersionTag = newer[0]
+						containerDetails.AvailableVersions = newer
+					}
+				}
+			}
+		}
+
 		details = append(details, containerDetails)
 	}
 
 	return details, nil
+}
+
+// parseTaggedImage extracts reference.NamedTagged from an image name.
+func parseTaggedImage(imageName string) (reference.NamedTagged, bool) {
+	ref, err := reference.ParseNormalizedNamed(imageName)
+	if err != nil {
+		return nil, false
+	}
+
+	tagged, ok := ref.(reference.NamedTagged)
+
+	return tagged, ok
 }

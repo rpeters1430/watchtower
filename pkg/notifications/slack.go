@@ -1,7 +1,9 @@
 package notifications
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -39,6 +41,15 @@ const slackChannelNotConvertedMessage = "Legacy Slack channel is not a channel I
 // shoutrrr Slack URL holds the channel as its host, which can carry an ID but
 // not a #name or @user.
 var slackChannelIDPattern = regexp.MustCompile(`^[CGD][A-Z0-9]{8,}$`)
+
+// discordAPIVersionPattern matches a Discord API version path segment, such as v10.
+var discordAPIVersionPattern = regexp.MustCompile(`^v[0-9]+$`)
+
+// errInvalidDiscordWebhookURL indicates a Discord wrapper hook URL that does
+// not have the form https://discord.com/api/webhooks/<id>/<token>/slack.
+var errInvalidDiscordWebhookURL = errors.New(
+	"invalid Discord webhook URL, expected https://discord.com/api/webhooks/<id>/<token>/slack",
+)
 
 // slackTypeNotifier handles Slack notifications via webhook.
 //
@@ -124,8 +135,11 @@ func (s *slackTypeNotifier) GetURL(_ *cobra.Command) (string, error) {
 			Msg("Slack hook URL loaded")
 	}
 
-	// Normalize URL and split parts.
-	trimmedURL := strings.TrimRight(s.HookURL, "/")
+	// Normalize URL and split its path into parts. The query string and fragment
+	// are dropped first, so their contents never count as path segments.
+	trimmedURL, _, _ := strings.Cut(s.HookURL, "?")
+	trimmedURL, _, _ = strings.Cut(trimmedURL, "#")
+	trimmedURL = strings.TrimRight(trimmedURL, "/")
 	trimmedURL = strings.TrimPrefix(trimmedURL, "https://")
 	parts := strings.Split(trimmedURL, "/")
 
@@ -133,9 +147,16 @@ func (s *slackTypeNotifier) GetURL(_ *cobra.Command) (string, error) {
 	if parts[0] == "discord.com" || parts[0] == "discordapp.com" {
 		clog.Debug().Msg("Detected a discord slack wrapper URL, using shoutrrr discord service")
 
+		webhookID, token, ok := discordWebhookCredentials(parts)
+		if !ok {
+			clog.Debug().Msg("Discord wrapper URL does not have the expected form")
+
+			return "", errInvalidDiscordWebhookURL
+		}
+
 		conf := &discord.Config{
-			WebhookID:  parts[len(parts)-3],
-			Token:      parts[len(parts)-2],
+			WebhookID:  webhookID,
+			Token:      token,
 			Color:      ColorInt,
 			SplitLines: true,
 			Username:   s.Username,
@@ -216,4 +237,32 @@ func (s *slackTypeNotifier) webhookChannel() string {
 		Msg(slackChannelNotConvertedMessage)
 
 	return slackWebhookChannel
+}
+
+// discordWebhookCredentials returns the webhook ID and token from the path
+// segments of a Discord wrapper hook URL.
+func discordWebhookCredentials(parts []string) (webhookID, token string, ok bool) {
+	// Drop the host, then an optional version segment after "api".
+	path := parts[1:]
+	if len(path) == 6 && path[0] == "api" && discordAPIVersionPattern.MatchString(path[1]) {
+		path = append([]string{"api"}, path[2:]...)
+	}
+
+	if len(path) != 5 || path[0] != "api" || path[1] != "webhooks" || path[4] != "slack" {
+		return "", "", false
+	}
+
+	webhookID, token = path[2], path[3]
+	if blankPathSegment(webhookID) || blankPathSegment(token) {
+		return "", "", false
+	}
+
+	return webhookID, token, true
+}
+
+// blankPathSegment reports whether a URL path segment carries no value.
+func blankPathSegment(segment string) bool {
+	decoded, err := url.PathUnescape(segment)
+
+	return err != nil || strings.TrimSpace(decoded) == ""
 }

@@ -12,9 +12,9 @@ import (
 
 // Request defines the payload for container lifecycle actions.
 type Request struct {
-	// Action specifies the operation: "start", "stop", "restart", or "set_tag".
+	// Action specifies the operation: "start", "stop", "restart", "set_tag", or "upgrade_version".
 	Action string `json:"action"`
-	// Tag specifies the new image tag or full reference when Action is "set_tag".
+	// Tag specifies the new image tag or full reference when Action is "set_tag" or "upgrade_version".
 	Tag string `json:"tag,omitempty"`
 	// Image is an alias for Tag.
 	Image string `json:"image,omitempty"`

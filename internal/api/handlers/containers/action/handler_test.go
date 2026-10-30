@@ -143,6 +143,13 @@ func TestHandler_Handle(t *testing.T) {
 			expectInBody:   "success",
 		},
 		{
+			name:           "successful upgrade_version",
+			containerName:  "my-app",
+			body:           Request{Action: "upgrade_version", Tag: "v2.0.0"},
+			expectedStatus: http.StatusOK,
+			expectInBody:   "success",
+		},
+		{
 			name:           "missing tag on set_tag returns 400",
 			containerName:  "my-app",
 			body:           Request{Action: "set_tag"},

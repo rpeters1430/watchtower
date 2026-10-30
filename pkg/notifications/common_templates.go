@@ -169,8 +169,8 @@ var commonTemplates = map[string]string{
 	  {{- end -}}
   {{- end -}}
 {{- else -}}
-  {{- /* Fallback to simple entry messages */ -}}
-  {{range .Entries -}}{{.Message}}{{"\n"}}{{- end -}}
+  {{- /* Fallback to simple entry messages, with the error when the entry has one */ -}}
+  {{range .Entries -}}{{.Message}}{{with index .Data "error"}}: {{.}}{{end}}{{"\n"}}{{- end -}}
 {{- end -}}`,
 
 	// "porcelain.v1.summary-no-log" template provides machine-readable output for scripting/automation.

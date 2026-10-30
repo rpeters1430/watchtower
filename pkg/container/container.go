@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -542,7 +543,10 @@ func (c *Container) GetCreateHostConfig() *dockerContainer.HostConfig {
 		}
 
 		normalizedName := util.NormalizeContainerName(parts[0])
-		alias := parts[1]
+		// Inspect reports the alias as a path under the linking container, such
+		// as /app/cache. Docker would store that path under the replacement.
+		// Only the last segment is kept, as Docker's own link parsing does.
+		_, alias := path.Split(parts[1])
 		adjustedLink := fmt.Sprintf("%s:%s", normalizedName, alias)
 		adjusted = append(adjusted, adjustedLink)
 		clog.Debug().

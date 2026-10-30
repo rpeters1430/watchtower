@@ -12,16 +12,20 @@ import (
 
 	dockerContainer "github.com/moby/moby/api/types/container"
 
+	registryConfig "github.com/nicholas-fedor/watchtower/internal/config/registry"
 	"github.com/nicholas-fedor/watchtower/pkg/container"
+	"github.com/nicholas-fedor/watchtower/pkg/registry/auth"
+	"github.com/nicholas-fedor/watchtower/pkg/registry/tags"
 	"github.com/nicholas-fedor/watchtower/pkg/types"
 )
 
 // Supported container lifecycle action names.
 const (
-	ActionStart   = "start"
-	ActionStop    = "stop"
-	ActionRestart = "restart"
-	ActionSetTag  = "set_tag"
+	ActionStart          = "start"
+	ActionStop           = "stop"
+	ActionRestart        = "restart"
+	ActionSetTag         = "set_tag"
+	ActionUpgradeVersion = "upgrade_version"
 )
 
 var (
@@ -102,6 +106,8 @@ func (e *containerExecutor) Execute(ctx context.Context, containerName, action, 
 		return e.restart(ctx, target)
 	case ActionSetTag:
 		return e.setTag(ctx, target, newImageOrTag)
+	case ActionUpgradeVersion:
+		return e.upgradeVersion(ctx, target, newImageOrTag)
 	default:
 		return fmt.Errorf("%w: %s", ErrUnsupportedAction, action)
 	}
@@ -279,4 +285,54 @@ func (e *containerExecutor) setTag(ctx context.Context, target types.Container, 
 		Msg("Successfully updated container image tag and recreated container")
 
 	return nil
+}
+
+func (e *containerExecutor) upgradeVersion(ctx context.Context, target types.Container, explicitTag string) error {
+	targetTag := strings.TrimSpace(explicitTag)
+	if targetTag == "" {
+		ref, err := reference.ParseNormalizedNamed(target.ImageName())
+		if err != nil {
+			return fmt.Errorf("failed to parse container image %s: %w", target.ImageName(), err)
+		}
+
+		tagged, ok := ref.(reference.NamedTagged)
+		if !ok {
+			return fmt.Errorf("container image %s has no tag to upgrade from", target.ImageName())
+		}
+
+		currentTag := tagged.Tag()
+		if !tags.IsVersioned(currentTag) {
+			return fmt.Errorf("container image tag %s is not a versioned tag (e.g. latest)", currentTag)
+		}
+
+		fetchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		availableTags, err := tags.FetchTags(
+			fetchCtx,
+			e.log,
+			target,
+			"",
+			auth.NewAuthClient(e.log, registryConfig.Registry{}),
+			registryConfig.Registry{},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to fetch available tags from registry: %w", err)
+		}
+
+		latestNewer, found := tags.GetLatestNewerVersion(currentTag, availableTags)
+		if !found {
+			return fmt.Errorf("no newer version found for tag %s", currentTag)
+		}
+
+		targetTag = latestNewer
+	}
+
+	e.log.Info().
+		Str("container", target.Name()).
+		Str("current_image", target.ImageName()).
+		Str("upgrade_target_tag", targetTag).
+		Msg("Upgrading container to newer version")
+
+	return e.setTag(ctx, target, targetTag)
 }

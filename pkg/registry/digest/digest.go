@@ -7,6 +7,8 @@ package digest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +37,43 @@ const ContentDigestHeader = "Docker-Content-Digest"
 
 // maxManifestSize is the maximum allowed size for a digest GET fallback body (1 MiB).
 const maxManifestSize = 1 << 20
+
+// schema2Version is the schemaVersion of OCI and Docker schema 2 manifests and
+// indexes, whose digest is the sha256 of their bytes.
+const schema2Version = 2
+
+// manifestBody holds the fields of a manifest response body that tell whether
+// it carries a digest or is a schema 2 manifest or index.
+type manifestBody struct {
+	// Digest is a digest some registries add to the body.
+	Digest string `json:"digest"`
+	// SchemaVersion is 2 for OCI and Docker schema 2 manifests and indexes.
+	SchemaVersion int `json:"schemaVersion"`
+	// Manifests lists the platform manifests of an index. Nil when absent.
+	Manifests *[]json.RawMessage `json:"manifests"`
+	// Config is the config descriptor of an image manifest. Nil when absent.
+	Config *struct {
+		// Digest is the config blob's digest.
+		Digest string `json:"digest"`
+	} `json:"config"`
+	// Layers lists the layer descriptors of an image manifest. Nil when absent.
+	Layers *[]json.RawMessage `json:"layers"`
+}
+
+// isSchema2 reports whether the body is a schema 2 index, which lists its
+// manifests, or a schema 2 image manifest, which has a config digest and a
+// list of layers.
+func (m manifestBody) isSchema2() bool {
+	if m.SchemaVersion != schema2Version {
+		return false
+	}
+
+	if m.Manifests != nil {
+		return true
+	}
+
+	return m.Config != nil && m.Config.Digest != "" && m.Layers != nil
+}
 
 // Errors for digest retrieval operations.
 var (
@@ -852,6 +891,9 @@ func fetchDigest(log *zerolog.Logger,
 			digest     string
 			updatedURL string
 			retry      bool
+			// redirectRetry reports that a retry follows the registry's redirect
+			// rather than a host Watchtower chose.
+			redirectRetry bool
 		)
 
 		err = ratelimit.Do(ctx, log, limitKey, func() error {
@@ -866,6 +908,9 @@ func fetchDigest(log *zerolog.Logger,
 			}
 
 			var handleErr error
+
+			redirectRetry = resp.StatusCode >= http.StatusMultipleChoices &&
+				resp.StatusCode < http.StatusBadRequest
 
 			digest, updatedURL, retry, handleErr = HandleManifestResponse(log,
 				resp,
@@ -899,14 +944,27 @@ func fetchDigest(log *zerolog.Logger,
 			log.Debug().
 				Fields(fields).
 				Fields(epFields).
-				Str("retry_url", updatedURL).
+				Str("retry_url", auth.RedactURL(updatedURL)).
 				Msg("Retrying manifest request with updated URL")
+
+			// A redirect can point anywhere, so the token goes only to the same
+			// origin. Hosts Watchtower picks for a retry serve the same registry.
+			retryToken := token
+
+			if redirectRetry && !sameOrigin(manifestURL, updatedURL) {
+				log.Debug().
+					Fields(fields).
+					Fields(epFields).
+					Msg("Manifest redirect leaves the registry's origin, retrying without the token")
+
+				retryToken = ""
+			}
 
 			digest, err = retryManifestRequest(log,
 				ctx,
 				method,
 				updatedURL,
-				token,
+				retryToken,
 				originalHost,
 				challengeHost,
 				redirected,
@@ -919,7 +977,7 @@ func fetchDigest(log *zerolog.Logger,
 					Err(err).
 					Fields(fields).
 					Fields(epFields).
-					Str("retry_url", updatedURL).
+					Str("retry_url", auth.RedactURL(updatedURL)).
 					Msg("Failed to retry manifest request")
 				lastErr = err
 
@@ -1020,7 +1078,7 @@ func HandleManifestResponse(log *zerolog.Logger,
 
 			log.Debug().
 				Fields(fields).
-				Str("retry_url", manifestURL).
+				Str("retry_url", auth.RedactURL(manifestURL)).
 				Msg("Setting retry due to HEAD failure on original host")
 
 			return "", manifestURL, true, nil
@@ -1042,26 +1100,24 @@ func HandleManifestResponse(log *zerolog.Logger,
 		Msg("Checking redirect condition")
 
 	if redirectCondition {
-		// Handle manifest request redirects by updating URL to redirected host
+		// The client follows redirects itself, so a redirect reaches here only
+		// past its redirect limit. The retry goes to the whole Location,
+		// resolved against the request, so its path and query are kept.
 		location := resp.Header.Get("Location")
 		if location != "" {
-			redirectURL, err := url.Parse(location)
-			if err == nil && redirectURL.Host != "" && redirectURL.Host != currentHost {
-				log.Debug().
-					Fields(fields).
-					Str("redirect_location", location).
-					Str("redirect_host", redirectURL.Host).
-					Msg("Manifest request redirected, updating URL host")
+			locationURL, err := url.Parse(location)
+			if err == nil {
+				target := resp.Request.URL.ResolveReference(locationURL)
+				if target.Host != "" && target.String() != resp.Request.URL.String() {
+					log.Debug().
+						Fields(fields).
+						Str("redirect_host", target.Host).
+						Msg("Manifest request redirected, retrying at the redirect target")
 
-				parsedURL.Host = redirectURL.Host
-				manifestURL = parsedURL.String()
+					*parsedURL = *target
 
-				log.Debug().
-					Fields(fields).
-					Str("retry_url", manifestURL).
-					Msg("Setting retry due to redirect")
-
-				return "", manifestURL, true, nil
+					return "", target.String(), true, nil
+				}
 			}
 		}
 	}
@@ -1103,7 +1159,7 @@ func HandleManifestResponse(log *zerolog.Logger,
 
 			log.Debug().
 				Fields(fields).
-				Str("retry_url", manifestURL).
+				Str("retry_url", auth.RedactURL(manifestURL)).
 				Msg("Setting retry due to 401/404 on redirected host")
 
 			return "", manifestURL, true, nil
@@ -1122,7 +1178,7 @@ func HandleManifestResponse(log *zerolog.Logger,
 
 			log.Debug().
 				Fields(fields).
-				Str("retry_url", manifestURL).
+				Str("retry_url", auth.RedactURL(manifestURL)).
 				Msg("Setting retry due to 401/404 on original host with challenge host")
 
 			return "", manifestURL, true, nil
@@ -1308,10 +1364,7 @@ func ExtractGetDigest(log *zerolog.Logger, resp *http.Response) (string, error) 
 			)
 		}
 		// Try to parse as JSON manifest first (standard OCI/Docker format).
-		// Define a struct to hold the expected JSON structure with a digest field.
-		var manifest struct {
-			Digest string `json:"digest"`
-		}
+		var manifest manifestBody
 		// Attempt to unmarshal the response body as JSON.
 		jsonErr := json.Unmarshal(bodyBytes, &manifest)
 		if jsonErr == nil {
@@ -1325,10 +1378,29 @@ func ExtractGetDigest(log *zerolog.Logger, resp *http.Response) (string, error) 
 
 				return normalizedDigest, nil
 			}
-			// JSON parsed successfully, but the digest field is missing or has no hash.
+
+			// A schema 2 manifest's digest is the sha256 of its bytes as served.
+			// Schema 1 manifests are signed, and their digest leaves the
+			// signatures out, so they are not hashed here, and neither is JSON
+			// that does not have the shape of a manifest or index.
+			if manifest.isSchema2() {
+				sum := sha256.Sum256(bodyBytes)
+				computedDigest := hex.EncodeToString(sum[:])
+
+				log.Debug().
+					Str("digest", computedDigest).
+					Int("body_length", len(bodyBytes)).
+					Msg("Computed digest from JSON manifest body")
+
+				return computedDigest, nil
+			}
+
+			// JSON parsed successfully, but it is not a schema 2 manifest and its
+			// digest field is missing or has no hash.
 			log.Debug().
 				Str("status", resp.Status).
-				Str("body", bodyStr).
+				Int("body_length", len(bodyStr)).
+				Str("content_type", contentType).
 				Msg("JSON manifest parsed but digest field is empty")
 
 			return "", fmt.Errorf("%w: empty digest in JSON manifest", errInvalidRegistryResponse)
@@ -1433,6 +1505,42 @@ func DigestsMatch(log *zerolog.Logger, localDigests []string, remoteDigest strin
 	return false
 }
 
+// sameOrigin reports whether two URLs share a scheme, host name, and port,
+// which decides whether a redirect may receive the registry token. A URL
+// without a port uses its scheme's default port.
+func sameOrigin(requestURL, redirectURL string) bool {
+	from, err := url.Parse(requestURL)
+	if err != nil {
+		return false
+	}
+
+	target, err := url.Parse(redirectURL)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(from.Scheme, target.Scheme) &&
+		strings.EqualFold(from.Hostname(), target.Hostname()) &&
+		effectivePort(from) == effectivePort(target)
+}
+
+// effectivePort returns the port a URL connects to, which is its scheme's
+// default port when the URL names none.
+func effectivePort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	default:
+		return ""
+	}
+}
+
 // makeManifestRequest creates an HTTP request for fetching the manifest with proper headers and authentication.
 //
 // Parameters:
@@ -1459,11 +1567,17 @@ func makeManifestRequest(
 		req.Header.Set("Authorization", token)
 	}
 
-	// Set Accept header for Docker Distribution API manifest requests, supporting v1, v2, OCI v1, and OCI index.
-	req.Header.Set(
-		"Accept",
-		"application/vnd.docker.distribution.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json",
-	)
+	// Accept every manifest type a tag can point to. A registry that does not
+	// see a multi-platform image's list type accepted can answer with one
+	// platform's manifest, whose digest does not match the list digest a pull
+	// records in RepoDigests.
+	req.Header.Set("Accept", strings.Join([]string{
+		"application/vnd.docker.distribution.manifest.v1+json",
+		"application/vnd.docker.distribution.manifest.v2+json",
+		"application/vnd.docker.distribution.manifest.list.v2+json",
+		"application/vnd.oci.image.manifest.v1+json",
+		"application/vnd.oci.image.index.v1+json",
+	}, ", "))
 	req.Header.Set("User-Agent", meta.UserAgent)
 
 	return req, nil
@@ -1532,7 +1646,7 @@ func retryManifestRequest(
 		// with an empty digest. A GET request is the last attempt, and an
 		// empty digest would mark the image as out of date.
 		if retry && method != http.MethodHead {
-			return fmt.Errorf("%w: %s", errUnresolvedManifestRetry, nextURL)
+			return fmt.Errorf("%w: %s", errUnresolvedManifestRetry, auth.RedactURL(nextURL))
 		}
 
 		digest = got

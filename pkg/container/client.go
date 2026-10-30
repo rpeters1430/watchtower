@@ -1723,6 +1723,15 @@ func (c *client) WaitForContainerHealthy(
 				return nil
 			}
 
+			// Podman reports a health object for a disabled health check, and
+			// its status stays empty because the check never runs. Docker
+			// reports no health object for one.
+			if healthCheckDisabled(inspect.Container.Config) {
+				clog.Debug().Msg("Health check disabled for container, proceeding")
+
+				return nil
+			}
+
 			status := inspect.Container.State.Health.Status
 			clog.Debug().
 				Str("health_status", string(status)).
@@ -1743,6 +1752,13 @@ func (c *client) WaitForContainerHealthy(
 			// Continue polling for "starting" or other statuses
 		}
 	}
+}
+
+// healthCheckDisabled reports whether a container's health check is turned off,
+// which Docker and Podman record as a test of only "NONE".
+func healthCheckDisabled(config *dockerContainer.Config) bool {
+	return config != nil && config.Healthcheck != nil &&
+		len(config.Healthcheck.Test) == 1 && config.Healthcheck.Test[0] == "NONE"
 }
 
 // RestartContainer restarts an existing container, respecting the given timeout.

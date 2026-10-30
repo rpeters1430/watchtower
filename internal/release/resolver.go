@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/singleflight"
 
 	registryConfig "github.com/nicholas-fedor/watchtower/internal/config/registry"
 	"github.com/nicholas-fedor/watchtower/pkg/registry/digest"
@@ -24,6 +25,11 @@ import (
 // It is short so a later session still gets a real attempt.
 const rateLimitCacheTTL = time.Minute
 
+// maxSweepAttempts bounds how many sweeps a lookup waits for. A lookup that
+// only joined another caller's sweep tries again once when that sweep fails,
+// since the failure may be the other caller's canceled or expired context.
+const maxSweepAttempts = 2
+
 // Candidate sweep outcomes.
 const (
 	// outcomeFailed means a candidate failed for a reason unrelated to the
@@ -35,6 +41,8 @@ const (
 	outcomeNoMatch
 	// outcomeMatched means a candidate answered and its digest matched.
 	outcomeMatched
+	// outcomeCached means an earlier sweep's answer was found in the cache.
+	outcomeCached
 )
 
 // errFetchTagDigest indicates a candidate release tag lookup failed.
@@ -71,6 +79,9 @@ type Resolver struct {
 
 	// cache maps a cache key to a cached answer. A zero expiry never lapses.
 	cache sync.Map
+
+	// sweeps merges concurrent lookups for one cache key into one sweep.
+	sweeps singleflight.Group
 
 	// now reports the current time, so cache expiry is testable.
 	now func() time.Time
@@ -197,6 +208,71 @@ func (r *Resolver) ResolveTag(
 		return cached.tag
 	}
 
+	for attempt := 1; ; attempt++ {
+		if ctx.Err() != nil {
+			return ""
+		}
+
+		// A caller that arrives while another sweeps the same key waits for that
+		// sweep. The sweep runs with the context of the caller that started it,
+		// and each caller stops waiting when its own context ends.
+		led := false
+		results := r.sweeps.DoChan(key, func() (any, error) {
+			led = true
+
+			return r.sweep(log, ctx, container, registryAuth, version, newDigest, key, fields, endpoints...), nil
+		})
+
+		select {
+		case <-ctx.Done():
+			log.Debug().
+				Fields(fields).
+				Str("cache_key", key).
+				Msg("Stopped waiting for a release tag lookup")
+
+			return ""
+		case shared := <-results:
+			result, _ := shared.Val.(probeResult)
+
+			if led || result.outcome != outcomeFailed || attempt == maxSweepAttempts {
+				if !led {
+					log.Debug().
+						Fields(fields).
+						Str("cache_key", key).
+						Str("tag", result.tag).
+						Msg("Shared a concurrent release tag lookup")
+				}
+
+				return result.tag
+			}
+
+			log.Debug().
+				Fields(fields).
+				Str("cache_key", key).
+				Msg("Concurrent release tag lookup failed, trying again")
+		}
+	}
+}
+
+// sweep probes the candidate tags for key and caches the answer.
+//
+// The cache is checked again first. A caller can miss the cache just before
+// another sweep stores its answer, then start a sweep of its own.
+func (r *Resolver) sweep(
+	log *zerolog.Logger,
+	ctx context.Context,
+	container types.Container,
+	registryAuth string,
+	version string,
+	newDigest string,
+	key string,
+	fields map[string]any,
+	endpoints ...string,
+) probeResult {
+	if cached, ok := r.loadAnswer(key); ok {
+		return probeResult{tag: cached.tag, outcome: outcomeCached}
+	}
+
 	outcome := r.probe(log, ctx, container, registryAuth, version, newDigest, endpoints...)
 
 	switch outcome.outcome {
@@ -212,6 +288,8 @@ func (r *Resolver) ResolveTag(
 	case outcomeFailed:
 		// A transport failure says nothing about the other candidate, so leave
 		// the gap uncached and let the next sibling try.
+	case outcomeCached:
+		// A probe always asks the registry, so it never reports a cached answer.
 	}
 
 	if outcome.tag == "" {
@@ -221,7 +299,7 @@ func (r *Resolver) ResolveTag(
 			Msg("No release tag matched the pulled image")
 	}
 
-	return outcome.tag
+	return outcome
 }
 
 // TagCandidates returns the release tag spellings to try, most likely first.
@@ -294,6 +372,8 @@ func (o probeOutcome) name() string {
 		return "rate_limited"
 	case outcomeFailed:
 		return "failed"
+	case outcomeCached:
+		return "cached"
 	default:
 		return "unknown"
 	}
