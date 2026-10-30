@@ -38,14 +38,14 @@ func TestTagsCache(t *testing.T) {
 
 	client := &dummyClient{client: server.Client()}
 	settings := registryConfig.Registry{
-		InsecureRegistries: []string{server.Listener.Addr().String()},
+		TLSSkip: true,
 	}
 
 	tags, err := FetchTags(context.Background(), &logger, mockContainer, "", client, settings)
-	if err == nil {
-		assert.Equal(t, []string{"1.0.0", "1.1.0", "1.2.0"}, tags)
-		latest, ok := GetLatestNewerVersion("1.0.0", tags)
-		require.True(t, ok)
-		assert.Equal(t, "1.2.0", latest)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1.0.0", "1.1.0", "1.2.0"}, tags)
+
+	latest, ok := GetLatestNewerVersion("1.0.0", tags)
+	require.True(t, ok)
+	assert.Equal(t, "1.2.0", latest)
 }

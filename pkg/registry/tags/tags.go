@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -73,26 +72,29 @@ func FetchTags(
 		}
 	}
 
-	scheme := "https"
-	if settings.InsecureRegistries != nil {
-		for _, insecure := range settings.InsecureRegistries {
-			if insecure == registryHost || strings.HasPrefix(registryHost, insecure+":") {
-				scheme = "http"
-				break
-			}
+	endpoint := ""
+	if len(endpoints) > 0 {
+		endpoint = endpoints[0]
+	}
+
+	scheme := auth.Scheme(settings)
+	if endpoint != "" {
+		endpointHost, endpointScheme, err := auth.ResolveEndpoint(endpoint, registryHost, scheme)
+		if err == nil {
+			registryHost = endpointHost
+			scheme = endpointScheme
 		}
 	}
 
 	tagsURL := fmt.Sprintf("%s://%s/v2/%s/tags/list", scheme, registryHost, repoPath)
 
-	tokenResult, err := auth.GetToken(ctx, container, registryAuth, client, settings, endpoints...)
-	if err != nil {
+	tokenResult, authErr := auth.GetToken(log, ctx, container, registryAuth, client, settings, endpoint)
+	if authErr != nil {
 		log.Debug().
-			Err(err).
+			Err(authErr).
 			Str("image", imageName).
 			Str("registry", registryHost).
-			Msg("Failed to obtain registry token for tags list")
-		return nil, fmt.Errorf("failed to get auth token for %s: %w", registryHost, err)
+			Msg("Failed to obtain registry token for tags list; proceeding without token")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tagsURL, nil)
@@ -113,6 +115,9 @@ func FetchTags(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		if authErr != nil {
+			return nil, fmt.Errorf("registry returned status %s for tags list (auth error: %w)", resp.Status, authErr)
+		}
 		return nil, fmt.Errorf("registry returned status %s for tags list", resp.Status)
 	}
 
