@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Backport upstream fixes and implement non-latest version upgrade system by @rpeters1430
 - Publish Watchtower dashboard with release notes by @rpeters1430
 - Add a setting to skip Trivy's secret check by @claude
 - Show security scan steps and time left during updates, and prune unused images by @claude
@@ -3069,8 +3070,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#135](https://github.com/rpeters1430/watchtower/pull/135)
-- @github-actions[bot] made their first contribution in [#138](https://github.com/rpeters1430/watchtower/pull/138)
+- @rpeters1430 made their first contribution
+- @github-actions[bot] made their first contribution in [#140](https://github.com/rpeters1430/watchtower/pull/140)
 - @renovate[bot] made their first contribution in [#137](https://github.com/rpeters1430/watchtower/pull/137)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
