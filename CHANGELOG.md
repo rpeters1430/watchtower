@@ -1414,6 +1414,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 6b5d2e7 by @renovate[bot]
 - Update step-security/harden-runner action to v2.22.3 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 0d7a6f6 by @renovate[bot]
 - Update module github.com/vektra/mockery/v3 to v3.9.0 by @renovate[bot]
@@ -3072,9 +3073,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution
-- @github-actions[bot] made their first contribution in [#143](https://github.com/rpeters1430/watchtower/pull/143)
+- @rpeters1430 made their first contribution in [#139](https://github.com/rpeters1430/watchtower/pull/139)
 - @renovate[bot] made their first contribution
+- @github-actions[bot] made their first contribution in [#144](https://github.com/rpeters1430/watchtower/pull/144)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
