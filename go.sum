@@ -1,3 +1,5 @@
+connectrpc.com/connect v1.19.1 h1:R5M57z05+90EfEvCY1b7hBxDVOUl45PrtXtAV2fOC14=
+connectrpc.com/connect v1.19.1/go.mod h1:tN20fjdGlewnSFeZxLKb0xwIZ6ozc3OQs2hTXy4du9w=
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 h1:He8afgbRMd7mFxO99hRNu+6tazq8nFF9lIwo9JFroBk=
@@ -13,6 +15,8 @@ github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lpr
 github.com/Microsoft/go-winio v0.5.2/go.mod h1:WpS1mjBmmwHBEWmogvA2mj8546UReBk4v8QkMxJ6pZY=
 github.com/Microsoft/go-winio v0.6.3 h1:M/52tsoyTfwaxajLnXZm7PqkbMGRH8iSWP+8fcg9MQ4=
 github.com/Microsoft/go-winio v0.6.3/go.mod h1:ma0QpxizD4fyyzJ1C7MIblymTD2Nxz5Mho/3CepwIZg=
+github.com/Microsoft/go-winio v0.6.4 h1:kJF2pamtYCWXf0xAT8sAkwKC0pMl2HYBrRPHAqyUc+g=
+github.com/Microsoft/go-winio v0.6.4/go.mod h1:1xl5JXG4ze/m74GH6Dc4Mwxfc3VL5siRVQjIAlHH07U=
 github.com/Microsoft/hcsshim v0.15.0-rc.4 h1:aZFX4LH0S20Lgjq0wG61StIClj7im4yzrxIClkaR8Z8=
 github.com/Microsoft/hcsshim v0.15.0-rc.4/go.mod h1:BA9CBztgu4h/6Jsvo1O1M4qjWw09PoYpaEYgexPE578=
 github.com/ProtonMail/go-crypto v1.5.2 h1:cucYnvqcY7UOXVD//mSyjeaPY0SSN3v5cDkYPxumINk=
@@ -81,6 +85,8 @@ github.com/containerd/containerd/api v1.12.0 h1:kuQm82SbDrCuO4n7hf2L8zsBtZLuympy
 github.com/containerd/containerd/api v1.12.0/go.mod h1:EBcSzoi9Vl18cdODaXUCskf3D2NT8lsSXeZJnU5jIUc=
 github.com/containerd/containerd/v2 v2.4.1 h1:DUx/ZJN7cEu0WuzHClDB+68H/bqMEH5pWoEjf0ae4hc=
 github.com/containerd/containerd/v2 v2.4.1/go.mod h1:vgLdtvl3prFk1d3ZVqQcsDD5Q9IKM+vAIdU54U85w+I=
+github.com/containerd/containerd/v2 v2.4.2 h1:p6Qg+xbEz8lvwdhHDx0U469xENvp4LgGBx+E7djXkGw=
+github.com/containerd/containerd/v2 v2.4.2/go.mod h1:vgLdtvl3prFk1d3ZVqQcsDD5Q9IKM+vAIdU54U85w+I=
 github.com/containerd/continuity v0.5.0 h1:7a85HZpCSs+1Zps0Ee3DPSuAWY+0SJM1JNM51nlEVDg=
 github.com/containerd/continuity v0.5.0/go.mod h1:/lNJvtJKUQStBzpVQ1+rasXO1LAWtUQssk28EZvJ3nE=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=
@@ -129,6 +135,8 @@ github.com/docker/compose/v5 v5.6.0 h1:WCDEV0D1CtZLyPdklHdEjFBnCStosBYkfsD3tvM/I
 github.com/docker/compose/v5 v5.6.0/go.mod h1:NLnbMzshDO3QlhgzMxd9sm981O1yLjPybL1WGStUesI=
 github.com/docker/compose/v5 v5.6.1 h1:Ddp7wM/MXZQ3w1+sDuEEZXn3HcLv7QM4epFaouu4vds=
 github.com/docker/compose/v5 v5.6.1/go.mod h1:NLnbMzshDO3QlhgzMxd9sm981O1yLjPybL1WGStUesI=
+github.com/docker/compose/v5 v5.7.0 h1:nRBxm4HkCFo8Bgb49o6xdhnJ0nl1eGb1H0FAb/ExldE=
+github.com/docker/compose/v5 v5.7.0/go.mod h1:FD9FBNvFvruYI+QiKZ5AoSH+FdO0gguWdF8AqSUGXtY=
 github.com/docker/distribution v2.8.3+incompatible h1:AtKxIZ36LoNK51+Z6RpzLpddBirtxJnzDrHLEKxTAYk=
 github.com/docker/distribution v2.8.3+incompatible/go.mod h1:J2gT2udsDAN96Uj4KfcMRqY0/ypR+oyYUYmja8H+y+w=
 github.com/docker/docker-credential-helpers v0.9.10 h1:LCWwv7UmS7fQVmdKDWeMuureOeY5kkbC5kZfkzxkS6k=
@@ -139,6 +147,10 @@ github.com/docker/go-metrics v0.1.0 h1:r76KPNpstz+IvQKSWpYegSkkyzex0V3A1ZGVx6bhG
 github.com/docker/go-metrics v0.1.0/go.mod h1:PciI3sONtB051kXALN1JoIlpcu54E1FuPh+4DuqEzyw=
 github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
+github.com/docker/secrets-engine/client v0.2.2 h1:aPvmlzsxNA+C+xgp2F+WiiDbCSAXHC591HscFFOvPOE=
+github.com/docker/secrets-engine/client v0.2.2/go.mod h1:c3l/N+fA0kiy9S8BE3kKrO5hOZu4+SLYZK9Jx+jc2cw=
+github.com/docker/secrets-engine/x v0.8.5 h1:P7D/YESMjpX18S4ratBgoeJkAFIxgsPxe093uFmgiGc=
+github.com/docker/secrets-engine/x v0.8.5/go.mod h1:jQ5CXCYCPn8Sw96TS8Ufq3oyIGH2GzUtVXIdwa2Q0VU=
 github.com/eclipse/paho.golang v0.23.0 h1:KHgl2wz6EJo7cMBmkuhpt7C576vP+kpPv7jjvSyR6Mk=
 github.com/eclipse/paho.golang v0.23.0/go.mod h1:nQRhTkoZv8EAiNs5UU0/WdQIx2NrnWUpL9nsGJTQN04=
 github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203 h1:XBBHcIb256gUJtLmY22n99HaZTz+r2Z51xUPi01m3wg=
