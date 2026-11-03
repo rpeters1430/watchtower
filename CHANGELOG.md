@@ -1414,6 +1414,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 83ccf06 by @renovate[bot]
+- Update module github.com/onsi/ginkgo/v2 to v2.34.0 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 528130d by @renovate[bot]
 - Update module github.com/docker/compose/v5 to v5.7.0 by @renovate[bot]
 - Update patch dependency updates by @renovate[bot]
@@ -3077,9 +3079,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @github-actions[bot] made their first contribution in [#152](https://github.com/rpeters1430/watchtower/pull/152)
-- @rpeters1430 made their first contribution in [#146](https://github.com/rpeters1430/watchtower/pull/146)
+- @rpeters1430 made their first contribution in [#153](https://github.com/rpeters1430/watchtower/pull/153)
 - @renovate[bot] made their first contribution
+- @github-actions[bot] made their first contribution in [#154](https://github.com/rpeters1430/watchtower/pull/154)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
