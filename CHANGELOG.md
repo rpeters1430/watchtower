@@ -1414,6 +1414,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to a88024e by @renovate[bot]
+- Update minor dependency updates by @renovate[bot]
 - Update module github.com/cenkalti/backoff/v7 to v7.0.3 by @renovate[bot]
 - Update docker/login-action digest to 8aa5831 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 83ccf06 by @renovate[bot]
@@ -3081,7 +3083,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @github-actions[bot] made their first contribution in [#162](https://github.com/rpeters1430/watchtower/pull/162)
+- @rpeters1430 made their first contribution in [#158](https://github.com/rpeters1430/watchtower/pull/158)
+- @github-actions[bot] made their first contribution in [#163](https://github.com/rpeters1430/watchtower/pull/163)
+- @renovate[bot] made their first contribution
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
