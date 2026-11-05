@@ -1414,6 +1414,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update docker/login-action digest to 8aa5831 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 83ccf06 by @renovate[bot]
 - Update module github.com/onsi/ginkgo/v2 to v2.34.0 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 528130d by @renovate[bot]
@@ -3079,9 +3080,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @github-actions[bot] made their first contribution in [#156](https://github.com/rpeters1430/watchtower/pull/156)
-- @rpeters1430 made their first contribution in [#153](https://github.com/rpeters1430/watchtower/pull/153)
+- @rpeters1430 made their first contribution in [#161](https://github.com/rpeters1430/watchtower/pull/161)
 - @renovate[bot] made their first contribution
+- @github-actions[bot] made their first contribution in [#157](https://github.com/rpeters1430/watchtower/pull/157)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
