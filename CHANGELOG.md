@@ -1414,6 +1414,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update golang:alpine3.24 docker digest to fa3d596 by @renovate[bot]
 - Update github/codeql-action action to v4.39.2 by @renovate[bot]
 - Update module github.com/spf13/pflag to v1.1.0 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to a88024e by @renovate[bot]
@@ -3085,8 +3086,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @github-actions[bot] made their first contribution in [#173](https://github.com/rpeters1430/watchtower/pull/173)
-- @rpeters1430 made their first contribution in [#171](https://github.com/rpeters1430/watchtower/pull/171)
+- @rpeters1430 made their first contribution in [#170](https://github.com/rpeters1430/watchtower/pull/170)
+- @github-actions[bot] made their first contribution in [#174](https://github.com/rpeters1430/watchtower/pull/174)
 - @renovate[bot] made their first contribution
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
