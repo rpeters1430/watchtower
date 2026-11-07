@@ -133,6 +133,8 @@ github.com/docker/cli v29.9.1+incompatible h1:E4YGy7TMkPk7mFsXTVUyjHxVeJdjTDfIS0
 github.com/docker/cli v29.9.1+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
 github.com/docker/cli v29.9.2+incompatible h1:trup/vUxx5uUo2t+87Cd9AmITR+DvKUe4H2tTtZN8FY=
 github.com/docker/cli v29.9.2+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
+github.com/docker/cli v29.9.3+incompatible h1:SBaMp7ecohadEHMDrUJg22t9I3awqsAVhnJ7GOcWpfE=
+github.com/docker/cli v29.9.3+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
 github.com/docker/compose/v5 v5.6.0 h1:WCDEV0D1CtZLyPdklHdEjFBnCStosBYkfsD3tvM/ITU=
 github.com/docker/compose/v5 v5.6.0/go.mod h1:NLnbMzshDO3QlhgzMxd9sm981O1yLjPybL1WGStUesI=
 github.com/docker/compose/v5 v5.6.1 h1:Ddp7wM/MXZQ3w1+sDuEEZXn3HcLv7QM4epFaouu4vds=
