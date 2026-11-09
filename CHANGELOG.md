@@ -1414,6 +1414,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 6d8cbe5 by @renovate[bot]
+- Update patch dependency updates by @renovate[bot]
+- Update alpine:3.24 docker digest to f59abe6 by @renovate[bot]
+- Update module github.com/valyala/fasthttp to v1.78.0 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 789569e by @renovate[bot]
 - Update module github.com/docker/cli to v29.9.3+incompatible by @renovate[bot]
 - Update alpine:3.24 docker digest to 3f4d6b3 by @renovate[bot]
@@ -3092,9 +3096,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#177](https://github.com/rpeters1430/watchtower/pull/177)
+- @rpeters1430 made their first contribution in [#182](https://github.com/rpeters1430/watchtower/pull/182)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#179](https://github.com/rpeters1430/watchtower/pull/179)
+- @github-actions[bot] made their first contribution in [#181](https://github.com/rpeters1430/watchtower/pull/181)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
