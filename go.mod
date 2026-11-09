@@ -14,8 +14,8 @@ require (
 	github.com/docker/cli v29.9.3+incompatible
 	github.com/docker/compose/v5 v5.7.0
 	github.com/go-git/go-git/v5 v5.19.3
-	github.com/gofiber/contrib/v3/swaggo v1.0.15
-	github.com/gofiber/contrib/v3/zerolog v1.1.9
+	github.com/gofiber/contrib/v3/swaggo v1.0.16
+	github.com/gofiber/contrib/v3/zerolog v1.1.10
 	github.com/gofiber/fiber/v3 v3.6.1
 	github.com/mattn/go-isatty v0.0.24
 	github.com/maypok86/otter/v2 v2.4.0
@@ -101,8 +101,8 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/gofiber/schema v1.9.1 // indirect
-	github.com/gofiber/utils/v2 v2.6.3 // indirect
+	github.com/gofiber/schema v1.9.3 // indirect
+	github.com/gofiber/utils/v2 v2.6.4 // indirect
 	github.com/gofrs/flock v0.13.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
