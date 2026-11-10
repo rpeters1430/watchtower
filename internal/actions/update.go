@@ -348,12 +348,6 @@ func Update(
 		}
 	}
 
-	// Run pre-check lifecycle hooks if enabled to validate the environment before updates.
-	if config.LifecycleHooks {
-		log.Debug().Msg("Executing pre-check lifecycle hooks")
-		lifecycle.ExecutePreChecks(log, ctx, client, config, filteredContainers)
-	}
-
 	// Prepare a list of container names and images for detailed debugging output.
 	filteredContainerNames := make([]string, len(filteredContainers))
 	for i, c := range filteredContainers {
@@ -396,13 +390,26 @@ func Update(
 		unmonitoredContainers(allContainers, filteredContainers),
 		config.UseComposeDependsOn,
 	)
-	if graphErr == nil {
-		for _, link := range graph.UnresolvedDependsOn() {
-			log.WithLevel(dependencyProblems.level("unresolved depends-on", string(link.Container.ID()), link.Link)).
-				Str("container", link.Container.Name()).
-				Str("depends_on", link.Link).
-				Msg("Ignoring depends-on entry that names no container")
-		}
+
+	// A session cannot safely check or update containers when its dependency
+	// graph cannot be built. Return before running lifecycle hooks or checking
+	// images in registries.
+	if graphErr != nil {
+		log.Debug().
+			Err(graphErr).
+			Msg("Failed to build the dependency graph")
+
+		return nil, cleanupImageInfos, fmt.Errorf(
+			"%w: %w",
+			errSortDependenciesFailed,
+			graphErr,
+		)
+	}
+	for _, link := range graph.UnresolvedDependsOn() {
+		log.WithLevel(dependencyProblems.level("unresolved depends-on", string(link.Container.ID()), link.Link)).
+			Str("container", link.Container.Name()).
+			Str("depends_on", link.Link).
+			Msg("Ignoring depends-on entry that names no container")
 	}
 
 	// Skip every container in a circular dependency. Cycle members are also
@@ -411,12 +418,7 @@ func Update(
 	// container.
 	inCycle := make(map[types.ContainerID]struct{})
 
-	var cycleMembers []types.Container
-	if graphErr == nil {
-		cycleMembers = graph.CycleMembers()
-	}
-
-	for _, c := range cycleMembers {
+	for _, c := range graph.CycleMembers() {
 		inCycle[c.ID()] = struct{}{}
 
 		progress.AddSkipped(log, c, errCircularDependency, config)
@@ -424,6 +426,13 @@ func Update(
 			Str("container", c.Name()).
 			Str("id", c.ID().ShortID()).
 			Msg("Skipping container update (circular dependency)")
+	}
+
+	// Run pre-check lifecycle hooks just before checking containers. A graph
+	// failure returns above without running hooks.
+	if config.LifecycleHooks {
+		log.Debug().Msg("Executing pre-check lifecycle hooks")
+		lifecycle.ExecutePreChecks(log, ctx, client, config, filteredContainers)
 	}
 
 	// Track containers that fail staleness checks for reporting.
