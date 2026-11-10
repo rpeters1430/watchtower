@@ -348,12 +348,6 @@ func Update(
 		}
 	}
 
-	// Run pre-check lifecycle hooks if enabled to validate the environment before updates.
-	if config.LifecycleHooks {
-		log.Debug().Msg("Executing pre-check lifecycle hooks")
-		lifecycle.ExecutePreChecks(log, ctx, client, config, filteredContainers)
-	}
-
 	// Prepare a list of container names and images for detailed debugging output.
 	filteredContainerNames := make([]string, len(filteredContainers))
 	for i, c := range filteredContainers {
@@ -396,6 +390,21 @@ func Update(
 		unmonitoredContainers(allContainers, filteredContainers),
 		config.UseComposeDependsOn,
 	)
+
+	// A session cannot safely check or update containers when its dependency
+	// graph cannot be built. Return before running lifecycle hooks or checking
+	// images in registries.
+	if graphErr != nil {
+		log.Debug().
+			Err(graphErr).
+			Msg("Failed to build the dependency graph")
+
+		return nil, cleanupImageInfos, fmt.Errorf(
+			"%w: %w",
+			errSortDependenciesFailed,
+			graphErr,
+		)
+	}
 	if graphErr == nil {
 		for _, link := range graph.UnresolvedDependsOn() {
 			log.WithLevel(dependencyProblems.level("unresolved depends-on", string(link.Container.ID()), link.Link)).
@@ -424,6 +433,13 @@ func Update(
 			Str("container", c.Name()).
 			Str("id", c.ID().ShortID()).
 			Msg("Skipping container update (circular dependency)")
+	}
+
+	// Run pre-check lifecycle hooks just before checking containers. A graph
+	// failure returns above without running hooks.
+	if config.LifecycleHooks {
+		log.Debug().Msg("Executing pre-check lifecycle hooks")
+		lifecycle.ExecutePreChecks(log, ctx, client, config, filteredContainers)
 	}
 
 	// Track containers that fail staleness checks for reporting.
