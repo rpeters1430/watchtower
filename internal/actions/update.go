@@ -405,13 +405,11 @@ func Update(
 			graphErr,
 		)
 	}
-	if graphErr == nil {
-		for _, link := range graph.UnresolvedDependsOn() {
-			log.WithLevel(dependencyProblems.level("unresolved depends-on", string(link.Container.ID()), link.Link)).
-				Str("container", link.Container.Name()).
-				Str("depends_on", link.Link).
-				Msg("Ignoring depends-on entry that names no container")
-		}
+	for _, link := range graph.UnresolvedDependsOn() {
+		log.WithLevel(dependencyProblems.level("unresolved depends-on", string(link.Container.ID()), link.Link)).
+			Str("container", link.Container.Name()).
+			Str("depends_on", link.Link).
+			Msg("Ignoring depends-on entry that names no container")
 	}
 
 	// Skip every container in a circular dependency. Cycle members are also
@@ -420,12 +418,7 @@ func Update(
 	// container.
 	inCycle := make(map[types.ContainerID]struct{})
 
-	var cycleMembers []types.Container
-	if graphErr == nil {
-		cycleMembers = graph.CycleMembers()
-	}
-
-	for _, c := range cycleMembers {
+	for _, c := range graph.CycleMembers() {
 		inCycle[c.ID()] = struct{}{}
 
 		progress.AddSkipped(log, c, errCircularDependency, config)
