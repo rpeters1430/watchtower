@@ -339,7 +339,7 @@ func processSendErrors(notifier *shoutrrrTypeNotifier, urls []string, errs []err
 		if err != nil {
 			failureCount++
 			scheme := GetScheme(urls[i])
-			sanitizedURL := sanitizeURLForLogging(urls[i])
+			sanitizedURL := redactServiceURL(urls[i])
 
 			// Diagnostic logging: Categorize failure types
 			errStr := err.Error()
