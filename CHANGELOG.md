@@ -216,6 +216,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Apply hook timeout during output capture by @rpeters1430
+- Stop before checks when dependency graph fails by @rpeters1430
 - Redact notification service hosts in send errors by @rpeters1430
 - Fix auth.GetToken signature and registry TLS scheme resolution by @rpeters1430
 - Forward scan timeout to trivy CLI by @rpeters1430
@@ -620,6 +622,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Simplify dependency handling after graph validation by @rpeters1430
 - Unexport package-internal identifiers by @nicholas-fedor
 - Fix lint findings from the scan_secrets setting by @claude
 - Satisfy golangci-lint on the scan progress changes by @claude
@@ -1021,6 +1024,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Record lifecycle timeout backport by @rpeters1430
+- Link upstream backport to pull request by @rpeters1430
+- Track upstream review and backports by @rpeters1430
 - Describe the update lock type by @rpeters1430
 - Keep the settings PATCH description on lines swag reads by @claude
 - Enable ephemeral self-update in the Compose sample by @claude
@@ -3100,8 +3106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#191](https://github.com/rpeters1430/watchtower/pull/191)
-- @github-actions[bot] made their first contribution in [#190](https://github.com/rpeters1430/watchtower/pull/190)
+- @rpeters1430 made their first contribution in [#194](https://github.com/rpeters1430/watchtower/pull/194)
+- @github-actions[bot] made their first contribution in [#192](https://github.com/rpeters1430/watchtower/pull/192)
 - @renovate[bot] made their first contribution
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
