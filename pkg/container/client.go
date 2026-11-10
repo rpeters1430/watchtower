@@ -1375,8 +1375,9 @@ func (c *client) ExecuteCommand(
 		AttachStderr: true,
 	}
 
-	// Create the exec instance using the parent context.
-	// Timeout management is handled by waitForExecOrTimeout.
+	// Create the exec instance using the parent context. The configured
+	// timeout starts after the command begins and bounds output capture and
+	// completion waiting.
 	exec, err := c.api.ExecCreate(
 		ctx,
 		string(container.ID()),
@@ -1406,8 +1407,19 @@ func (c *client) ExecuteCommand(
 		return false, fmt.Errorf("%w: %w", errStartExecFailed, err)
 	}
 
+	// Bound the whole command run after it starts so a hook that never
+	// closes its output stream cannot block the update past its timeout.
+	execCtx := ctx
+
+	if timeout > 0 {
+		var cancel context.CancelFunc
+
+		execCtx, cancel = context.WithTimeout(ctx, time.Duration(timeout)*time.Minute)
+		defer cancel()
+	}
+
 	// Capture output and handle attachment.
-	output, err := c.captureExecOutput(ctx, exec.ID)
+	output, err := c.captureExecOutput(execCtx, exec.ID)
 	if err != nil {
 		clog.Warn().
 			Err(err).
@@ -1416,10 +1428,10 @@ func (c *client) ExecuteCommand(
 
 	// Wait for completion and evaluate result.
 	skipUpdate, err := c.waitForExecOrTimeout(
-		ctx,
+		execCtx,
 		exec.ID,
 		output,
-		timeout,
+		0,
 	)
 	if err != nil {
 		clog.Debug().
