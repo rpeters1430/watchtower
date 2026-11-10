@@ -216,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Redact notification service hosts in send errors by @rpeters1430
 - Fix auth.GetToken signature and registry TLS scheme resolution by @rpeters1430
 - Forward scan timeout to trivy CLI by @rpeters1430
 - Cap bearer token lifetimes that overflow a duration by @nicholas-fedor
@@ -3099,9 +3100,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#187](https://github.com/rpeters1430/watchtower/pull/187)
+- @rpeters1430 made their first contribution in [#191](https://github.com/rpeters1430/watchtower/pull/191)
+- @github-actions[bot] made their first contribution in [#190](https://github.com/rpeters1430/watchtower/pull/190)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#186](https://github.com/rpeters1430/watchtower/pull/186)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
