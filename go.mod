@@ -14,8 +14,8 @@ require (
 	github.com/docker/cli v29.9.3+incompatible
 	github.com/docker/compose/v5 v5.7.1
 	github.com/go-git/go-git/v5 v5.19.3
-	github.com/gofiber/contrib/v3/swaggo v1.0.16
-	github.com/gofiber/contrib/v3/zerolog v1.1.10
+	github.com/gofiber/contrib/v3/swaggo v1.0.17
+	github.com/gofiber/contrib/v3/zerolog v1.1.11
 	github.com/gofiber/fiber/v3 v3.7.0
 	github.com/mattn/go-isatty v0.0.24
 	github.com/maypok86/otter/v2 v2.4.0
@@ -101,8 +101,8 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/gofiber/schema v1.9.3 // indirect
-	github.com/gofiber/utils/v2 v2.6.4 // indirect
+	github.com/gofiber/schema v1.9.4 // indirect
+	github.com/gofiber/utils/v2 v2.6.5 // indirect
 	github.com/gofrs/flock v0.13.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
@@ -121,7 +121,7 @@ require (
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.8.3 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
-	github.com/klauspost/compress v1.20.3 // indirect
+	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/knadh/koanf/maps v0.1.3 // indirect
 	github.com/knadh/koanf/parsers/yaml v1.1.1 // indirect
 	github.com/knadh/koanf/providers/env v1.1.0 // indirect
