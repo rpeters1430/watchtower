@@ -21,7 +21,7 @@ require (
 	github.com/maypok86/otter/v2 v2.4.0
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/moby/api v1.57.0
-	github.com/moby/moby/client v0.6.2
+	github.com/moby/moby/client v0.6.3
 	github.com/nicholas-fedor/shoutrrr v0.24.0
 	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
