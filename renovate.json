@@ -13,7 +13,9 @@
     "* 12-15 * * *"
   ],
   "platformAutomerge": false,
-  "dependencyDashboard": true,
+  "dependencyDashboard": {
+    "enabled": true
+  },
   "assignees": [
     "rpeters1430"
   ],
