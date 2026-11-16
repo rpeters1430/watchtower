@@ -579,7 +579,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update mock client for tests by @simonaronsson
 - Fix #472 by @mbrandau
 - Fix according to remarks
-- 🐛 bump alpine version by @codingCoffee
+- 🐛 bump alpine version by @codingcoffee
 - Fixed small typo by @jnidzwetzki
 - Fixed wrong filename in documentation by @jnidzwetzki
 - Fix some var ref errors by @simonaronsson
@@ -1421,6 +1421,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update patch dependency updates by @renovate[bot]
 - Update patch dependency updates by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 643ff94 by @renovate[bot]
 - Update module github.com/moby/moby/api to v1.57.0 by @renovate[bot]
@@ -3114,9 +3115,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#202](https://github.com/rpeters1430/watchtower/pull/202)
+- @rpeters1430 made their first contribution in [#206](https://github.com/rpeters1430/watchtower/pull/206)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#201](https://github.com/rpeters1430/watchtower/pull/201)
+- @github-actions[bot] made their first contribution in [#205](https://github.com/rpeters1430/watchtower/pull/205)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
@@ -3230,7 +3231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - @Germs2004 made their first contribution
 - @pagdot made their first contribution
 - @raymondelooff made their first contribution
-- @codingCoffee made their first contribution
+- @codingcoffee made their first contribution
 - @jnidzwetzki made their first contribution
 - @mindrunner made their first contribution
 - @jsclayton made their first contribution
