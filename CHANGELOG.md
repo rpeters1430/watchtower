@@ -1421,6 +1421,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update module github.com/compose-spec/compose-go/v2 to v2.17.0 by @renovate[bot]
+- Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 83f760a by @renovate[bot]
+- Update golang:1.27-alpine docker digest to 70bd7dd by @renovate[bot]
+- Update golang:1.27.4-alpine docker digest to 70bd7dd by @renovate[bot]
+- Update golang:alpine3.24 docker digest to 70bd7dd by @renovate[bot]
+- Update module github.com/moby/moby/client to v0.6.3 by @renovate[bot]
+- Update module github.com/docker/cli to v29.10.0+incompatible by @renovate[bot]
+- Migrate config renovate.json by @renovate[bot]
 - Update module github.com/valyala/fasthttp to v1.79.0 by @renovate[bot]
 - Update patch dependency updates by @renovate[bot]
 - Update patch dependency updates by @renovate[bot]
@@ -3116,9 +3124,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#209](https://github.com/rpeters1430/watchtower/pull/209)
+- @rpeters1430 made their first contribution in [#217](https://github.com/rpeters1430/watchtower/pull/217)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#207](https://github.com/rpeters1430/watchtower/pull/207)
+- @github-actions[bot] made their first contribution in [#210](https://github.com/rpeters1430/watchtower/pull/210)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
