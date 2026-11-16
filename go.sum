@@ -243,6 +243,8 @@ github.com/gofiber/contrib/v3/swaggo v1.0.15 h1:bvSlokdsl9fZCylcUlhC9sEbdgeslXcd
 github.com/gofiber/contrib/v3/swaggo v1.0.15/go.mod h1:kZo1ye/d6DmwYb5Yi5aRB+9D+YN4TO3SyhGCc0B7MEo=
 github.com/gofiber/contrib/v3/swaggo v1.0.16 h1:Pd+AYpoXla2hrmuuYzxnQOYrPyK5hpXJ/qb81LVA0PE=
 github.com/gofiber/contrib/v3/swaggo v1.0.16/go.mod h1:N+HUQlfbkj/pnHm5KyAUBj6wUV4vzlr+hw0QMN+re6o=
+github.com/gofiber/contrib/v3/swaggo v1.0.17 h1:dKh54NdvpCEr38QoIEOzVEN2RMkSjUny4YyusWOLth4=
+github.com/gofiber/contrib/v3/swaggo v1.0.17/go.mod h1:byPIDBdFljWZ8n6I5GOpGC992G9MgLQoUQOwcvQQ12o=
 github.com/gofiber/contrib/v3/zerolog v1.1.6 h1:IOj/aX8k2k543GxUf0a9TuNZ1Kjx4LArf3ZvFEMXDJw=
 github.com/gofiber/contrib/v3/zerolog v1.1.6/go.mod h1:2YCfPCYTjVwGvepf6Tp5PpNvkJJtIYJR7ORbi1s0AbY=
 github.com/gofiber/contrib/v3/zerolog v1.1.7 h1:V6fkfEoSGkAkzqfGqeCngcHhFGdo5B7pUQVJn/GWUU0=
@@ -253,6 +255,8 @@ github.com/gofiber/contrib/v3/zerolog v1.1.9 h1:jkzp5g384F0QCsCqvPMKOlTCXFCDsw3L
 github.com/gofiber/contrib/v3/zerolog v1.1.9/go.mod h1:1Qsh1NTKeZczyeK4NhavC52KDRkdnQx1xYaTQwSArBA=
 github.com/gofiber/contrib/v3/zerolog v1.1.10 h1:7aedPFFppllDOaXuss48qcIaWYgW7Zi79A3yjRgeXmY=
 github.com/gofiber/contrib/v3/zerolog v1.1.10/go.mod h1:VlwjYKglQV4s0Jpqi2QguNfS+De2nPE1XpcFe7LiO1A=
+github.com/gofiber/contrib/v3/zerolog v1.1.11 h1:dKaBeucKVrPQEQ++iaNzjEYZxccVbeVk3Mw5z92KZDA=
+github.com/gofiber/contrib/v3/zerolog v1.1.11/go.mod h1:WSqqeiT2uOkm+0LfBYVCN2LCqo/bpMgKlDE5oyQr3CA=
 github.com/gofiber/fiber/v3 v3.6.0 h1:dmu6zB1SSXINf1flhgMRVaIOQ08vaZaN8JYVSBJI3fI=
 github.com/gofiber/fiber/v3 v3.6.0/go.mod h1:ce/ZWPbiMom+nAEkPv4+NPBEx8b9+MH3g2VV6nvEpgo=
 github.com/gofiber/fiber/v3 v3.6.1 h1:wYjbgqpJm6VErIVLSGzGpX7lLZyTNgElsj8nQ1i+iFo=
@@ -267,6 +271,8 @@ github.com/gofiber/schema v1.9.1 h1:QjicFdTDMlkzCOoZAlNWqdkR2YHhgH8/Q/MpcbHurjs=
 github.com/gofiber/schema v1.9.1/go.mod h1:219nYAgzIEBWl/aHCyhQtFoXBvfLjsC6+FI3DUN1+Ck=
 github.com/gofiber/schema v1.9.3 h1:KbKui12hYcvv6Ht0iUCOPrFU4KnrxX4D/h74TeE9Q/E=
 github.com/gofiber/schema v1.9.3/go.mod h1:TmN3rIGytK690YcZZ6BSq8OOswWcmRhLYcReauIfC68=
+github.com/gofiber/schema v1.9.4 h1:IVNXN2WyVHmUn/S186e/rdnGlb1LFrhZ1hjndTYvn8w=
+github.com/gofiber/schema v1.9.4/go.mod h1:TmN3rIGytK690YcZZ6BSq8OOswWcmRhLYcReauIfC68=
 github.com/gofiber/utils/v2 v2.6.1 h1:x3zsS/oUQz0ia2Zx8XXtG/7naR5a+/95FRO8mwQ5QQ4=
 github.com/gofiber/utils/v2 v2.6.1/go.mod h1:tc9KqdRAQZRD/u0mN2d1ZHROGheSZv+0FcC9cg5OEdw=
 github.com/gofiber/utils/v2 v2.6.2 h1:+tX8EPc/WO4f8DiV1W3gGWPJvGdHFW3qLIR2ws06At0=
@@ -275,6 +281,8 @@ github.com/gofiber/utils/v2 v2.6.3 h1:VlnOB89rFnonlXoYOkESOkXtIkAw4CBBwpBHu+/a/Y
 github.com/gofiber/utils/v2 v2.6.3/go.mod h1:Mq3OXwyBPxORb3jPafy6Swki4/TJJW9TDPHeerXkXpg=
 github.com/gofiber/utils/v2 v2.6.4 h1:VsC3hEFZXk2JO6I/+FZ1OdZzMX4COPgwwrFaDAey3+o=
 github.com/gofiber/utils/v2 v2.6.4/go.mod h1:SpYvWEQlYmZzzpuSfQX0gUiPSoxpOKldiEmVDzdl8Ds=
+github.com/gofiber/utils/v2 v2.6.5 h1:rU+8ao6LKi3fKOA3sEjfLv1T+2C2IwomeVmEKaqkr4A=
+github.com/gofiber/utils/v2 v2.6.5/go.mod h1:OqPxdhDW7fPz0dupDanqf4e5O15IyFKy724y/EY9RI4=
 github.com/gofrs/flock v0.13.1 h1:jjREztyBeSKBZYAC+mgc1laB+xsgy4kYMf3FbKF2UBo=
 github.com/gofrs/flock v0.13.1/go.mod h1:sf4BFiHwnvgxa25DlQoDqXQnwRMEOwqxRq37P6MzzmE=
 github.com/golang-jwt/jwt/v5 v5.3.1 h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=
@@ -323,6 +331,8 @@ github.com/kevinburke/ssh_config v1.6.0 h1:J1FBfmuVosPHf5GRdltRLhPJtJpTlMdKTBjRg
 github.com/kevinburke/ssh_config v1.6.0/go.mod h1:q2RIzfka+BXARoNexmF9gkxEX7DmvbW9P4hIVx2Kg4M=
 github.com/klauspost/compress v1.20.3 h1:zWNoFqq/lSuYQRim3dUXlXeA0IqwuZGicdG5ZTfY5j4=
 github.com/klauspost/compress v1.20.3/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
+github.com/klauspost/compress v1.20.4 h1:dD0v/bvxtjCBqQu6sx1TNWkalEY5lNTIe+HY9w8TeNI=
+github.com/klauspost/compress v1.20.4/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/knadh/koanf/maps v0.1.3 h1:P1z7EvTqdFBrPYbzSvorvrpib+sjkUMxf0FVvA5NKK4=
 github.com/knadh/koanf/maps v0.1.3/go.mod h1:npD/QZY3V6ghQDdcQzl1W4ICNVTkohC8E73eI2xW4yI=
 github.com/knadh/koanf/parsers/yaml v1.1.1 h1:u70vV5IyaM0HvONh8HoqBC97oTgO33KcpZbTLiKVinU=
