@@ -12,7 +12,7 @@ require (
 	github.com/containerd/platforms v1.0.0-rc.5
 	github.com/distribution/reference v0.6.0
 	github.com/docker/cli v29.10.0+incompatible
-	github.com/docker/compose/v5 v5.7.1
+	github.com/docker/compose/v5 v5.8.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/gofiber/contrib/v3/swaggo v1.0.17
 	github.com/gofiber/contrib/v3/zerolog v1.1.11
@@ -48,7 +48,7 @@ require (
 	connectrpc.com/connect v1.19.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc // indirect
-	github.com/DefangLabs/secret-detector v0.0.0-20260916192156-3e28d7ed64df // indirect
+	github.com/DefangLabs/secret-detector v1.1.0 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
@@ -135,6 +135,7 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/buildkit v0.34.0 // indirect
+	github.com/moby/extensions v0.0.0-20261020100352-d2819d88bcbe // indirect
 	github.com/moby/go-archive v0.3.3 // indirect
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect

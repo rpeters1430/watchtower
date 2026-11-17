@@ -8,6 +8,8 @@ github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc h1:58s5YzGPNAP7+
 github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc/go.mod h1:DMNF6Kxv+EcuUvVuNkvC3f+BjEEmc/Fn9aU+qiD8zpU=
 github.com/DefangLabs/secret-detector v0.0.0-20260916192156-3e28d7ed64df h1:ZuLcWrXR2XqJ8Y38IJ5BhJOWtBEa2+OlFJi9E8iRWwA=
 github.com/DefangLabs/secret-detector v0.0.0-20260916192156-3e28d7ed64df/go.mod h1:HGe6OirwWqbO194AsyDWPfOSjUQcIJxYjZZ+7rpSW30=
+github.com/DefangLabs/secret-detector v1.1.0 h1:uLwHshx7w7p8u7FMaeZdIqfohfVT/9YU2KX/Y8fyBpA=
+github.com/DefangLabs/secret-detector v1.1.0/go.mod h1:AKE3ccusL69/Lku0WQkDmIaNDqMyOt6YqRQwmZ0bvsI=
 github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc=
 github.com/KyleBanks/depth v1.2.1/go.mod h1:jzSb9d0L43HxTQfT+oSA1EEp2q+ne2uh6XgeJcm8brE=
 github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=
@@ -147,6 +149,8 @@ github.com/docker/compose/v5 v5.7.0 h1:nRBxm4HkCFo8Bgb49o6xdhnJ0nl1eGb1H0FAb/Exl
 github.com/docker/compose/v5 v5.7.0/go.mod h1:FD9FBNvFvruYI+QiKZ5AoSH+FdO0gguWdF8AqSUGXtY=
 github.com/docker/compose/v5 v5.7.1 h1:WbO2IZu7NNZ3zktPBsoJkxSxPdKoFpKKBHY0gUIDqBw=
 github.com/docker/compose/v5 v5.7.1/go.mod h1:ly9/c4pDGIOPLwoX3BwS6mTePUGb2zlzjnaiCuY/WDs=
+github.com/docker/compose/v5 v5.8.0 h1:UA+EN1bHwms7LQHftNyQp0cNN+Jj1z0FBx0IyCSAHms=
+github.com/docker/compose/v5 v5.8.0/go.mod h1:r/gf0BwwKvvleAWTXbhAZJHQ+TRcFE/nSMXc15fcLgg=
 github.com/docker/distribution v2.8.3+incompatible h1:AtKxIZ36LoNK51+Z6RpzLpddBirtxJnzDrHLEKxTAYk=
 github.com/docker/distribution v2.8.3+incompatible/go.mod h1:J2gT2udsDAN96Uj4KfcMRqY0/ypR+oyYUYmja8H+y+w=
 github.com/docker/docker-credential-helpers v0.9.10 h1:LCWwv7UmS7fQVmdKDWeMuureOeY5kkbC5kZfkzxkS6k=
@@ -384,6 +388,8 @@ github.com/moby/buildkit v0.34.0 h1:bG5h2y1s5IVvc/uSGo6hVlYbd2eXVFRuADl9Zf+jeJM=
 github.com/moby/buildkit v0.34.0/go.mod h1:e+Za70y2a3nL1U2Y0P8TvhPyKp2Ok2NS+Q4siSArDiM=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=
 github.com/moby/docker-image-spec v1.3.1/go.mod h1:eKmb5VW8vQEh/BAr2yvVNvuiJuY6UIocYsFu/DxxRpo=
+github.com/moby/extensions v0.0.0-20261020100352-d2819d88bcbe h1:wHRo58MA+vgX2sXtL4uT/NcSYPiyJarqHZ4aDS8P0ys=
+github.com/moby/extensions v0.0.0-20261020100352-d2819d88bcbe/go.mod h1:5OTGReLaEAAQ0XoeIQzL6Ep+J3kwlFVTRSP86RwVoso=
 github.com/moby/go-archive v0.3.3 h1:OxxR9paxsluYi+zDUEXTTaIxtkK3viymW+Ka7vRhhME=
 github.com/moby/go-archive v0.3.3/go.mod h1:Npdv43fFqlhZW7Xo8fbm3ZMYFvAGNviUPqX21VERbcE=
 github.com/moby/locker v1.0.1 h1:fOXqR41zeveg4fFODix+1Ch4mj/gT0NE1XJbp/epuBg=
