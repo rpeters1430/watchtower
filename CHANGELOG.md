@@ -1421,6 +1421,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update minor dependency updates by @renovate[bot]
+- Update actions/setup-go digest to d8cbb80 by @renovate[bot]
 - Update module github.com/compose-spec/compose-go/v2 to v2.17.0 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 83f760a by @renovate[bot]
 - Update golang:1.27-alpine docker digest to 70bd7dd by @renovate[bot]
@@ -3124,9 +3126,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#217](https://github.com/rpeters1430/watchtower/pull/217)
+- @rpeters1430 made their first contribution in [#220](https://github.com/rpeters1430/watchtower/pull/220)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#210](https://github.com/rpeters1430/watchtower/pull/210)
+- @github-actions[bot] made their first contribution in [#219](https://github.com/rpeters1430/watchtower/pull/219)
 - @nicholas-fedor made their first contribution
 - @claude made their first contribution
 - @Copilot made their first contribution
