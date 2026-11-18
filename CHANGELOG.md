@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Copy vulnerability-specific AI remediation prompts by @rpeters1430
 - Backport upstream fixes and implement non-latest version upgrade system by @rpeters1430
 - Publish Watchtower dashboard with release notes by @rpeters1430
 - Add a setting to skip Trivy's secret check by @claude
@@ -216,6 +217,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Support clipboard copy from HTTP NAS dashboard by @rpeters1430
 - Keep following an update after a phone sleeps by @claude
 - Apply hook timeout during output capture by @rpeters1430
 - Stop before checks when dependency graph fails by @rpeters1430
@@ -1025,6 +1027,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Document AI security remediation prompt workflow by @rpeters1430
 - Record lifecycle timeout backport by @rpeters1430
 - Link upstream backport to pull request by @rpeters1430
 - Track upstream review and backports by @rpeters1430
@@ -3128,9 +3131,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#225](https://github.com/rpeters1430/watchtower/pull/225)
+- @rpeters1430 made their first contribution in [#227](https://github.com/rpeters1430/watchtower/pull/227)
+- @github-actions[bot] made their first contribution in [#226](https://github.com/rpeters1430/watchtower/pull/226)
 - @claude made their first contribution
-- @github-actions[bot] made their first contribution in [#224](https://github.com/rpeters1430/watchtower/pull/224)
 - @renovate[bot] made their first contribution
 - @nicholas-fedor made their first contribution
 - @Copilot made their first contribution
