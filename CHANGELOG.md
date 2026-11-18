@@ -216,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep following an update after a phone sleeps by @claude
 - Apply hook timeout during output capture by @rpeters1430
 - Stop before checks when dependency graph fails by @rpeters1430
 - Redact notification service hosts in send errors by @rpeters1430
@@ -3127,11 +3128,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#223](https://github.com/rpeters1430/watchtower/pull/223)
-- @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#222](https://github.com/rpeters1430/watchtower/pull/222)
-- @nicholas-fedor made their first contribution
+- @rpeters1430 made their first contribution in [#225](https://github.com/rpeters1430/watchtower/pull/225)
 - @claude made their first contribution
+- @github-actions[bot] made their first contribution in [#224](https://github.com/rpeters1430/watchtower/pull/224)
+- @renovate[bot] made their first contribution
+- @nicholas-fedor made their first contribution
 - @Copilot made their first contribution
 - @allcontributors[bot] made their first contribution
 - @rooty0 made their first contribution
