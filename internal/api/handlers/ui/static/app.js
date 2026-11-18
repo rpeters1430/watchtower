@@ -2750,7 +2750,22 @@
         notify("No vulnerability findings were available for an AI fix prompt.", true);
         return;
       }
-      await navigator.clipboard.writeText(aiRemediationPrompt(selected, strategy));
+      const prompt = aiRemediationPrompt(selected, strategy);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(prompt);
+      } else {
+        // NAS dashboards may be served over HTTP, where Clipboard API is unavailable.
+        const input = el("textarea", { "aria-label": "AI remediation prompt" });
+        input.value = prompt;
+        input.style.position = "fixed";
+        input.style.left = "-9999px";
+        document.body.append(input);
+        input.focus();
+        input.select();
+        const copied = document.execCommand("copy");
+        input.remove();
+        if (!copied) throw new Error("Clipboard unavailable; open the dashboard over HTTPS");
+      }
       notify(`Copied AI remediation prompt for ${count(selected.length, "container")}.`);
     } catch (problem) {
       notify(`Couldn't copy the AI prompt: ${problem.message || "clipboard access denied"}.`, true);
