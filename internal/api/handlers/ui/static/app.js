@@ -416,7 +416,11 @@
     state.activity = data;
 
     if (!resetMeanwhile && before && before.running && !data.running) {
-      await activityEnded(data.last_scan || before);
+      // A handed-off request that never reached Watchtower leaves the
+      // previous scan in place; that one was reported long ago.
+      const stale = before.handedOff && lastScanTime(data) === before.baseline;
+
+      await activityEnded(stale ? { containers: [] } : data.last_scan || before);
     }
 
     if (updateRunning()) {
@@ -426,6 +430,49 @@
     renderProgress();
     scheduleScanClock();
   }
+
+  function lastScanTime(activity) {
+    return (activity && activity.last_scan && activity.last_scan.finished_at) || "";
+  }
+
+  // Lets the progress poll follow an update whose request this page lost.
+  // Until the poll hears from Watchtower the update counts as running, so the
+  // page keeps polling and reports the update when it sees it finish.
+  function handOffToPoll(baseline) {
+    if (!state.activity || !state.activity.running) {
+      state.activity = { running: true, containers: [], handedOff: true, baseline };
+    }
+
+    scheduleActivity(1_000);
+  }
+
+  // A phone stops timers and drops open requests while its screen is off, so
+  // catch up as soon as the page is visible or back online again.
+  let lastResume = 0;
+
+  async function resume() {
+    if (document.hidden || !state.session || !state.session.authenticated) {
+      return;
+    }
+
+    // Screens flick on and off; every request counts toward the rate limit.
+    if (Date.now() - lastResume < 5_000) {
+      return;
+    }
+
+    lastResume = Date.now();
+
+    if (activityTimer) {
+      clearTimeout(activityTimer);
+      activityTimer = null;
+    }
+
+    await refresh();
+  }
+
+  document.addEventListener("visibilitychange", resume);
+  window.addEventListener("pageshow", (event) => event.persisted && resume());
+  window.addEventListener("online", resume);
 
   // An update this page didn't start (a schedule, another tab, or one started
   // before a reload) has finished, so catch the page up with it. `last` is the
@@ -782,6 +829,10 @@
     const label = names.length === 1 ? names[0] : count(names.length, "container");
     const query = names.map((name) => `container=${encodeURIComponent(exactPattern(name))}`).join("&");
 
+    // The scan that had finished before this one, so a dropped request isn't
+    // later mistaken for having produced it.
+    const baseline = lastScanTime(state.activity);
+
     names.forEach((name) => state.updating.add(name));
     render();
     scheduleActivity(1_000);
@@ -802,12 +853,18 @@
         markUpdated(names);
       }
     } catch (problem) {
-      // The request timed out, but the update carries on in Watchtower. Leave
-      // it to the progress poll, which reports it when it finishes.
-      if (problem.status === 503) {
-        notify(`Still updating ${label}. The result shows here when Watchtower finishes.`);
+      // The request timed out (503), or the connection dropped (0), which is
+      // what a phone does to open requests when its screen turns off. Either
+      // way the update carries on in Watchtower, so leave it to the progress
+      // poll, which reports it when it finishes.
+      if (problem.status === 503 || problem.status === 0) {
+        notify(
+          problem.status === 503
+            ? `Still updating ${label}. The result shows here when Watchtower finishes.`
+            : `Lost contact with Watchtower while updating ${label}. The update carries on there, and the result shows here once the page reconnects.`,
+        );
         names.forEach((name) => state.updating.delete(name));
-        scheduleActivity(1_000);
+        handOffToPoll(baseline);
         render();
 
         return;
