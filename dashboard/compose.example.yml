@@ -2,7 +2,7 @@
 # Use a strong password and keep the API token on the server side.
 services:
   watchtower-dashboard:
-    image: ghcr.io/rpeters1430/watchtower-dashboard:latest@sha256:83f760a21f0cba6b34b5d5d5d2bea7cba10aa1cf6e4ac59c1ea5d05e841919c1
+    image: ghcr.io/rpeters1430/watchtower-dashboard:latest@sha256:4c77e274cfdc191701f799d6c3b42918d37dc0c564f8493ee4dfa24ec5a21b56
     container_name: watchtower-dashboard
     restart: unless-stopped
     environment:
