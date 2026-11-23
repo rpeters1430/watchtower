@@ -1425,6 +1425,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Chores
 
+- Update patch dependency updates by @renovate[bot]
+- Update module github.com/valyala/fasthttp to v1.80.0 by @renovate[bot]
 - Update ossf/scorecard-action action to v2.6.0 by @renovate[bot]
 - Update ghcr.io/rpeters1430/watchtower-dashboard:latest docker digest to 4c77e27 by @renovate[bot]
 - Update minor dependency updates by @renovate[bot]
@@ -3133,9 +3135,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Contributors
 
-- @rpeters1430 made their first contribution in [#230](https://github.com/rpeters1430/watchtower/pull/230)
+- @rpeters1430 made their first contribution in [#235](https://github.com/rpeters1430/watchtower/pull/235)
 - @renovate[bot] made their first contribution
-- @github-actions[bot] made their first contribution in [#229](https://github.com/rpeters1430/watchtower/pull/229)
+- @github-actions[bot] made their first contribution in [#231](https://github.com/rpeters1430/watchtower/pull/231)
 - @claude made their first contribution
 - @nicholas-fedor made their first contribution
 - @Copilot made their first contribution
