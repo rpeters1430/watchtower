@@ -141,6 +141,8 @@ github.com/docker/cli v29.9.3+incompatible h1:SBaMp7ecohadEHMDrUJg22t9I3awqsAVhn
 github.com/docker/cli v29.9.3+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
 github.com/docker/cli v29.10.0+incompatible h1:lCL+clBUJnHsmjBCr6TwvfQFkmBidPxi5SkuXCoYxc0=
 github.com/docker/cli v29.10.0+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
+github.com/docker/cli v29.10.1+incompatible h1:0wlyVoe0snmKYUUjJuhoR0HiSqRHQonKVcZzT7LwkVM=
+github.com/docker/cli v29.10.1+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
 github.com/docker/compose/v5 v5.6.0 h1:WCDEV0D1CtZLyPdklHdEjFBnCStosBYkfsD3tvM/ITU=
 github.com/docker/compose/v5 v5.6.0/go.mod h1:NLnbMzshDO3QlhgzMxd9sm981O1yLjPybL1WGStUesI=
 github.com/docker/compose/v5 v5.6.1 h1:Ddp7wM/MXZQ3w1+sDuEEZXn3HcLv7QM4epFaouu4vds=
@@ -167,6 +169,8 @@ github.com/docker/secrets-engine/x v0.8.5 h1:P7D/YESMjpX18S4ratBgoeJkAFIxgsPxe09
 github.com/docker/secrets-engine/x v0.8.5/go.mod h1:jQ5CXCYCPn8Sw96TS8Ufq3oyIGH2GzUtVXIdwa2Q0VU=
 github.com/eclipse/paho.golang v0.23.0 h1:KHgl2wz6EJo7cMBmkuhpt7C576vP+kpPv7jjvSyR6Mk=
 github.com/eclipse/paho.golang v0.23.0/go.mod h1:nQRhTkoZv8EAiNs5UU0/WdQIx2NrnWUpL9nsGJTQN04=
+github.com/eclipse/paho.golang v0.24.0 h1:TcqZlyi9nBu1GhHeD9FPI0y8Lu2mSDRm0Wj/maWVVOw=
+github.com/eclipse/paho.golang v0.24.0/go.mod h1:UgP5muyv9x5gfkVksNCkg2lAWZs1vENy5sZ17IQePHw=
 github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203 h1:XBBHcIb256gUJtLmY22n99HaZTz+r2Z51xUPi01m3wg=
 github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203/go.mod h1:E1jcSv8FaEny+OP/5k9UxZVw9YFWGj7eI4KR/iOBqCg=
 github.com/elazarl/goproxy v1.7.2 h1:Y2o6urb7Eule09PjlhQRGNsqRfPmYI3KKQLFpCAV3+o=
@@ -452,6 +456,8 @@ github.com/nicholas-fedor/shoutrrr v0.24.0 h1:k5yEH3jCRVjIldtQE1LsFlRrnKS+c40UKZ
 github.com/nicholas-fedor/shoutrrr v0.24.0/go.mod h1:VC9VA+l0L8rOZjuiEKSnWC6lHf+reDjUSYmWh4nT1go=
 github.com/nicholas-fedor/shoutrrr v0.25.0 h1:3h6t0GSHi0j+KYXTYf2tXdEhM22R/u0gJKznhcM12k8=
 github.com/nicholas-fedor/shoutrrr v0.25.0/go.mod h1:WzPFvHCXGB/PYwtTHIT/8sBX6gnamGeSiSV5FjWYYgk=
+github.com/nicholas-fedor/shoutrrr v0.25.1 h1:KoWk009bm2YneyPpowW3L8vXtWGR7e6SxhvoaDChTwY=
+github.com/nicholas-fedor/shoutrrr v0.25.1/go.mod h1:8qsTp6SKNzLSIPG5N9zB1Wj4ZbAuImJJSyK2qLOk5CQ=
 github.com/onsi/ginkgo/v2 v2.33.1 h1:62XfWJbEIjPSCSDYrsCPP/SHcmH7O0M8ne8zfqQ2iz4=
 github.com/onsi/ginkgo/v2 v2.33.1/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
 github.com/onsi/ginkgo/v2 v2.34.0 h1:aN3Us823mHHTSWMIi8WIQTdYuSPhl2lWY46E/w3SiAk=

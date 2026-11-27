@@ -11,7 +11,7 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/platforms v1.0.0-rc.5
 	github.com/distribution/reference v0.6.0
-	github.com/docker/cli v29.10.0+incompatible
+	github.com/docker/cli v29.10.1+incompatible
 	github.com/docker/compose/v5 v5.8.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/gofiber/contrib/v3/swaggo v1.0.18
@@ -22,7 +22,7 @@ require (
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/moby/api v1.57.0
 	github.com/moby/moby/client v0.6.3
-	github.com/nicholas-fedor/shoutrrr v0.25.0
+	github.com/nicholas-fedor/shoutrrr v0.25.1
 	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/go-digest v1.0.0
@@ -77,7 +77,7 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/docker/secrets-engine/client v0.2.2 // indirect
 	github.com/docker/secrets-engine/x v0.8.5 // indirect
-	github.com/eclipse/paho.golang v0.23.0 // indirect
+	github.com/eclipse/paho.golang v0.24.0 // indirect
 	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
